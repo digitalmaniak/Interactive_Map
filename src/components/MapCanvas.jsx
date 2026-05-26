@@ -1357,14 +1357,14 @@ export default function MapCanvas() {
 
       // Dynamic grid opacity based on zoom level:
       // min zoom (initialZoom) -> opacity 0.0
-      // max zoom (45.0) -> opacity 0.75
+      // max zoom (45.0) -> opacity 1.0
       const minZoom = initialZoom;
       const maxZoom = 45.0;
       const zoomRange = maxZoom - minZoom;
       let gridOpacity = 0.0;
       if (zoomRange > 0) {
         const rawOpacity = (camera.zoom - minZoom) / zoomRange;
-        gridOpacity = Math.max(0.0, Math.min(0.75, rawOpacity * 0.75));
+        gridOpacity = Math.max(0.0, Math.min(1.0, rawOpacity));
       }
       gridHelper.material.opacity = gridOpacity;
 
