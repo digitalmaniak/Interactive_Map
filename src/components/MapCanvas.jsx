@@ -359,6 +359,16 @@ const createMountainGeometry = () => {
   return geom;
 };
 
+const setMeshEmissive = (mesh, colorHex) => {
+  if (!mesh || !mesh.material) return;
+  if (Array.isArray(mesh.material)) {
+    mesh.material.forEach((mat) => {
+      if (mat.emissive) mat.emissive.setHex(colorHex);
+    });
+  } else {
+    if (mesh.material.emissive) mesh.material.emissive.setHex(colorHex);
+  }
+};
 
 // Geometry generators for trees
 const createPineTreeGeometry = () => {
@@ -1102,14 +1112,14 @@ export default function MapCanvas() {
           if (countryIntersects.length > 0) {
             const intersectedCountry = countryIntersects[0].object;
             if (hoveredMesh !== intersectedCountry) {
-              if (hoveredMesh) hoveredMesh.material.emissive.setHex(0x000000);
+              if (hoveredMesh) setMeshEmissive(hoveredMesh, 0x000000);
               hoveredMesh = intersectedCountry;
-              hoveredMesh.material.emissive.setHex(0x1e1b4b); // Soft indigo glow
+              setMeshEmissive(hoveredMesh, 0x1e1b4b); // Soft indigo glow
               setHoveredCountry(hoveredMesh.userData.countryName);
             }
           } else {
             if (hoveredMesh) {
-              hoveredMesh.material.emissive.setHex(0x000000);
+              setMeshEmissive(hoveredMesh, 0x000000);
               hoveredMesh = null;
               setHoveredCountry("Hover over map");
             }
