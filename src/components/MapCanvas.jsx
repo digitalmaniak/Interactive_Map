@@ -910,10 +910,30 @@ export default function MapCanvas() {
       }
     });
 
-    // 6. Add InstancedMesh layers for Mountains, Pine Trees, Palm Trees, and Capital Buildings
+    // 6. Define assetScaleUniform and material compile helper for dynamic scaling of all instanced assets
+    const assetScaleUniform = { value: 1.0 };
+    const createScaledAssetMaterial = (params) => {
+      const mat = new THREE.MeshStandardMaterial(params);
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.assetScale = assetScaleUniform;
+        shader.vertexShader = `
+          uniform float assetScale;
+          ${shader.vertexShader}
+        `.replace(
+          `#include <begin_vertex>`,
+          `
+          #include <begin_vertex>
+          transformed.xyz *= assetScale;
+          `
+        );
+      };
+      return mat;
+    };
+
+    // Add InstancedMesh layers for Mountains, Pine Trees, Palm Trees, and Capital Buildings
     if (mountainInstances.length > 0) {
       const mountainGeo = createMountainGeometry();
-      const mountainMat = new THREE.MeshStandardMaterial({
+      const mountainMat = createScaledAssetMaterial({
         vertexColors: true,
         flatShading: true,
         roughness: 0.8,
@@ -938,7 +958,7 @@ export default function MapCanvas() {
 
     if (pineTreeInstances.length > 0) {
       const pineGeo = createPineTreeGeometry();
-      const pineMat = new THREE.MeshStandardMaterial({
+      const pineMat = createScaledAssetMaterial({
         vertexColors: true,
         flatShading: true,
         roughness: 0.8,
@@ -963,7 +983,7 @@ export default function MapCanvas() {
 
     if (palmTreeInstances.length > 0) {
       const palmGeo = createPalmTreeGeometry();
-      const palmMat = new THREE.MeshStandardMaterial({
+      const palmMat = createScaledAssetMaterial({
         vertexColors: true,
         flatShading: true,
         roughness: 0.8,
@@ -988,7 +1008,7 @@ export default function MapCanvas() {
 
     if (cityBuildingInstances.length > 0) {
       const buildingGeo = new THREE.BoxGeometry(1, 1, 1);
-      const buildingMat = new THREE.MeshStandardMaterial({
+      const buildingMat = createScaledAssetMaterial({
         flatShading: true,
         roughness: 0.6,
         metalness: 0.1
@@ -1361,6 +1381,9 @@ export default function MapCanvas() {
       const S_max = 9.5;  // Very visible when zoomed out
       const S_min = 0.75; // Clean and small when zoomed in
       const pinScaleVal = S_min + (S_max - S_min) * Math.pow(1 - tZ, 2.0);
+
+      // Dynamically scale scattered instanced assets (2.0 at min zoom, 1.0 at max zoom)
+      assetScaleUniform.value = 2.0 - tZ;
 
       pinGroup.children.forEach((pin, idx) => {
         pin.rotation.y += 0.015;
