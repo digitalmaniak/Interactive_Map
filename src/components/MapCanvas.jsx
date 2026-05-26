@@ -195,115 +195,170 @@ const capitals = {
   "ZWE": { lat: -17.8252, lon: 31.0335 }  // Harare
 };
 
-// Seedable 2D Perlin Noise generator (Ken Perlin's Improved Noise)
-function createNoise2D(seed = 12345) {
-  const p = new Uint8Array(256);
-  for (let i = 0; i < 256; i++) p[i] = i;
-  
-  let currentSeed = seed;
-  const nextRand = () => {
-    currentSeed = (currentSeed * 1664525 + 1013904223) % 4294967296;
-    return currentSeed / 4294967296;
-  };
-  
-  // Shuffle table deterministically
-  for (let i = 255; i > 0; i--) {
-    const j = Math.floor(nextRand() * (i + 1));
-    const temp = p[i];
-    p[i] = p[j];
-    p[j] = temp;
-  }
-  
-  const perm = new Uint8Array(512);
-  for (let i = 0; i < 512; i++) {
-    perm[i] = p[i & 255];
-  }
-  
-  const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
-  const lerp = (t, a, b) => a + t * (b - a);
-  const grad = (hash, x, y) => {
-    const h = hash & 7;
-    const u = h < 4 ? x : y;
-    const v = h < 4 ? y : x;
-    return ((h & 1) ? -u : u) + ((h & 2) ? -2.0 * v : 2.0 * v);
-  };
-  
-  return (x, y) => {
-    const X = Math.floor(x) & 255;
-    const Y = Math.floor(y) & 255;
-    
-    x -= Math.floor(x);
-    y -= Math.floor(y);
-    
-    const u = fade(x);
-    const v = fade(y);
-    
-    const A = perm[X] + Y;
-    const B = perm[X + 1] + Y;
-    
-    return lerp(v, lerp(u, grad(perm[A], x, y),
-                             grad(perm[B], x - 1, y)),
-                   lerp(u, grad(perm[A + 1], x, y - 1),
-                             grad(perm[B + 1], x - 1, y - 1)));
-  };
-}
+// Country average elevations and primary biomes metadata (gathered from standard geography data)
+const countryMetadata = {
+  // North America
+  "USA": { height: 1.2, biome: "forest" },
+  "CAN": { height: 1.0, biome: "forest" },
+  "MEX": { height: 1.4, biome: "desert" },
+  "GRL": { height: 1.8, biome: "glacial" },
 
-const noise = createNoise2D(12345);
+  // South America
+  "BRA": { height: 0.8, biome: "forest" },
+  "ARG": { height: 0.9, biome: "grassland" },
+  "CHL": { height: 1.8, biome: "forest" },
+  "PER": { height: 2.1, biome: "forest" },
+  "COL": { height: 1.2, biome: "forest" },
+  "VEN": { height: 0.9, biome: "forest" },
+  "BOL": { height: 2.0, biome: "savanna" },
+  "ECU": { height: 1.5, biome: "forest" },
+  "PRY": { height: 0.6, biome: "savanna" },
+  "URY": { height: 0.5, biome: "grassland" },
+  "SUR": { height: 0.6, biome: "forest" },
+  "GUY": { height: 0.7, biome: "forest" },
 
-// fBM height sampler
-const sampleHeight = (x, z) => {
-  const nX = x * 0.005;
-  const nZ = z * 0.005;
-  
-  let h = 0;
-  h += noise(nX, nZ) * 8.0;
-  h += noise(nX * 2.5, nZ * 2.5) * 3.0;
-  h += noise(nX * 6.0, nZ * 6.0) * 0.8;
-  
-  if (h < 0) h *= 0.3;
-  else h = Math.pow(h, 1.2) * 1.5;
-  
-  return h;
+  // Europe
+  "FRA": { height: 0.7, biome: "grassland" },
+  "DEU": { height: 0.7, biome: "forest" },
+  "GBR": { height: 0.6, biome: "grassland" },
+  "ITA": { height: 1.0, biome: "forest" },
+  "ESP": { height: 1.1, biome: "savanna" },
+  "UKR": { height: 0.6, biome: "grassland" },
+  "POL": { height: 0.6, biome: "forest" },
+  "ROU": { height: 0.9, biome: "forest" },
+  "NLD": { height: 0.3, biome: "grassland" },
+  "BEL": { height: 0.5, biome: "grassland" },
+  "CHE": { height: 2.2, biome: "glacial" },
+  "AUT": { height: 1.5, biome: "forest" },
+  "SWE": { height: 1.0, biome: "forest" },
+  "NOR": { height: 1.5, biome: "glacial" },
+  "FIN": { height: 0.7, biome: "forest" },
+  "DNK": { height: 0.4, biome: "grassland" },
+  "ISL": { height: 1.3, biome: "glacial" },
+  "IRL": { height: 0.5, biome: "grassland" },
+  "PRT": { height: 0.8, biome: "savanna" },
+  "GRC": { height: 1.1, biome: "savanna" },
+
+  // Asia
+  "RUS": { height: 1.0, biome: "forest" },
+  "CHN": { height: 1.8, biome: "forest" },
+  "IND": { height: 0.9, biome: "savanna" },
+  "JPN": { height: 1.5, biome: "forest" },
+  "KOR": { height: 1.1, biome: "forest" },
+  "KAZ": { height: 1.0, biome: "grassland" },
+  "MNG": { height: 1.7, biome: "grassland" },
+  "SAU": { height: 0.9, biome: "desert" },
+  "IRN": { height: 1.5, biome: "desert" },
+  "TUR": { height: 1.4, biome: "savanna" },
+  "PAK": { height: 1.2, biome: "savanna" },
+  "AFG": { height: 2.0, biome: "desert" },
+  "NPL": { height: 2.8, biome: "glacial" },
+  "BTN": { height: 2.8, biome: "forest" },
+  "THA": { height: 0.5, biome: "forest" },
+  "VNM": { height: 0.6, biome: "forest" },
+  "IDN": { height: 0.7, biome: "forest" },
+  "PHL": { height: 0.6, biome: "forest" },
+  "MYS": { height: 0.8, biome: "forest" },
+  "BGD": { height: 0.4, biome: "savanna" },
+  "LKA": { height: 0.6, biome: "forest" },
+  "IRQ": { height: 0.5, biome: "desert" },
+  "SYR": { height: 0.8, biome: "desert" },
+  "JOR": { height: 1.2, biome: "desert" },
+  "ARE": { height: 0.5, biome: "desert" },
+  "YEM": { height: 1.4, biome: "desert" },
+  "OMN": { height: 0.9, biome: "desert" },
+
+  // Africa
+  "EGY": { height: 0.5, biome: "desert" },
+  "ZAF": { height: 1.3, biome: "savanna" },
+  "DZA": { height: 1.1, biome: "desert" },
+  "LBY": { height: 0.6, biome: "desert" },
+  "SDN": { height: 0.7, biome: "savanna" },
+  "COD": { height: 0.8, biome: "forest" },
+  "AGO": { height: 1.2, biome: "savanna" },
+  "MDG": { height: 0.9, biome: "forest" },
+  "ETH": { height: 2.1, biome: "savanna" },
+  "KEN": { height: 1.4, biome: "savanna" },
+  "TZA": { height: 1.2, biome: "savanna" },
+  "NGA": { height: 0.7, biome: "forest" },
+  "MAR": { height: 1.2, biome: "desert" },
+  "MOZ": { height: 0.6, biome: "savanna" },
+  "CIV": { height: 0.6, biome: "forest" },
+  "GHA": { height: 0.5, biome: "forest" },
+  "CMR": { height: 0.9, biome: "forest" },
+  "SEN": { height: 0.4, biome: "savanna" },
+
+  // Oceania
+  "AUS": { height: 0.6, biome: "desert" },
+  "NZL": { height: 1.4, biome: "forest" },
+  "PNG": { height: 1.2, biome: "forest" },
+
+  // Antarctica
+  "ATA": { height: 2.5, biome: "glacial" }
 };
 
-// Dynamic 2D subdivision
-function subdivide2D(vertices, faces, iterations) {
-  let currentVerts = [...vertices];
-  let currentFaces = [...faces];
-  
-  for (let iter = 0; iter < iterations; iter++) {
-    const nextFaces = [];
-    const midpointCache = new Map();
-    
-    const getMidpoint = (a, b) => {
-      const key = a < b ? `${a}_${b}` : `${b}_${a}`;
-      if (midpointCache.has(key)) {
-        return midpointCache.get(key);
-      }
-      const pA = currentVerts[a];
-      const pB = currentVerts[b];
-      const mid = new THREE.Vector2((pA.x + pB.x) / 2, (pA.y + pB.y) / 2);
-      currentVerts.push(mid);
-      const index = currentVerts.length - 1;
-      midpointCache.set(key, index);
-      return index;
+const biomeColors = {
+  glacial: "#f1f5f9",   // Polar white
+  desert: "#fde047",    // Sunny desert yellow
+  forest: "#4ade80",    // Vibrant forest green
+  grassland: "#a7f3d0", // Soft mint green
+  savanna: "#fed7aa"    // Warm peach/savanna
+};
+
+// Retrieve country height, color, and biome metadata
+const getCountryMetadata = (countryCode, centroidLat) => {
+  const meta = countryMetadata[countryCode];
+  if (meta) {
+    return {
+      height: meta.height,
+      color: new THREE.Color(biomeColors[meta.biome]),
+      biome: meta.biome
     };
-    
-    for (let i = 0; i < currentFaces.length; i++) {
-      const [v0, v1, v2] = currentFaces[i];
-      const m01 = getMidpoint(v0, v1);
-      const m12 = getMidpoint(v1, v2);
-      const m20 = getMidpoint(v2, v0);
-      
-      nextFaces.push([v0, m01, m20]);
-      nextFaces.push([v1, m12, m01]);
-      nextFaces.push([v2, m20, m12]);
-      nextFaces.push([m01, m12, m20]);
-    }
-    currentFaces = nextFaces;
   }
-  return { vertices: currentVerts, faces: currentFaces };
-}
+  
+  // Fallback based on latitude
+  let biome = "forest";
+  let height = 0.9;
+  
+  if (centroidLat > 55 || centroidLat < -50) {
+    biome = "glacial";
+    height = 1.1;
+  } else if (Math.abs(centroidLat) >= 15 && Math.abs(centroidLat) <= 35) {
+    biome = "desert";
+    height = 0.7;
+  } else if (Math.abs(centroidLat) < 15) {
+    biome = "savanna";
+    height = 0.8;
+  }
+  
+  return {
+    height,
+    color: new THREE.Color(biomeColors[biome]),
+    biome
+  };
+};
+
+const createMountainGeometry = () => {
+  const geom = new THREE.ConeGeometry(0.7, 1.4, 4);
+  geom.translate(0, 0.7, 0); // pivot at base
+  geom.rotateY(Math.PI / 4); // align corners nicely
+  
+  // Assign mountain rock color with white snow cap using vertex colors
+  const count = geom.attributes.position.count;
+  const colors = [];
+  const pos = geom.attributes.position;
+  for (let i = 0; i < count; i++) {
+    const y = pos.getY(i);
+    if (y > 0.9) {
+      colors.push(0.95, 0.95, 0.95); // White snow cap
+    } else {
+      colors.push(0.45, 0.50, 0.60); // Slate gray rock
+    }
+  }
+  geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  return geom;
+};
+
 
 // Geometry generators for trees
 const createPineTreeGeometry = () => {
@@ -419,38 +474,7 @@ const createPalmTreeGeometry = () => {
   return mergedGeo;
 };
 
-const getBiome = (lat, x, z) => {
-  if (lat > 65 || lat < -60) return 'glacial';
-  
-  if (Math.abs(lat) >= 15 && Math.abs(lat) <= 35) {
-    const dNoise = noise(x * 0.01, z * 0.01);
-    if (dNoise > 0.0) return 'desert';
-  }
-  
-  return 'forest';
-};
 
-const getBiomeColor = (x, y, z, latLonConverter) => {
-  const { lat } = latLonConverter(new THREE.Vector3(x, y, z));
-  
-  // High elevation snow cap & rock peaks
-  if (y > 6.8) return new THREE.Color("#ffffff"); // Snow cap
-  if (y > 4.2) return new THREE.Color("#64748b"); // Mountain rock grey
-  
-  const biome = getBiome(lat, x, z);
-  if (biome === 'glacial') {
-    return new THREE.Color("#f8fafc"); // Crisp snow white
-  } else if (biome === 'desert') {
-    const dNoise = noise(x * 0.01, z * 0.01);
-    if (dNoise > 0.15) return new THREE.Color("#fcd34d"); // Sand yellow
-    return new THREE.Color("#fda4af"); // Dry clay red
-  } else {
-    // Forest / Jungle
-    const fNoise = noise(x * 0.02, z * 0.02);
-    if (fNoise > 0.1) return new THREE.Color("#15803d"); // Deep forest green
-    return new THREE.Color("#22c55e"); // Vibrant grass green
-  }
-};
 
 export default function MapCanvas() {
   const containerRef = useRef(null);
@@ -639,25 +663,23 @@ export default function MapCanvas() {
     scene.add(shelvesGroup);
 
     const borderLines = []; // Collect border coordinate pairs
-    const extrudeHeight = 1.2;
-
-    // 5. Generate Custom Procedural Low-Poly Countries from GeoJSON
+    const mountainInstances = [];
     const pineTreeInstances = [];
     const palmTreeInstances = [];
     const cityBuildingInstances = [];
-
-    const landMaterial = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      flatShading: true,
-      roughness: 0.75,
-      metalness: 0.05
-    });
 
     const shelfMat = new THREE.MeshBasicMaterial({
       color: "#22d3ee",
       transparent: true,
       opacity: 0.55,
       side: THREE.DoubleSide
+    });
+
+    const sideMaterial = new THREE.MeshStandardMaterial({
+      color: "#a89f91", // uniform sandstone side walls
+      flatShading: true,
+      roughness: 0.85,
+      metalness: 0.05
     });
 
     geoJsonData.features.forEach((feature) => {
@@ -667,6 +689,31 @@ export default function MapCanvas() {
       const coordinates = feature.geometry.coordinates;
 
       try {
+        // Calculate a centroid to determine latitude for fallback rules and local scaling
+        let sumLat = 0, sumLon = 0, ptCount = 0;
+        const collectPoints = (coords) => {
+          if (typeof coords[0] === "number") {
+            sumLon += coords[0];
+            sumLat += coords[1];
+            ptCount++;
+          } else {
+            coords.forEach(collectPoints);
+          }
+        };
+        collectPoints(coordinates);
+        const centroidLat = ptCount > 0 ? sumLat / ptCount : 0.0;
+        const centroidLon = ptCount > 0 ? sumLon / ptCount : 0.0;
+
+        // Retrieve country-specific average elevation and biome colors
+        const meta = getCountryMetadata(countryCode, centroidLat);
+        const countryHeight = meta.height;
+        const topMaterial = new THREE.MeshStandardMaterial({
+          color: meta.color,
+          flatShading: true,
+          roughness: 0.75,
+          metalness: 0.05
+        });
+
         const processPolygon = (polygonCoords) => {
           const outerRing = polygonCoords[0];
           const contour = outerRing.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
@@ -690,85 +737,26 @@ export default function MapCanvas() {
             holes.push(holePoints);
           }
 
-          // Leverage ShapeGeometry to perform robust 2D triangulation (handles holes & winding order perfectly)
-          const tempGeom = new THREE.ShapeGeometry(shape);
-          const posAttr = tempGeom.attributes.position;
-          const indexAttr = tempGeom.index;
+          // 1. Create clean flat-top ExtrudeGeometry
+          const extrudeSettings = {
+            depth: countryHeight,
+            bevelEnabled: true,
+            bevelThickness: 0.05,
+            bevelSize: 0.03,
+            bevelSegments: 2
+          };
+          const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+          geom.rotateX(-Math.PI / 2); // rotate to sit flat in XZ plane
 
-          const vertices = [];
-          for (let i = 0; i < posAttr.count; i++) {
-            vertices.push(new THREE.Vector2(posAttr.getX(i), posAttr.getY(i)));
-          }
+          // Material 0 = top/bottom caps, Material 1 = extruded sides
+          const mesh = new THREE.Mesh(geom, [topMaterial, sideMaterial]);
+          mesh.name = countryName;
+          mesh.userData = { countryCode, countryName };
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          countriesGroup.add(mesh);
 
-          const faceIndices = [];
-          if (indexAttr) {
-            const arr = indexAttr.array;
-            for (let i = 0; i < indexAttr.count; i += 3) {
-              faceIndices.push([arr[i], arr[i+1], arr[i+2]]);
-            }
-          } else {
-            for (let i = 0; i < posAttr.count; i += 3) {
-              faceIndices.push([i, i+1, i+2]);
-            }
-          }
-          tempGeom.dispose();
-
-          if (faceIndices.length === 0) return;
-
-          let subdivisions = 3;
-          if (faceIndices.length > 150) subdivisions = 1;
-          else if (faceIndices.length > 40) subdivisions = 2;
-
-          const subdivided = subdivide2D(vertices, faceIndices, subdivisions);
-
-          const positions = [];
-          const colors = [];
-          const sideColor = new THREE.Color("#a89f91"); // Sandstone side walls
-
-          // 1. Top Cap Faces
-          subdivided.faces.forEach(face => {
-            const pA = subdivided.vertices[face[0]];
-            const pB = subdivided.vertices[face[1]];
-            const pC = subdivided.vertices[face[2]];
-
-            const yA = sampleHeight(pA.x, pA.y) + extrudeHeight;
-            const yB = sampleHeight(pB.x, pB.y) + extrudeHeight;
-            const yC = sampleHeight(pC.x, pC.y) + extrudeHeight;
-
-            const vA = new THREE.Vector3(pA.x, yA, -pA.y);
-            const vB = new THREE.Vector3(pB.x, yB, -pB.y);
-            const vC = new THREE.Vector3(pC.x, yC, -pC.y);
-
-            const cx = (vA.x + vB.x + vC.x) / 3;
-            const cy = (vA.y + vB.y + vC.y) / 3;
-            const cz = (vA.z + vB.z + vC.z) / 3;
-
-            const col = getBiomeColor(cx, cy, cz, vector3ToLatLon);
-
-            positions.push(vA.x, vA.y, vA.z);
-            positions.push(vB.x, vB.y, vB.z);
-            positions.push(vC.x, vC.y, vC.z);
-
-            colors.push(col.r, col.g, col.b);
-            colors.push(col.r, col.g, col.b);
-            colors.push(col.r, col.g, col.b);
-
-            const { lat } = vector3ToLatLon(new THREE.Vector3(cx, cy, cz));
-            const biome = getBiome(lat, cx, -cz);
-            if (biome === 'forest') {
-              const hash = Math.sin(cx * 12.9898 + cz * 78.233) * 43758.5453;
-              const rand = Math.abs(hash - Math.floor(hash));
-              if (rand < 0.08) {
-                if (Math.abs(lat) > 35) {
-                  pineTreeInstances.push({ x: cx, y: cy, z: cz, rand });
-                } else if (Math.abs(lat) < 25) {
-                  palmTreeInstances.push({ x: cx, y: cy, z: cz, rand });
-                }
-              }
-            }
-          });
-
-          // 2. Extruded Side Walls & Borders
+          // 2. Add Contour Borders on top of the mesh
           const segments = [];
           for (let i = 0; i < contour.length; i++) {
             const next = (i + 1) % contour.length;
@@ -780,55 +768,53 @@ export default function MapCanvas() {
               segments.push({ a: hole[i], b: hole[next] });
             }
           });
-
           segments.forEach(seg => {
-            const pA = seg.a;
-            const pB = seg.b;
-
-            const yA = sampleHeight(pA.x, pA.y) + extrudeHeight;
-            const yB = sampleHeight(pB.x, pB.y) + extrudeHeight;
-
-            const tA = [pA.x, yA, -pA.y];
-            const tB = [pB.x, yB, -pB.y];
-            const bB = [pB.x, 0, -pB.y];
-            const bA = [pA.x, 0, -pA.y];
-
-            // Triangle 1: tA, tB, bB
-            positions.push(...tA, ...tB, ...bB);
-            colors.push(sideColor.r, sideColor.g, sideColor.b);
-            colors.push(sideColor.r, sideColor.g, sideColor.b);
-            colors.push(sideColor.r, sideColor.g, sideColor.b);
-
-            // Triangle 2: tA, bB, bA
-            positions.push(...tA, ...bB, ...bA);
-            colors.push(sideColor.r, sideColor.g, sideColor.b);
-            colors.push(sideColor.r, sideColor.g, sideColor.b);
-            colors.push(sideColor.r, sideColor.g, sideColor.b);
-
-            // Populate contour borders
             borderLines.push(
-              pA.x, yA + 0.02, -pA.y,
-              pB.x, yB + 0.02, -pB.y
+              seg.a.x, countryHeight + 0.02, -seg.a.y,
+              seg.b.x, countryHeight + 0.02, -seg.b.y
             );
           });
 
-          const geom = new THREE.BufferGeometry();
-          geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-          geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-          geom.computeVertexNormals();
+          // 3. Extract top cap centroids to scatter instanced trees and mountains
+          const tempGeom = new THREE.ShapeGeometry(shape);
+          const posAttr = tempGeom.attributes.position;
+          const indexAttr = tempGeom.index;
 
-          const mesh = new THREE.Mesh(geom, landMaterial);
-          mesh.name = countryName;
-          mesh.userData = { countryCode, countryName };
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-          countriesGroup.add(mesh);
+          if (indexAttr) {
+            const arr = indexAttr.array;
+            for (let i = 0; i < indexAttr.count; i += 3) {
+              const i0 = arr[i], i1 = arr[i+1], i2 = arr[i+2];
+              const p0 = new THREE.Vector2(posAttr.getX(i0), posAttr.getY(i0));
+              const p1 = new THREE.Vector2(posAttr.getX(i1), posAttr.getY(i1));
+              const p2 = new THREE.Vector2(posAttr.getX(i2), posAttr.getY(i2));
 
-          // 3. Neon Cyan Water Shelf
-          const centroid = new THREE.Vector2(0, 0);
-          contour.forEach(p => centroid.add(p));
-          centroid.divideScalar(contour.length);
+              const cx = (p0.x + p1.x + p2.x) / 3;
+              const cy = (p0.y + p1.y + p2.y) / 3;
+              const cz = -cy;
 
+              const hash = Math.sin(cx * 12.9898 + cz * 78.233) * 43758.5453;
+              const rand = Math.abs(hash - Math.floor(hash));
+
+              // If country is mountainous, spawn mountains
+              if (countryHeight > 1.3 && rand < 0.18) {
+                mountainInstances.push({ x: cx, y: countryHeight, z: cz, rand });
+              }
+              // If forest/savanna biome, spawn trees
+              else if (meta.biome === "forest" || meta.biome === "savanna") {
+                if (rand < 0.10) {
+                  if (centroidLat > 25 || centroidLat < -25) {
+                    pineTreeInstances.push({ x: cx, y: countryHeight, z: cz, rand });
+                  } else {
+                    palmTreeInstances.push({ x: cx, y: countryHeight, z: cz, rand });
+                  }
+                }
+              }
+            }
+          }
+          tempGeom.dispose();
+
+          // 4. Neon Cyan Water Shelf
+          const centroid = new THREE.Vector2(centroidLon * mapScale, centroidLat * mapScale);
           const scaledContour = contour.map(p => {
             const sx = centroid.x + 1.025 * (p.x - centroid.x);
             const sy = centroid.y + 1.025 * (p.y - centroid.y);
@@ -857,7 +843,7 @@ export default function MapCanvas() {
           });
         }
 
-        // 4. City scatter at capital location
+        // 5. City scatter at capital location
         let capLat = feature.properties.capital_lat;
         let capLon = feature.properties.capital_lon;
         if (capLat === undefined || capLon === undefined) {
@@ -865,22 +851,9 @@ export default function MapCanvas() {
           if (cap) {
             capLat = cap.lat;
             capLon = cap.lon;
-          } else {
-            let sumLat = 0, sumLon = 0, ptCount = 0;
-            const collectPoints = (coords) => {
-              if (typeof coords[0] === "number") {
-                sumLon += coords[0];
-                sumLat += coords[1];
-                ptCount++;
-              } else {
-                coords.forEach(collectPoints);
-              }
-            };
-            collectPoints(coordinates);
-            if (ptCount > 0) {
-              capLat = sumLat / ptCount;
-              capLon = sumLon / ptCount;
-            }
+          } else if (ptCount > 0) {
+            capLat = centroidLat;
+            capLon = centroidLon;
           }
         }
 
@@ -903,7 +876,7 @@ export default function MapCanvas() {
 
             const bx = basePos.x + dx;
             const bz = basePos.z + dz;
-            const by = sampleHeight(bx, -bz) + extrudeHeight;
+            const by = countryHeight;
 
             const bw = 0.25 + (bRand * 0.15);
             const bh = 0.5 + (Math.cos(bHash) * 0.2) * 1.8;
@@ -925,7 +898,32 @@ export default function MapCanvas() {
       }
     });
 
-    // 6. Add InstancedMesh layers for Pine Trees, Palm Trees, and Capital Buildings
+    // 6. Add InstancedMesh layers for Mountains, Pine Trees, Palm Trees, and Capital Buildings
+    if (mountainInstances.length > 0) {
+      const mountainGeo = createMountainGeometry();
+      const mountainMat = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        flatShading: true,
+        roughness: 0.8,
+        metalness: 0.1
+      });
+      const mountainMesh = new THREE.InstancedMesh(mountainGeo, mountainMat, mountainInstances.length);
+      mountainMesh.castShadow = true;
+      mountainMesh.receiveShadow = true;
+      
+      const matrix = new THREE.Matrix4();
+      mountainInstances.forEach((inst, idx) => {
+        const position = new THREE.Vector3(inst.x, inst.y, inst.z);
+        const rotation = new THREE.Euler(0, inst.rand * Math.PI * 2, 0);
+        const q = new THREE.Quaternion().setFromEuler(rotation);
+        const sVal = 0.7 + Math.abs(inst.rand * 0.5);
+        const scale = new THREE.Vector3(sVal, sVal, sVal);
+        matrix.compose(position, q, scale);
+        mountainMesh.setMatrixAt(idx, matrix);
+      });
+      scene.add(mountainMesh);
+    }
+
     if (pineTreeInstances.length > 0) {
       const pineGeo = createPineTreeGeometry();
       const pineMat = new THREE.MeshStandardMaterial({
@@ -1028,13 +1026,24 @@ export default function MapCanvas() {
     });
 
     initialPins.forEach((pinData) => {
-      const pinMesh = new THREE.Mesh(pinGeom, pinMat);
+      // Convert lat/lon to X/Z, starting high at Y = 10.0
+      const basePos = latLonToVector3(pinData.lat, pinData.lon, 10.0);
       
-      // Calculate 3D position slightly above country surface level (Y=extrudeHeight + 0.1)
-      const pinPos = latLonToVector3(pinData.lat, pinData.lon, extrudeHeight + 0.1);
-      pinMesh.position.copy(pinPos);
+      // Raycast down to find the country mesh's flat-top elevation
+      const ray = new THREE.Raycaster(
+        new THREE.Vector3(basePos.x, 15.0, basePos.z),
+        new THREE.Vector3(0, -1, 0)
+      );
+      const intersects = ray.intersectObjects(countriesGroup.children);
+      let yHeight = 0.9; // fallback
+      if (intersects.length > 0) {
+        yHeight = intersects[0].point.y;
+      }
+      
+      const pinMesh = new THREE.Mesh(pinGeom, pinMat);
+      pinMesh.position.set(basePos.x, yHeight + 0.1, basePos.z);
       pinMesh.castShadow = true;
-      pinMesh.userData = { isPin: true, ...pinData };
+      pinMesh.userData = { isPin: true, ...pinData, countryHeight: yHeight };
       
       pinGroup.add(pinMesh);
     });
@@ -1330,7 +1339,8 @@ export default function MapCanvas() {
       pinGroup.children.forEach((pin, idx) => {
         pin.rotation.y += 0.015;
         // Bouncing motion
-        pin.position.y = extrudeHeight + 0.25 + Math.sin(elapsedTime * 2.5 + idx) * 0.15;
+        const baseHeight = pin.userData.countryHeight || 0.9;
+        pin.position.y = baseHeight + 0.25 + Math.sin(elapsedTime * 2.5 + idx) * 0.15;
       });
 
       renderer.render(scene, camera);
