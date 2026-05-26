@@ -610,6 +610,16 @@ export default function MapCanvas() {
     const horizontalZoom = (frustumSize * aspect) / (mapWidth + 80);
     const initialZoom = Math.min(verticalZoom, horizontalZoom);
 
+    // Compute pin scale parameters based on initialZoom
+    const minZoom = initialZoom;
+    const maxZoom = 45.0;
+    const S_max = 2.8;  // Scale of pin when fully zoomed out
+    const S_min = 0.55; // Scale of pin when fully zoomed in
+    const invMin = 1.0 / minZoom;
+    const invMax = 1.0 / maxZoom;
+    const pinA = (S_max - S_min) / (invMin - invMax);
+    const pinB = S_min - pinA / maxZoom;
+
     const camera = new THREE.OrthographicCamera(
       (-frustumSize * aspect) / 2,
       (frustumSize * aspect) / 2,
@@ -1347,21 +1357,24 @@ export default function MapCanvas() {
       dirLight.target.position.copy(cameraTarget);
       dirLight.target.updateMatrixWorld();
 
-      // Animate visited pin markers (hover floating & pulsing)
+      // Animate visited pin markers (hover floating & pulsing + dynamic scaling)
+      const pinScaleVal = (pinA / camera.zoom) + pinB;
       pinGroup.children.forEach((pin, idx) => {
         pin.rotation.y += 0.015;
         // Bouncing motion
         const baseHeight = pin.userData.countryHeight || 0.9;
         pin.position.y = baseHeight + 0.25 + Math.sin(elapsedTime * 2.5 + idx) * 0.15;
+        // Dynamic scale
+        pin.scale.set(pinScaleVal, pinScaleVal, pinScaleVal);
       });
 
       // Dynamic grid opacity based on zoom level:
       // min zoom (initialZoom) -> opacity 0.0
-      // halfway zoom (initialZoom + (maxZoom - initialZoom) / 2) -> opacity 1.0
+      // 25% of max zoom -> opacity 1.0
       const minZoom = initialZoom;
       const maxZoom = 45.0;
-      const halfwayZoom = minZoom + (maxZoom - minZoom) / 2;
-      const zoomRange = halfwayZoom - minZoom;
+      const targetZoom = maxZoom * 0.25;
+      const zoomRange = targetZoom - minZoom;
       let gridOpacity = 0.0;
       if (zoomRange > 0) {
         const rawOpacity = (camera.zoom - minZoom) / zoomRange;
