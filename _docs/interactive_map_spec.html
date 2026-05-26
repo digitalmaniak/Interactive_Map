@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Specification: Interactive Spatial Journal</title>
+    <style>
+        :root {
+            --bg-primary: #020617;
+            --text-main: #f8fafc;
+            --accent-pink: #f43f5e;
+            --accent-blue: #38bdf8;
+            --panel-bg: rgba(15, 23, 42, 0.75);
+        }
+        body {
+            font-family: system-ui, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+        nav {
+            width: 280px;
+            background: #090d16;
+            border-right: 1px solid rgba(255,255,255,0.05);
+            height: 100vh;
+            position: fixed;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+        main {
+            margin-left: 280px;
+            padding: 3rem;
+            max-width: 900px;
+        }
+        h1, h2, h3 { color: var(--accent-blue); }
+        .pink-text { color: var(--accent-pink); }
+        pre {
+            background: #000000;
+            padding: 1.25rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <h2>Specs Index</h2>
+    <ul>
+        <li><a href="#loader" style="color:var(--text-main); text-decoration:none;">1. Neon Grid Loader</a></li>
+        <li><a href="#map-render" style="color:var(--text-main); text-decoration:none;">2. Low-Poly World Canvas</a></li>
+        <li><a href="#database" style="color:var(--text-main); text-decoration:none;">3. Firestore Flex Schema</a></li>
+        <li><a href="#photos" style="color:var(--text-main); text-decoration:none;">4. Asset Pipeline</a></li>
+    </ul>
+</nav>
+
+<main>
+    <h1>Spatial Location Ledger: Unified Spec Document</h1>
+    <p><strong>Target Pipeline:</strong> Next.js + Vercel Deployment</p>
+    <p><strong>Design DNA:</strong> Neon Cyberpunk Initialization into High-Density, Low-Poly Living World Canvas</p>
+
+    <hr style="border:0; border-top:1px solid rgba(255,255,255,0.05); margin: 2rem 0;">
+
+    <section id="loader">
+        <h2>1. Neon Grid Initialization State (Loader)</h2>
+        <p>Before the main canvas mounts, a dark webGL context initializes to mirror the reference aesthetics of a clean grid layout.</p>
+        <ul>
+            <li><strong>The Matrix:</strong> A <code>THREE.Points</code> coordinate map using a deep maroon background color background (<code>#1a0210</code>) overlaid with fine magenta crosshair indicators.</li>
+            <li><strong>The Focal Target:</strong> A central ring mesh utilizing an emissive <code>MeshBasicMaterial</code> mapped to a post-processing <code>UnrealBloomPass</code> chain to achieve a crisp, glowing neon tracking line effect.</li>
+            <li><strong>The Materialization Sequence:</strong> Upon complete asset loading, a uniform shader parameter scales outward, triggering a Perlin noise dissolve execution that replaces the vector plane with the high-density map mesh.</li>
+        </ul>
+    </section>
+
+    <section id="map-render">
+        <h2>2. High-Density Low-Poly Map Rendering Engine</h2>
+        <p>Once materialized, the application transitions to a camera-restricted layout over a high-density, fully modeled low-poly terrain matrix.</p>
+        
+        <h3>A. Camera Control Set</h3>
+        <p>A <code>THREE.OrthographicCamera</code> handles translation across the X (horizontal pan) and Y (vertical pan) planes. Camera zoom levels track smoothly via scroll/pinch interactions while blocking pitch, roll, and angle variations to preserve the stylized top-down projection perspective.</p>
+
+        <h3>B. Mesh Setup & Biome Lighting</h3>
+        <ul>
+            <li><strong>Material Execution:</strong> All landmass geometries explicitly define <code>flatShading: true</code> using customized <code>MeshStandardMaterial</code> assets to display crisp polygonal facet definition.</li>
+            <li><strong>Light Rigging:</strong> An explicit directional light setup configured with sharp, low-bias shadows cuts across the terrain structures, accentuating poly ridges, low-poly pine tree groupings, desert monuments, and polar shelves.</li>
+            <li><strong>Granular Zoom Scalability:</strong> Continents use a highly scalable matrix configuration to allow precise zooming. Individual regions house micro-mesh scatter fields (cities, variations of vegetation, coastal configurations) that animate subtly when entering the active viewport bounding boxes.</li>
+        </ul>
+    </section>
+
+    <section id="database">
+        <h2>3. Flexible Document-Block Firestore Schema</h2>
+        <pre><code>// Location Node Payload Design
+{
+  "id": "pin_coordinate_string_hash",
+  "geohash": "xn0m7",
+  "coordinates": { "lat": 35.6762, "lng": 139.6503 },
+  "core_metadata": {
+    "title": "Tokyo Outing",
+    "date_start": "2025-01-29",
+    "date_end": "2025-02-12"
+  },
+  "custom_blocks": [
+    {
+      "block_id": "b1",
+      "type": "journal_markdown",
+      "value": "## Tsukiji Outer Market\nExplored vendor options early morning."
+    },
+    {
+      "block_id": "b2",
+      "type": "asset_gallery",
+      "source_mode": "mixed",
+      "references": [
+        { "source": "google_photos", "id": "g_photo_asset_hash_992" },
+        { "source": "firebase_storage", "id": "user_uploaded_document_file_112" }
+      ]
+    }
+  ]
+}</code></pre>
+    </section>
+
+    <section id="photos">
+        <h2>4. Asset Sourcing & Media Ingestion Pipeline</h2>
+        <p>Handles direct document uploads via standard Firebase Storage paths alongside manual asset sourcing arrays driven via authorized Google Photos API endpoint loops.</p>
+    </section>
+</main>
+
+</body>
+</html>
