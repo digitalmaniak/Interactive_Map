@@ -4,10 +4,10 @@ An interactive cyberpunk-inspired map of the world built using **Next.js**, **Th
 
 ## Project Structure
 
-- `_docs/`: Design and tech specification documents.
-- `Project/`: The Next.js web application source code.
-  - `src/app/`: Next.js page routing and layout structure.
-  - `src/components/`: Core interactive components (including Three.js canvases).
+- `_docs/`: Design and tech specification documents (Local only, ignored in Git).
+- `_images/`: Visual design reference images (Local only, ignored in Git).
+- `src/app/`: Next.js page routing and layout structure.
+- `src/components/`: Core interactive components (including Three.js canvases).
 
 ## Tech Stack
 - **Framework:** Next.js (App Router, JavaScript)
@@ -22,16 +22,12 @@ An interactive cyberpunk-inspired map of the world built using **Next.js**, **Th
 - npm
 
 ### Development
-1. Navigate to the `Project` directory:
-   ```bash
-   cd Project
-   ```
-2. Install dependencies:
+1. Install dependencies:
    ```bash
    npm install
    ```
-3. Run the development server:
+2. Run the development server:
    ```bash
    npm run dev
    ```
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
