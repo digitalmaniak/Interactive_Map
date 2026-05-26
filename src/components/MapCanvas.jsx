@@ -631,9 +631,12 @@ export default function MapCanvas() {
     gridHelper.position.y = 0.01;
     scene.add(gridHelper);
 
-    // Groups to organize extruded landmasses and borders
+    // Groups to organize extruded landmasses, borders, and water shelves
     const countriesGroup = new THREE.Group();
     scene.add(countriesGroup);
+
+    const shelvesGroup = new THREE.Group();
+    scene.add(shelvesGroup);
 
     const borderLines = []; // Collect border coordinate pairs
     const extrudeHeight = 1.2;
@@ -668,28 +671,55 @@ export default function MapCanvas() {
           const outerRing = polygonCoords[0];
           const contour = outerRing.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
           
+          const shape = new THREE.Shape();
+          for (let i = 0; i < contour.length; i++) {
+            if (i === 0) shape.moveTo(contour[i].x, contour[i].y);
+            else shape.lineTo(contour[i].x, contour[i].y);
+          }
+          
           const holes = [];
           for (let h = 1; h < polygonCoords.length; h++) {
             const holeCoords = polygonCoords[h];
-            const hole = holeCoords.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
-            holes.push(hole);
+            const holePath = new THREE.Path();
+            const holePoints = holeCoords.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
+            for (let i = 0; i < holePoints.length; i++) {
+              if (i === 0) holePath.moveTo(holePoints[i].x, holePoints[i].y);
+              else holePath.lineTo(holePoints[i].x, holePoints[i].y);
+            }
+            shape.holes.push(holePath);
+            holes.push(holePoints);
           }
 
-          const combinedPoints = [...contour];
-          const holePoints = [];
-          holes.forEach(hole => {
-            holePoints.push(hole);
-            combinedPoints.push(...hole);
-          });
+          // Leverage ShapeGeometry to perform robust 2D triangulation (handles holes & winding order perfectly)
+          const tempGeom = new THREE.ShapeGeometry(shape);
+          const posAttr = tempGeom.attributes.position;
+          const indexAttr = tempGeom.index;
 
-          const faceIndices = THREE.ShapeUtils.triangulateShape(contour, holePoints);
-          if (!faceIndices || faceIndices.length === 0) return;
+          const vertices = [];
+          for (let i = 0; i < posAttr.count; i++) {
+            vertices.push(new THREE.Vector2(posAttr.getX(i), posAttr.getY(i)));
+          }
+
+          const faceIndices = [];
+          if (indexAttr) {
+            const arr = indexAttr.array;
+            for (let i = 0; i < indexAttr.count; i += 3) {
+              faceIndices.push([arr[i], arr[i+1], arr[i+2]]);
+            }
+          } else {
+            for (let i = 0; i < posAttr.count; i += 3) {
+              faceIndices.push([i, i+1, i+2]);
+            }
+          }
+          tempGeom.dispose();
+
+          if (faceIndices.length === 0) return;
 
           let subdivisions = 3;
           if (faceIndices.length > 150) subdivisions = 1;
           else if (faceIndices.length > 40) subdivisions = 2;
 
-          const subdivided = subdivide2D(combinedPoints, faceIndices, subdivisions);
+          const subdivided = subdivide2D(vertices, faceIndices, subdivisions);
 
           const positions = [];
           const colors = [];
@@ -816,7 +846,7 @@ export default function MapCanvas() {
 
           const shelfMesh = new THREE.Mesh(shelfGeom, shelfMat);
           shelfMesh.position.y = 0.08;
-          countriesGroup.add(shelfMesh);
+          shelvesGroup.add(shelfMesh);
         };
 
         if (geometryType === "Polygon") {
@@ -1318,15 +1348,17 @@ export default function MapCanvas() {
         canvasElement.removeEventListener("touchstart", handleTouchStart);
         canvasElement.removeEventListener("touchmove", handleTouchMove);
       }
-      renderer.dispose();
-      oceanGeo.dispose();
-      oceanMat.dispose();
-      countriesGroup.children.forEach((child) => {
-        child.geometry.dispose();
-        child.material.dispose();
+      scene.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((mat) => mat.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
       });
-      pinGeom.dispose();
-      pinMat.dispose();
+      renderer.dispose();
     };
   }, [isLoaded, geoJsonData]);
 
