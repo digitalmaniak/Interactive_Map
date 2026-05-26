@@ -162,11 +162,11 @@ export default function MapCanvas() {
       frustumSize / 2,
       -frustumSize / 2,
       1,
-      1000
+      5000
     );
     camera.zoom = initialZoom;
     camera.updateProjectionMatrix();
-    camera.position.set(0, 110, 85); // Isometric camera tilt looking north-east
+    camera.position.set(0, 1100, 850); // Isometric camera tilt looking north-east
     camera.lookAt(0, 0, 0);
 
     // 3. Bright Natural Light Rigging (Hemisphere + Sunlight)
@@ -643,12 +643,12 @@ export default function MapCanvas() {
       // Copy camera target instantly for crisp 1-to-1 tracking and inertia
       const cameraPositionTarget = new THREE.Vector3(
         cameraTarget.x,
-        cameraTarget.y + 110,
-        cameraTarget.z + 85
+        cameraTarget.y + 1100,
+        cameraTarget.z + 850
       );
       camera.position.copy(cameraPositionTarget);
 
-      const lookTarget = camera.position.clone().add(new THREE.Vector3(0, -110, -85));
+      const lookTarget = camera.position.clone().add(new THREE.Vector3(0, -1100, -850));
       camera.lookAt(lookTarget);
 
       // Keep directional light centered over the camera target for sharp follow-shadows
