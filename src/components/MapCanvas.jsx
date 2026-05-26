@@ -1358,7 +1358,7 @@ export default function MapCanvas() {
       const minZ = initialZoom;
       const maxZ = 45.0;
       const tZ = Math.max(0.0, Math.min(1.0, (camera.zoom - minZ) / (maxZ - minZ)));
-      const S_max = 5.2;  // Very visible when zoomed out
+      const S_max = 9.5;  // Very visible when zoomed out
       const S_min = 0.75; // Clean and small when zoomed in
       const pinScaleVal = S_min + (S_max - S_min) * Math.pow(1 - tZ, 2.0);
 
