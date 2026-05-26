@@ -16,12 +16,12 @@ export default function MapCanvas() {
 
     // Soft minimalist loader logs
     const logs = [
-      "CONNECTING TO SPATIAL LEDGER...",
+      "LOADING PERSONAL ATLAS...",
       "CALIBRATING MAP COORDINATES...",
-      "GENERATING ORGANIC BIOMES...",
-      "RENDERING LOW-POLY CONTINENTS...",
-      "MATERIALIZING LANDSCAPES...",
-      "SYSTEM OPERATIONAL."
+      "GENERATING CONTINENT BIOMES...",
+      "RENDERING WORLD MAP...",
+      "LOADING VISITED MEMORIES...",
+      "READY TO EXPLORE."
     ];
 
     let logIndex = 0;
@@ -511,7 +511,7 @@ export default function MapCanvas() {
       <div className={`loader-overlay ${isLoaded ? "hidden" : ""}`}>
         <div className="loader-container">
           <div>
-            <h2 className="loader-status-title">LOADING LEDGER</h2>
+            <h2 className="loader-status-title">MY TRAVEL JOURNAL</h2>
           </div>
 
           {/* Minimalist Progress Line */}
@@ -537,57 +537,57 @@ export default function MapCanvas() {
       <nav className="sidebar-panel">
         <div className="sidebar-header">
           <h1 className="sidebar-logo">
-            LEDGER <span className="logo-dot"></span>
+            ODYSSEY <span className="logo-dot"></span>
           </h1>
-          <span style={{ fontSize: "0.65rem", color: "var(--accent-indigo)", letterSpacing: "0.15em", fontFamily: "var(--font-orbitron)", fontWeight: 700 }}>
-            SPATIAL NODE READER
+          <span style={{ fontSize: "0.65rem", color: "var(--accent-primary)", letterSpacing: "0.05em", fontWeight: 700 }}>
+            SPATIAL TRAVEL JOURNAL
           </span>
         </div>
 
         <ul className="sidebar-menu">
           <li>
             <div className="menu-item active">
-              <span>OVERVIEW MAP</span>
+              <span>Interactive Map</span>
             </div>
           </li>
           <li>
             <div className="menu-item">
-              <span>LOCATION LEDGER</span>
+              <span>Travel Journals</span>
             </div>
           </li>
           <li>
             <div className="menu-item">
-              <span>PHOTO INGESTION</span>
+              <span>Memory Gallery</span>
             </div>
           </li>
           <li>
             <div className="menu-item">
-              <span>SYSTEM SETTINGS</span>
+              <span>AI Trip Planner</span>
             </div>
           </li>
         </ul>
 
         <div className="sidebar-footer">
-          <span>SECURE.NODE</span>
-          <span>SYS_ACTIVE</span>
+          <span>WANDERER</span>
+          <span>ONLINE</span>
         </div>
       </nav>
 
       {/* 4. Active Spatial Hover Tracker HUD Panel */}
       <div className="overlay-panel">
         <h3 className="panel-title">
-          <span>ACTIVE COORDINATES</span>
-          <span className="logo-dot" style={{ margin: 0, backgroundColor: "var(--accent-indigo)", boxShadow: "none" }}></span>
+          <span>EXPLORING PATH</span>
+          <span className="logo-dot" style={{ margin: 0, backgroundColor: "var(--accent-primary)", boxShadow: "none" }}></span>
         </h3>
         <div className="panel-body">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontFamily: "var(--font-orbitron)", fontSize: "0.8rem", color: "var(--text-main)", fontWeight: 700 }}>
-            <div>X: <span>{activeCoords.x}</span></div>
-            <div>Z: <span>{activeCoords.z}</span></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.85rem", color: "var(--text-main)", fontWeight: 700 }}>
+            <div>Latitude: <span>{activeCoords.x}</span></div>
+            <div>Longitude: <span>{activeCoords.z}</span></div>
           </div>
-          <p style={{ marginTop: "0.75rem", fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
-            Drag to pan the spatial grid. Scroll to scale zoom levels. Click nodes to initialize documentation blocks.
+          <p style={{ marginTop: "0.75rem", fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+            Drag to explore the world map. Scroll to zoom in and out. Click any pinned location to view journal entries, restaurant reviews, photos, or ask the AI to help plan your next journey.
           </p>
-          <button className="cyber-btn">TRIGGER SCAN</button>
+          <button className="cyber-btn">ADD JOURNAL ENTRY</button>
         </div>
       </div>
     </div>
