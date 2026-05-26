@@ -1357,10 +1357,11 @@ export default function MapCanvas() {
 
       // Dynamic grid opacity based on zoom level:
       // min zoom (initialZoom) -> opacity 0.0
-      // max zoom (45.0) -> opacity 1.0
+      // halfway zoom (initialZoom + (maxZoom - initialZoom) / 2) -> opacity 1.0
       const minZoom = initialZoom;
       const maxZoom = 45.0;
-      const zoomRange = maxZoom - minZoom;
+      const halfwayZoom = minZoom + (maxZoom - minZoom) / 2;
+      const zoomRange = halfwayZoom - minZoom;
       let gridOpacity = 0.0;
       if (zoomRange > 0) {
         const rawOpacity = (camera.zoom - minZoom) / zoomRange;
