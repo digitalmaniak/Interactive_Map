@@ -661,8 +661,10 @@ export default function MapCanvas() {
     scene.add(oceanMesh);
 
     // Grid helper (extended in all directions, matching 8.0 unit squares)
-    const gridHelper = new THREE.GridHelper(8000, 1000, "rgba(255, 255, 255, 0.05)", "rgba(255, 255, 255, 0.02)");
+    const gridHelper = new THREE.GridHelper(8000, 1000, 0xffffff, 0xffffff);
     gridHelper.position.y = 0.01;
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.0;
     scene.add(gridHelper);
 
     // Groups to organize extruded landmasses, borders, and water shelves
@@ -1352,6 +1354,19 @@ export default function MapCanvas() {
         const baseHeight = pin.userData.countryHeight || 0.9;
         pin.position.y = baseHeight + 0.25 + Math.sin(elapsedTime * 2.5 + idx) * 0.15;
       });
+
+      // Dynamic grid opacity based on zoom level:
+      // min zoom (initialZoom) -> opacity 0.0
+      // max zoom (45.0) -> opacity 0.75
+      const minZoom = initialZoom;
+      const maxZoom = 45.0;
+      const zoomRange = maxZoom - minZoom;
+      let gridOpacity = 0.0;
+      if (zoomRange > 0) {
+        const rawOpacity = (camera.zoom - minZoom) / zoomRange;
+        gridOpacity = Math.max(0.0, Math.min(0.75, rawOpacity * 0.75));
+      }
+      gridHelper.material.opacity = gridOpacity;
 
       renderer.render(scene, camera);
     };
