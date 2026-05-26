@@ -133,7 +133,7 @@ export default function MapCanvas() {
     // 1. Scene & Renderer Setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#f1f5f9"); // Bright off-white background
-    scene.fog = new THREE.FogExp2("#f1f5f9", 0.004);
+    scene.fog = new THREE.FogExp2("#f1f5f9", 0.0004);
 
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
