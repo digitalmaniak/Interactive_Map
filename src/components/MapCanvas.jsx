@@ -586,8 +586,8 @@ export default function MapCanvas() {
 
     // 1. Scene & Renderer Setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#f1f5f9"); // Bright off-white background
-    scene.fog = new THREE.FogExp2("#f1f5f9", 0.0004);
+    scene.background = new THREE.Color("#0e7490"); // Blend with deep cyan ocean
+    scene.fog = new THREE.FogExp2("#0e7490", 0.0004);
 
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
@@ -627,7 +627,7 @@ export default function MapCanvas() {
     const ambientLight = new THREE.AmbientLight("#ffffff", 1.9);
     scene.add(ambientLight);
 
-    const hemiLight = new THREE.HemisphereLight("#bae6fd", "#f1f5f9", 1.4); // Light blue sky sky-glow to grey ground
+    const hemiLight = new THREE.HemisphereLight("#bae6fd", "#0e7490", 1.4); // Light blue sky sky-glow to ocean reflection
     hemiLight.position.set(0, 120, 0);
     scene.add(hemiLight);
 
@@ -647,8 +647,8 @@ export default function MapCanvas() {
     scene.add(dirLight);
     scene.add(dirLight.target); // Essential for directional light target tracking
 
-    // 4. Flat Ocean Base Plane
-    const oceanGeo = new THREE.PlaneGeometry(360 * mapScale + 400, 180 * mapScale + 400);
+    // 4. Flat Ocean Base Plane (extended to avoid edge clipping)
+    const oceanGeo = new THREE.PlaneGeometry(10000, 10000);
     oceanGeo.rotateX(-Math.PI / 2);
     const oceanMat = new THREE.MeshStandardMaterial({
       color: "#0e7490", // Deep cyan ocean
@@ -660,8 +660,8 @@ export default function MapCanvas() {
     oceanMesh.receiveShadow = true;
     scene.add(oceanMesh);
 
-    // Grid helper (faint design reference, increased divisions for more grid squares)
-    const gridHelper = new THREE.GridHelper(360 * mapScale, 360, "rgba(99, 102, 241, 0.05)", "rgba(99, 102, 241, 0.02)");
+    // Grid helper (extended in all directions, matching 8.0 unit squares)
+    const gridHelper = new THREE.GridHelper(8000, 1000, "rgba(255, 255, 255, 0.05)", "rgba(255, 255, 255, 0.02)");
     gridHelper.position.y = 0.01;
     scene.add(gridHelper);
 
