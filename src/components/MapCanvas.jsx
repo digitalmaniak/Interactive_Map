@@ -249,15 +249,19 @@ export default function MapCanvas() {
     };
     scatterObjects();
 
-    // 6. Camera Orbit, Pan & Zoom Custom Implementation
+    // 6. Camera Orbit, Pan & Zoom Custom Implementation with Inertia
     let isDragging = false;
     const previousMousePosition = { x: 0, y: 0 };
     const cameraTarget = new THREE.Vector3(0, 0, 0);
+    const dragVelocity = { x: 0, y: 0 };
+    const friction = 0.92;
 
     const handleMouseDown = (e) => {
       isDragging = true;
       previousMousePosition.x = e.clientX;
       previousMousePosition.y = e.clientY;
+      dragVelocity.x = 0;
+      dragVelocity.y = 0;
     };
 
     const handleMouseMove = (e) => {
@@ -282,9 +286,21 @@ export default function MapCanvas() {
       const deltaX = e.clientX - previousMousePosition.x;
       const deltaY = e.clientY - previousMousePosition.y;
 
-      const factor = camera.zoom * 15;
-      const moveX = (-deltaX + deltaY) / factor;
-      const moveZ = (-deltaX - deltaY) / factor;
+      // Exact pixel-to-world conversion math for Orthographic camera to lock cursor
+      const clientWidth = renderer.domElement.clientWidth;
+      const clientHeight = renderer.domElement.clientHeight;
+
+      const worldWidth = (frustumSize * (clientWidth / clientHeight)) / camera.zoom;
+      const worldHeight = frustumSize / camera.zoom;
+
+      const H_u = worldWidth / clientWidth;
+      const V_u = worldHeight / clientHeight;
+
+      const S_x = H_u / Math.sqrt(2);
+      const S_y = (V_u * Math.sqrt(3)) / Math.sqrt(2);
+
+      const moveX = -S_x * deltaX - S_y * deltaY;
+      const moveZ = S_x * deltaX - S_y * deltaY;
 
       cameraTarget.x += moveX;
       cameraTarget.z += moveZ;
@@ -292,6 +308,10 @@ export default function MapCanvas() {
       // Restrict camera pan bounds
       cameraTarget.x = Math.max(-80, Math.min(80, cameraTarget.x));
       cameraTarget.z = Math.max(-80, Math.min(80, cameraTarget.z));
+
+      // Track drag velocity for inertia (weighted exponential moving average)
+      dragVelocity.x = dragVelocity.x * 0.3 + deltaX * 0.7;
+      dragVelocity.y = dragVelocity.y * 0.3 + deltaY * 0.7;
 
       previousMousePosition.x = e.clientX;
       previousMousePosition.y = e.clientY;
@@ -321,6 +341,8 @@ export default function MapCanvas() {
         isDragging = true;
         previousMousePosition.x = e.touches[0].clientX;
         previousMousePosition.y = e.touches[0].clientY;
+        dragVelocity.x = 0;
+        dragVelocity.y = 0;
       } else if (e.touches.length === 2) {
         isDragging = false;
         touchStartDist = Math.hypot(
@@ -335,12 +357,29 @@ export default function MapCanvas() {
         const deltaX = e.touches[0].clientX - previousMousePosition.x;
         const deltaY = e.touches[0].clientY - previousMousePosition.y;
 
-        const factor = camera.zoom * 15;
-        const moveX = (-deltaX + deltaY) / factor;
-        const moveZ = (-deltaX - deltaY) / factor;
+        const clientWidth = renderer.domElement.clientWidth;
+        const clientHeight = renderer.domElement.clientHeight;
+
+        const worldWidth = (frustumSize * (clientWidth / clientHeight)) / camera.zoom;
+        const worldHeight = frustumSize / camera.zoom;
+
+        const H_u = worldWidth / clientWidth;
+        const V_u = worldHeight / clientHeight;
+
+        const S_x = H_u / Math.sqrt(2);
+        const S_y = (V_u * Math.sqrt(3)) / Math.sqrt(2);
+
+        const moveX = -S_x * deltaX - S_y * deltaY;
+        const moveZ = S_x * deltaX - S_y * deltaY;
 
         cameraTarget.x += moveX;
         cameraTarget.z += moveZ;
+
+        cameraTarget.x = Math.max(-80, Math.min(80, cameraTarget.x));
+        cameraTarget.z = Math.max(-80, Math.min(80, cameraTarget.z));
+
+        dragVelocity.x = dragVelocity.x * 0.3 + deltaX * 0.7;
+        dragVelocity.y = dragVelocity.y * 0.3 + deltaY * 0.7;
 
         previousMousePosition.x = e.touches[0].clientX;
         previousMousePosition.y = e.touches[0].clientY;
@@ -385,6 +424,41 @@ export default function MapCanvas() {
       requestAnimationFrame(animate);
 
       const elapsedTime = clock.getElapsedTime();
+
+      // Apply drag inertia / deceleration when mouse is released
+      if (!isDragging) {
+        const speed = Math.sqrt(dragVelocity.x * dragVelocity.x + dragVelocity.y * dragVelocity.y);
+        if (speed > 0.05) {
+          const clientWidth = renderer.domElement.clientWidth;
+          const clientHeight = renderer.domElement.clientHeight;
+
+          const worldWidth = (frustumSize * (clientWidth / clientHeight)) / camera.zoom;
+          const worldHeight = frustumSize / camera.zoom;
+
+          const H_u = worldWidth / clientWidth;
+          const V_u = worldHeight / clientHeight;
+
+          const S_x = H_u / Math.sqrt(2);
+          const S_y = (V_u * Math.sqrt(3)) / Math.sqrt(2);
+
+          const moveX = -S_x * dragVelocity.x - S_y * dragVelocity.y;
+          const moveZ = S_x * dragVelocity.x - S_y * dragVelocity.y;
+
+          cameraTarget.x += moveX;
+          cameraTarget.z += moveZ;
+
+          // Restrict camera pan bounds
+          cameraTarget.x = Math.max(-80, Math.min(80, cameraTarget.x));
+          cameraTarget.z = Math.max(-80, Math.min(80, cameraTarget.z));
+
+          // Decay velocity
+          dragVelocity.x *= friction;
+          dragVelocity.y *= friction;
+        } else {
+          dragVelocity.x = 0;
+          dragVelocity.y = 0;
+        }
+      }
 
       // Lerp camera target
       const cameraPositionTarget = new THREE.Vector3(
