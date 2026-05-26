@@ -610,16 +610,6 @@ export default function MapCanvas() {
     const horizontalZoom = (frustumSize * aspect) / (mapWidth + 80);
     const initialZoom = Math.min(verticalZoom, horizontalZoom);
 
-    // Compute pin scale parameters based on initialZoom
-    const minZoom = initialZoom;
-    const maxZoom = 45.0;
-    const S_max = 2.8;  // Scale of pin when fully zoomed out
-    const S_min = 0.55; // Scale of pin when fully zoomed in
-    const invMin = 1.0 / minZoom;
-    const invMax = 1.0 / maxZoom;
-    const pinA = (S_max - S_min) / (invMin - invMax);
-    const pinB = S_min - pinA / maxZoom;
-
     const camera = new THREE.OrthographicCamera(
       (-frustumSize * aspect) / 2,
       (frustumSize * aspect) / 2,
@@ -1043,8 +1033,10 @@ export default function MapCanvas() {
 
     const pinMat = new THREE.MeshStandardMaterial({
       color: "#f43f5e", // Rose pink
-      roughness: 0.15,
-      metalness: 0.8
+      emissive: "#ff3b30",
+      emissiveIntensity: 0.25, // self-glowing so it stands out against dark cyan / green
+      roughness: 0.4,
+      metalness: 0.1
     });
 
     initialPins.forEach((pinData) => {
@@ -1062,7 +1054,7 @@ export default function MapCanvas() {
         yHeight = intersects[0].point.y;
       }
       
-      const pinMesh = new THREE.Mesh(pinGeom, pinMat);
+      const pinMesh = new THREE.Mesh(pinGeom, pinMat.clone());
       pinMesh.position.set(basePos.x, yHeight + 0.1, basePos.z);
       pinMesh.castShadow = true;
       pinMesh.userData = { isPin: true, ...pinData, countryHeight: yHeight };
@@ -1108,14 +1100,19 @@ export default function MapCanvas() {
           document.body.style.cursor = "pointer";
           const collidedPin = pinIntersects[0].object;
           if (hoveredPin !== collidedPin) {
-            if (hoveredPin) hoveredPin.material.color.setHex(0xf43f5e);
+            if (hoveredPin) {
+              hoveredPin.material.color.setHex(0xf43f5e);
+              hoveredPin.material.emissive.setHex(0xff3b30);
+            }
             hoveredPin = collidedPin;
             hoveredPin.material.color.setHex(0x4f46e5); // Change to Indigo
+            hoveredPin.material.emissive.setHex(0x4f46e5); // Emissive Indigo
           }
         } else {
           document.body.style.cursor = "default";
           if (hoveredPin) {
             hoveredPin.material.color.setHex(0xf43f5e);
+            hoveredPin.material.emissive.setHex(0xff3b30);
             hoveredPin = null;
           }
 
@@ -1358,12 +1355,19 @@ export default function MapCanvas() {
       dirLight.target.updateMatrixWorld();
 
       // Animate visited pin markers (hover floating & pulsing + dynamic scaling)
-      const pinScaleVal = (pinA / camera.zoom) + pinB;
+      const minZ = initialZoom;
+      const maxZ = 45.0;
+      const tZ = Math.max(0.0, Math.min(1.0, (camera.zoom - minZ) / (maxZ - minZ)));
+      const S_max = 5.2;  // Very visible when zoomed out
+      const S_min = 0.75; // Clean and small when zoomed in
+      const pinScaleVal = S_min + (S_max - S_min) * Math.pow(1 - tZ, 2.0);
+
       pinGroup.children.forEach((pin, idx) => {
         pin.rotation.y += 0.015;
-        // Bouncing motion
+        // Bouncing motion scaled by pin size so it is visible when zoomed out
         const baseHeight = pin.userData.countryHeight || 0.9;
-        pin.position.y = baseHeight + 0.25 + Math.sin(elapsedTime * 2.5 + idx) * 0.15;
+        const bounceAmplitude = 0.12 * pinScaleVal;
+        pin.position.y = baseHeight + (0.2 * pinScaleVal) + Math.sin(elapsedTime * 2.5 + idx) * bounceAmplitude;
         // Dynamic scale
         pin.scale.set(pinScaleVal, pinScaleVal, pinScaleVal);
       });
