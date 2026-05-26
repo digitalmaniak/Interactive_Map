@@ -48,8 +48,8 @@ export default function MapCanvas() {
   const [activePin, setActivePin] = useState(null);
   const [isAddingEntry, setIsAddingEntry] = useState(false);
 
-  // Map Scale conversion factor
-  const mapScale = 0.45;
+  // Map Scale conversion factor (scaled up for higher resolution details)
+  const mapScale = 8.0;
 
   // Coordinate Conversion Utility Functions
   const latLonToVector3 = (lat, lon, y = 0.8) => {
@@ -148,6 +148,14 @@ export default function MapCanvas() {
     // 2. Orthographic Camera Setup
     const aspect = width / height;
     const frustumSize = 75;
+
+    // Calculate perfect initial zoom to fit the map with padding
+    const mapHeight = 180 * mapScale;
+    const mapWidth = 360 * mapScale;
+    const verticalZoom = frustumSize / (mapHeight + 40);
+    const horizontalZoom = (frustumSize * aspect) / (mapWidth + 80);
+    const initialZoom = Math.min(verticalZoom, horizontalZoom);
+
     const camera = new THREE.OrthographicCamera(
       (-frustumSize * aspect) / 2,
       (frustumSize * aspect) / 2,
@@ -156,6 +164,8 @@ export default function MapCanvas() {
       1,
       1000
     );
+    camera.zoom = initialZoom;
+    camera.updateProjectionMatrix();
     camera.position.set(0, 110, 85); // Isometric camera tilt looking north-east
     camera.lookAt(0, 0, 0);
 
@@ -168,21 +178,23 @@ export default function MapCanvas() {
     scene.add(hemiLight);
 
     const dirLight = new THREE.DirectionalLight("#fffbeb", 2.0); // Warm sunny tint
-    dirLight.position.set(80, 130, 45);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 2048;
     dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.camera.left = -110;
-    dirLight.shadow.camera.right = 110;
-    dirLight.shadow.camera.top = 110;
-    dirLight.shadow.camera.bottom = -110;
+    // Focused shadow frustum centered at camera target
+    const shadowFrustum = 160;
+    dirLight.shadow.camera.left = -shadowFrustum;
+    dirLight.shadow.camera.right = shadowFrustum;
+    dirLight.shadow.camera.top = shadowFrustum;
+    dirLight.shadow.camera.bottom = -shadowFrustum;
     dirLight.shadow.camera.near = 0.5;
     dirLight.shadow.camera.far = 400;
     dirLight.shadow.bias = -0.0005;
     scene.add(dirLight);
+    scene.add(dirLight.target); // Essential for directional light target tracking
 
     // 4. Flat Ocean Base Plane
-    const oceanGeo = new THREE.PlaneGeometry(360 * mapScale + 80, 180 * mapScale + 80);
+    const oceanGeo = new THREE.PlaneGeometry(360 * mapScale + 400, 180 * mapScale + 400);
     oceanGeo.rotateX(-Math.PI / 2);
     const oceanMat = new THREE.MeshStandardMaterial({
       color: "#e0f2fe", // Soft bright baby blue ocean
@@ -194,8 +206,8 @@ export default function MapCanvas() {
     oceanMesh.receiveShadow = true;
     scene.add(oceanMesh);
 
-    // Grid helper (faint design reference)
-    const gridHelper = new THREE.GridHelper(360 * mapScale, 36, "rgba(99, 102, 241, 0.05)", "rgba(99, 102, 241, 0.02)");
+    // Grid helper (faint design reference, increased divisions for more grid squares)
+    const gridHelper = new THREE.GridHelper(360 * mapScale, 360, "rgba(99, 102, 241, 0.05)", "rgba(99, 102, 241, 0.02)");
     gridHelper.position.y = 0.01;
     scene.add(gridHelper);
 
@@ -204,7 +216,7 @@ export default function MapCanvas() {
     scene.add(countriesGroup);
 
     const borderLines = []; // Collect border coordinate pairs
-    const extrudeHeight = 0.8;
+    const extrudeHeight = 1.2;
 
     // Helper to generate THREE.Shape from coordinates ring
     const createShape = (ring) => {
@@ -335,9 +347,9 @@ export default function MapCanvas() {
     const pinGroup = new THREE.Group();
     scene.add(pinGroup);
 
-    const pinGeom = new THREE.ConeGeometry(0.7, 2.5, 4);
+    const pinGeom = new THREE.ConeGeometry(1.2, 4.0, 4);
     pinGeom.rotateX(Math.PI); // Point down
-    pinGeom.translate(0, 1.25, 0); // Center translation pivot at tip
+    pinGeom.translate(0, 2.0, 0); // Center translation pivot at tip
 
     const pinMat = new THREE.MeshStandardMaterial({
       color: "#f43f5e", // Rose pink
@@ -360,7 +372,8 @@ export default function MapCanvas() {
     // 8. Interactive Dragging, Pan, and Raycasting Click/Hover Panning
     let isDragging = false;
     let dragMoveCount = 0; // count dragging frames to distinguish click from drag
-    const previousMousePosition = { x: 0, y: 0 };
+    const currentMousePosition = { x: 0, y: 0 };
+    const previousFrameMousePosition = { x: 0, y: 0 };
     const cameraTarget = new THREE.Vector3(0, 0, 0);
     const dragVelocity = { x: 0, y: 0 };
     const friction = 0.92;
@@ -370,8 +383,10 @@ export default function MapCanvas() {
     const handleMouseDown = (e) => {
       isDragging = true;
       dragMoveCount = 0;
-      previousMousePosition.x = e.clientX;
-      previousMousePosition.y = e.clientY;
+      currentMousePosition.x = e.clientX;
+      currentMousePosition.y = e.clientY;
+      previousFrameMousePosition.x = e.clientX;
+      previousFrameMousePosition.y = e.clientY;
       dragVelocity.x = 0;
       dragVelocity.y = 0;
     };
@@ -424,40 +439,9 @@ export default function MapCanvas() {
         return;
       }
 
+      currentMousePosition.x = e.clientX;
+      currentMousePosition.y = e.clientY;
       dragMoveCount++;
-      const deltaX = e.clientX - previousMousePosition.x;
-      const deltaY = e.clientY - previousMousePosition.y;
-
-      // Exact pixel-to-world conversion math for Orthographic camera
-      const clientWidth = renderer.domElement.clientWidth;
-      const clientHeight = renderer.domElement.clientHeight;
-
-      const worldWidth = (frustumSize * (clientWidth / clientHeight)) / camera.zoom;
-      const worldHeight = frustumSize / camera.zoom;
-
-      const H_u = worldWidth / clientWidth;
-      const V_u = worldHeight / clientHeight;
-
-      const S_x = H_u / Math.sqrt(2);
-      const S_y = (V_u * Math.sqrt(3)) / Math.sqrt(2);
-
-      // Panning target translation
-      const moveX = -S_x * deltaX - S_y * deltaY;
-      const moveZ = S_x * deltaX - S_y * deltaY;
-
-      cameraTarget.x += moveX;
-      cameraTarget.z += moveZ;
-
-      // Map Boundaries
-      cameraTarget.x = Math.max(-100, Math.min(100, cameraTarget.x));
-      cameraTarget.z = Math.max(-60, Math.min(60, cameraTarget.z));
-
-      // Track drag velocity for inertia decay
-      dragVelocity.x = dragVelocity.x * 0.3 + deltaX * 0.7;
-      dragVelocity.y = dragVelocity.y * 0.3 + deltaY * 0.7;
-
-      previousMousePosition.x = e.clientX;
-      previousMousePosition.y = e.clientY;
     };
 
     const handleMouseUp = (e) => {
@@ -512,8 +496,10 @@ export default function MapCanvas() {
 
     const handleWheel = (e) => {
       e.preventDefault();
-      let zoomAmount = e.deltaY * -0.001;
-      camera.zoom = Math.max(0.3, Math.min(2.5, camera.zoom + zoomAmount));
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      const minZoom = initialZoom * 0.95;
+      const maxZoom = 45.0;
+      camera.zoom = Math.max(minZoom, Math.min(maxZoom, camera.zoom * factor));
       camera.updateProjectionMatrix();
     };
 
@@ -529,8 +515,10 @@ export default function MapCanvas() {
       if (e.touches.length === 1) {
         isDragging = true;
         dragMoveCount = 0;
-        previousMousePosition.x = e.touches[0].clientX;
-        previousMousePosition.y = e.touches[0].clientY;
+        currentMousePosition.x = e.touches[0].clientX;
+        currentMousePosition.y = e.touches[0].clientY;
+        previousFrameMousePosition.x = e.touches[0].clientX;
+        previousFrameMousePosition.y = e.touches[0].clientY;
         dragVelocity.x = 0;
         dragVelocity.y = 0;
       } else if (e.touches.length === 2) {
@@ -544,43 +532,18 @@ export default function MapCanvas() {
 
     const handleTouchMove = (e) => {
       if (isDragging && e.touches.length === 1) {
+        currentMousePosition.x = e.touches[0].clientX;
+        currentMousePosition.y = e.touches[0].clientY;
         dragMoveCount++;
-        const deltaX = e.touches[0].clientX - previousMousePosition.x;
-        const deltaY = e.touches[0].clientY - previousMousePosition.y;
-
-        const clientWidth = renderer.domElement.clientWidth;
-        const clientHeight = renderer.domElement.clientHeight;
-
-        const worldWidth = (frustumSize * (clientWidth / clientHeight)) / camera.zoom;
-        const worldHeight = frustumSize / camera.zoom;
-
-        const H_u = worldWidth / clientWidth;
-        const V_u = worldHeight / clientHeight;
-
-        const S_x = H_u / Math.sqrt(2);
-        const S_y = (V_u * Math.sqrt(3)) / Math.sqrt(2);
-
-        const moveX = -S_x * deltaX - S_y * deltaY;
-        const moveZ = S_x * deltaX - S_y * deltaY;
-
-        cameraTarget.x += moveX;
-        cameraTarget.z += moveZ;
-
-        cameraTarget.x = Math.max(-100, Math.min(100, cameraTarget.x));
-        cameraTarget.z = Math.max(-60, Math.min(60, cameraTarget.z));
-
-        dragVelocity.x = dragVelocity.x * 0.3 + deltaX * 0.7;
-        dragVelocity.y = dragVelocity.y * 0.3 + deltaY * 0.7;
-
-        previousMousePosition.x = e.touches[0].clientX;
-        previousMousePosition.y = e.touches[0].clientY;
       } else if (e.touches.length === 2) {
         const dist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
         const factor = dist / touchStartDist;
-        camera.zoom = Math.max(0.3, Math.min(2.5, camera.zoom * factor));
+        const minZoom = initialZoom * 0.95;
+        const maxZoom = 45.0;
+        camera.zoom = Math.max(minZoom, Math.min(maxZoom, camera.zoom * factor));
         camera.updateProjectionMatrix();
         touchStartDist = dist;
       }
@@ -616,8 +579,39 @@ export default function MapCanvas() {
 
       const elapsedTime = clock.getElapsedTime();
 
-      // Apply drag inertia decay
-      if (!isDragging) {
+      const xLimit = 180 * mapScale + 100;
+      const zLimit = 90 * mapScale + 80;
+
+      if (isDragging) {
+        const deltaX = currentMousePosition.x - previousFrameMousePosition.x;
+        const deltaY = currentMousePosition.y - previousFrameMousePosition.y;
+
+        const clientWidth = renderer.domElement.clientWidth;
+        const clientHeight = renderer.domElement.clientHeight;
+
+        const worldWidth = (frustumSize * (clientWidth / clientHeight)) / camera.zoom;
+        const worldHeight = frustumSize / camera.zoom;
+
+        const H_u = worldWidth / clientWidth;
+        const V_u = worldHeight / clientHeight;
+
+        const moveX = -H_u * deltaX;
+        const moveZ = -1.2637 * V_u * deltaY;
+
+        cameraTarget.x += moveX;
+        cameraTarget.z += moveZ;
+
+        cameraTarget.x = Math.max(-xLimit, Math.min(xLimit, cameraTarget.x));
+        cameraTarget.z = Math.max(-zLimit, Math.min(zLimit, cameraTarget.z));
+
+        // Smooth velocity tracking
+        dragVelocity.x = dragVelocity.x * 0.2 + deltaX * 0.8;
+        dragVelocity.y = dragVelocity.y * 0.2 + deltaY * 0.8;
+
+        previousFrameMousePosition.x = currentMousePosition.x;
+        previousFrameMousePosition.y = currentMousePosition.y;
+      } else {
+        // Apply drag inertia decay
         const speed = Math.sqrt(dragVelocity.x * dragVelocity.x + dragVelocity.y * dragVelocity.y);
         if (speed > 0.05) {
           const clientWidth = renderer.domElement.clientWidth;
@@ -629,17 +623,14 @@ export default function MapCanvas() {
           const H_u = worldWidth / clientWidth;
           const V_u = worldHeight / clientHeight;
 
-          const S_x = H_u / Math.sqrt(2);
-          const S_y = (V_u * Math.sqrt(3)) / Math.sqrt(2);
-
-          const moveX = -S_x * dragVelocity.x - S_y * dragVelocity.y;
-          const moveZ = S_x * dragVelocity.x - S_y * dragVelocity.y;
+          const moveX = -H_u * dragVelocity.x;
+          const moveZ = -1.2637 * V_u * dragVelocity.y;
 
           cameraTarget.x += moveX;
           cameraTarget.z += moveZ;
 
-          cameraTarget.x = Math.max(-100, Math.min(100, cameraTarget.x));
-          cameraTarget.z = Math.max(-60, Math.min(60, cameraTarget.z));
+          cameraTarget.x = Math.max(-xLimit, Math.min(xLimit, cameraTarget.x));
+          cameraTarget.z = Math.max(-zLimit, Math.min(zLimit, cameraTarget.z));
 
           dragVelocity.x *= friction;
           dragVelocity.y *= friction;
@@ -649,16 +640,21 @@ export default function MapCanvas() {
         }
       }
 
-      // Smoothly move camera
+      // Copy camera target instantly for crisp 1-to-1 tracking and inertia
       const cameraPositionTarget = new THREE.Vector3(
         cameraTarget.x,
         cameraTarget.y + 110,
         cameraTarget.z + 85
       );
-      camera.position.lerp(cameraPositionTarget, 0.08);
+      camera.position.copy(cameraPositionTarget);
 
       const lookTarget = camera.position.clone().add(new THREE.Vector3(0, -110, -85));
       camera.lookAt(lookTarget);
+
+      // Keep directional light centered over the camera target for sharp follow-shadows
+      dirLight.position.set(cameraTarget.x + 80, cameraTarget.y + 130, cameraTarget.z + 45);
+      dirLight.target.position.copy(cameraTarget);
+      dirLight.target.updateMatrixWorld();
 
       // Animate visited pin markers (hover floating & pulsing)
       pinGroup.children.forEach((pin, idx) => {
