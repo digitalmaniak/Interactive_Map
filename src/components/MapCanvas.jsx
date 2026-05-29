@@ -362,6 +362,7 @@ export default function MapCanvas() {
   const [loadingLog, setLoadingLog] = useState("CONNECTING TO WORLD GEOMETRY ATLAS...");
   const [isLoaded, setIsLoaded] = useState(false);
   const [geoJsonData, setGeoJsonData] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // Interactive HUD States
   const [hoveredCountry, setHoveredCountry] = useState("Hover over map");
@@ -1122,16 +1123,30 @@ export default function MapCanvas() {
         <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
       </div>
 
-      {/* 3. Frosted-glass Sidebar Panel */}
-      <nav className="sidebar-panel">
-        <div className="sidebar-header">
-          <h1 className="sidebar-logo">
+      {/* 2.5 Floating Header & Menu Toggle Trigger */}
+      <div 
+        className={`sidebar-trigger ${isSidebarOpen ? "open" : ""}`}
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+      >
+        <button className="hamburger-btn" aria-label="Toggle Navigation Menu">
+          <span className="hamburger-line"></span>
+          <span className="hamburger-line"></span>
+          <span className="hamburger-line"></span>
+        </button>
+        <div className="trigger-text">
+          <h1 className="sidebar-logo" style={{ fontSize: "1.15rem", margin: 0, padding: 0 }}>
             ODYSSEY <span className="logo-dot"></span>
           </h1>
-          <span style={{ fontSize: "0.65rem", color: "var(--accent-primary)", letterSpacing: "0.05em", fontWeight: 700 }}>
+          <span className="trigger-subtext">
             SPATIAL TRAVEL JOURNAL
           </span>
         </div>
+      </div>
+
+      {/* 3. Frosted-glass Sidebar Panel */}
+      <nav className={`sidebar-panel ${isSidebarOpen ? "open" : ""}`}>
+        {/* Spacer to push menu items below the floating logo trigger */}
+        <div style={{ height: "4.5rem" }} />
 
         <ul className="sidebar-menu">
           <li>
@@ -1156,21 +1171,17 @@ export default function MapCanvas() {
           </li>
         </ul>
 
-        {/* Display current hovered country name */}
-        <div style={{ marginTop: "2rem", borderTop: "1px solid rgba(15, 23, 42, 0.05)", paddingTop: "1rem" }}>
-          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
-            Exploring Region
-          </span>
-          <h4 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--accent-primary)", marginTop: "0.25rem" }}>
-            {hoveredCountry}
-          </h4>
-        </div>
-
         <div className="sidebar-footer">
           <span>WANDERER</span>
           <span>ONLINE</span>
         </div>
       </nav>
+
+      {/* Persistent Exploring Region Badge */}
+      <div className={`exploring-badge ${isSidebarOpen ? "shifted" : ""}`}>
+        <span className="exploring-badge-title">Exploring Region</span>
+        <h4 className="exploring-badge-name">{hoveredCountry}</h4>
+      </div>
 
       {/* 4. Active Spatial Hover Tracker / Memory HUD Panel */}
       <div className="overlay-panel">
