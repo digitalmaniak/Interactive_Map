@@ -382,6 +382,31 @@ const getCountryMetadata = (countryCode, centroidLat, centroidLon) => {
 };
 
 
+const isPointInPolygon = (point, vs) => {
+  const x = point[0], y = point[1];
+  let inside = false;
+  for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+    const xi = vs[i][0], yi = vs[i][1];
+    const xj = vs[j][0], yj = vs[j][1];
+    const intersect = ((yi > y) !== (yj > y))
+        && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+};
+
+const isPointInFeature = (lon, lat, feature) => {
+  const geometryType = feature.geometry.type;
+  const coordinates = feature.geometry.coordinates;
+
+  if (geometryType === "Polygon") {
+    return isPointInPolygon([lon, lat], coordinates[0]);
+  } else if (geometryType === "MultiPolygon") {
+    return coordinates.some(polygon => isPointInPolygon([lon, lat], polygon[0]));
+  }
+  return false;
+};
+
 const setMeshEmissive = (mesh, colorHex) => {
   if (!mesh || !mesh.material) return;
   if (Array.isArray(mesh.material)) {
@@ -908,11 +933,34 @@ export default function MapCanvas() {
           const countryIntersects = raycaster.intersectObjects(countriesGroup.children);
           if (countryIntersects.length > 0) {
             const intersectedCountry = countryIntersects[0].object;
+            
+            // Handle hover mesh highlights
             if (hoveredMesh !== intersectedCountry) {
               if (hoveredMesh) setMeshEmissive(hoveredMesh, 0x000000);
               hoveredMesh = intersectedCountry;
               setMeshEmissive(hoveredMesh, 0x1e1b4b); // Soft indigo glow
-              setHoveredCountry(hoveredMesh.userData.countryName);
+            }
+
+            // Update display name (checking for US state if USA is hovered)
+            if (intersectedCountry.userData.countryCode === "USA") {
+              let stateName = null;
+              if (statesData && statesData.features) {
+                const latLon = vector3ToLatLon(countryIntersects[0].point);
+                for (let i = 0; i < statesData.features.length; i++) {
+                  const feature = statesData.features[i];
+                  if (isPointInFeature(latLon.lon, latLon.lat, feature)) {
+                    stateName = feature.properties.name;
+                    break;
+                  }
+                }
+              }
+              if (stateName) {
+                setHoveredCountry(`${stateName}, USA`);
+              } else {
+                setHoveredCountry("United States of America");
+              }
+            } else {
+              setHoveredCountry(intersectedCountry.userData.countryName);
             }
           } else {
             if (hoveredMesh) {
