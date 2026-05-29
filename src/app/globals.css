@@ -178,21 +178,14 @@ html, body {
   margin-top: 0.05rem;
 }
 
-/* Floating Exploring Region Badge */
+/* Floating Exploring Region Text (No box background/border) */
 .exploring-badge {
   position: absolute;
   bottom: 2rem;
   left: 2rem;
-  background: var(--panel-bg);
-  backdrop-filter: blur(25px) saturate(210%);
-  -webkit-backdrop-filter: blur(25px) saturate(210%);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  padding: 0.75rem 1.15rem;
   z-index: 10;
-  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.03);
   pointer-events: none;
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .exploring-badge.shifted {
@@ -202,18 +195,20 @@ html, body {
 .exploring-badge-title {
   display: block;
   font-size: 0.65rem;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.65);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   font-weight: 700;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
 }
 
 .exploring-badge-name {
   font-family: var(--font-google-sans);
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--accent-primary);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #ffffff;
   margin-top: 0.15rem;
+  text-shadow: 0 2px 4px rgba(15, 23, 42, 0.3);
 }
 
 
