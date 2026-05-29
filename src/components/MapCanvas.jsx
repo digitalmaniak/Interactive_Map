@@ -613,15 +613,12 @@ export default function MapCanvas() {
 
         void main() {
           vUv = uv;
-          #include <beginnormal_vertex>
-          #include <defaultnormal_vertex>
-          #include <normal_vertex>
           #include <begin_vertex>
+          #include <project_vertex>
           #include <worldpos_vertex>
           #include <shadowmap_vertex>
           
           vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-          gl_Position = projectionMatrix * viewMatrix * vec4(vWorldPosition, 1.0);
         }
       `,
       fragmentShader: `
