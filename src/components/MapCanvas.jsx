@@ -405,6 +405,7 @@ export default function MapCanvas() {
   const [loadingLog, setLoadingLog] = useState("CONNECTING TO WORLD GEOMETRY ATLAS...");
   const [isLoaded, setIsLoaded] = useState(false);
   const [geoJsonData, setGeoJsonData] = useState(null);
+  const [statesData, setStatesData] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // Interactive HUD States
@@ -450,14 +451,20 @@ export default function MapCanvas() {
       setLoadingProgress(progress);
     }, 150);
 
-    fetch("/data/countries.json")
-      .then((res) => {
+    Promise.all([
+      fetch("/data/countries.json").then((res) => {
         if (!res.ok) throw new Error("Failed to fetch countries GeoJSON");
         return res.json();
+      }),
+      fetch("/data/us-states.json").then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch US states GeoJSON");
+        return res.json();
       })
-      .then((data) => {
+    ])
+      .then(([countries, states]) => {
         isDataFetched = true;
-        setGeoJsonData(data);
+        setGeoJsonData(countries);
+        setStatesData(states);
         setLoadingLog("PARSING WORLD BOUNDARIES...");
         
         // Finish progress
@@ -487,7 +494,7 @@ export default function MapCanvas() {
 
   // 2. Initialize Three.js World Map
   useEffect(() => {
-    if (typeof window === "undefined" || !isLoaded || !geoJsonData) return;
+    if (typeof window === "undefined" || !isLoaded || !geoJsonData || !statesData) return;
 
     const container = containerRef.current;
     if (!container) return;
@@ -741,6 +748,67 @@ export default function MapCanvas() {
       });
       const bordersMesh = new THREE.LineSegments(borderGeom, borderMat);
       scene.add(bordersMesh);
+    }
+
+    // 6.5 Draw US State Borders as a subtle subdivision overlay
+    if (statesData && statesData.features) {
+      const stateLines = [];
+      statesData.features.forEach((feature) => {
+        const geometryType = feature.geometry.type;
+        const coordinates = feature.geometry.coordinates;
+
+        const processStatePolygon = (polygonCoords) => {
+          const outerRing = polygonCoords[0];
+          const contour = outerRing.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
+          
+          // Add contour borders
+          for (let i = 0; i < contour.length; i++) {
+            const next = (i + 1) % contour.length;
+            stateLines.push(
+              contour[i].x, UNIFORM_HEIGHT + 0.012, -contour[i].y,
+              contour[next].x, UNIFORM_HEIGHT + 0.012, -contour[next].y
+            );
+          }
+
+          // Add holes if any
+          for (let h = 1; h < polygonCoords.length; h++) {
+            const holeCoords = polygonCoords[h];
+            const holePoints = holeCoords.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
+            for (let i = 0; i < holePoints.length; i++) {
+              const next = (i + 1) % holePoints.length;
+              stateLines.push(
+                holePoints[i].x, UNIFORM_HEIGHT + 0.012, -holePoints[i].y,
+                holePoints[next].x, UNIFORM_HEIGHT + 0.012, -holePoints[next].y
+              );
+            }
+          }
+        };
+
+        try {
+          if (geometryType === "Polygon") {
+            processStatePolygon(coordinates);
+          } else if (geometryType === "MultiPolygon") {
+            coordinates.forEach((polyCoords) => {
+              processStatePolygon(polyCoords);
+            });
+          }
+        } catch (err) {
+          console.error(`Error processing state geometry:`, err);
+        }
+      });
+
+      if (stateLines.length > 0) {
+        const stateGeom = new THREE.BufferGeometry();
+        stateGeom.setAttribute("position", new THREE.Float32BufferAttribute(stateLines, 3));
+        const stateMat = new THREE.LineBasicMaterial({
+          color: "#475569", // match color family
+          transparent: true,
+          opacity: 0.22,    // more subtle than country borders to maintain visual hierarchy
+          depthWrite: false
+        });
+        const stateMesh = new THREE.LineSegments(stateGeom, stateMat);
+        scene.add(stateMesh);
+      }
     }
 
     // 7. AddVisited 3D Memory Pins
@@ -1134,7 +1202,7 @@ export default function MapCanvas() {
       });
       renderer.dispose();
     };
-  }, [isLoaded, geoJsonData]);
+  }, [isLoaded, geoJsonData, statesData]);
 
   return (
     <div className="app-container">
