@@ -369,55 +369,18 @@ const getCountryContinent = (countryCode, lat, lon) => {
   return "Asia";
 };
 
-const UNIFORM_HEIGHT = 0.35;
+const UNIFORM_HEIGHT = 0.45;
 
 const getCountryMetadata = (countryCode, centroidLat, centroidLon) => {
-  const meta = countryMetadata[countryCode];
-  
-  // Default values
-  let biome = "forest";
-  let baseColor = "#16a34a"; // forest green
-  let heightVal = 1.0;
-  
-  if (meta) {
-    biome = meta.biome;
-    heightVal = meta.height;
-  } else {
-    // Fallback based on latitude
-    if (centroidLat > 55 || centroidLat < -50) {
-      biome = "glacial";
-    } else if (Math.abs(centroidLat) >= 15 && Math.abs(centroidLat) <= 35) {
-      biome = "desert";
-    } else if (Math.abs(centroidLat) < 15) {
-      biome = "savanna";
-    }
-  }
-
-  // Set vibrant colors
-  if (biome === "glacial") {
-    baseColor = "#a5f3fc"; // Ice-blue base
-  } else if (biome === "desert") {
-    baseColor = "#fde047"; // Desert yellow
-  } else if (biome === "forest") {
-    baseColor = "#16a34a"; // Foliage green
-  } else if (biome === "savanna" || biome === "grassland") {
-    baseColor = "#a3e635"; // Savanna lime green
-  }
-
-  // Determine if this country gets a secondary terraced plateau
-  const hasPlateau = (biome === "desert" || biome === "glacial" || heightVal >= 1.2);
-  
-  // Determine if this country gets a third mountain peaks layer
-  const hasPeaks = (heightVal >= 1.8 && biome !== "desert");
-
+  const continent = getCountryContinent(countryCode, centroidLat, centroidLon);
+  const colorHex = continentColors[continent] || "#d8e2dc";
   return {
     height: UNIFORM_HEIGHT,
-    color: new THREE.Color(baseColor),
-    biome: biome,
-    hasPlateau,
-    hasPeaks
+    color: new THREE.Color(colorHex),
+    continent: continent
   };
 };
+
 
 const isPointInPolygon = (point, vs) => {
   const x = point[0], y = point[1];
@@ -445,22 +408,14 @@ const isPointInFeature = (lon, lat, feature) => {
 };
 
 const setMeshEmissive = (mesh, colorHex) => {
-  if (!mesh) return;
-  
-  const highlight = (obj) => {
-    if (obj.material) {
-      if (Array.isArray(obj.material)) {
-        obj.material.forEach((mat) => {
-          if (mat.emissive) mat.emissive.setHex(colorHex);
-        });
-      } else {
-        if (obj.material.emissive) obj.material.emissive.setHex(colorHex);
-      }
-    }
-  };
-
-  highlight(mesh);
-  mesh.children.forEach(highlight); // Highlight child plateaus/peaks
+  if (!mesh || !mesh.material) return;
+  if (Array.isArray(mesh.material)) {
+    mesh.material.forEach((mat) => {
+      if (mat.emissive) mat.emissive.setHex(colorHex);
+    });
+  } else {
+    if (mesh.material.emissive) mesh.material.emissive.setHex(colorHex);
+  }
 };
 
 
@@ -574,8 +529,8 @@ export default function MapCanvas() {
 
     // 1. Scene & Renderer Setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#0e7490"); // Blend with deep cyan ocean
-    scene.fog = new THREE.FogExp2("#0e7490", 0.0004);
+    scene.background = new THREE.Color("#0891b2"); // Blend with deep cartoony ocean
+    scene.fog = new THREE.FogExp2("#0891b2", 0.0004);
 
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
@@ -615,7 +570,7 @@ export default function MapCanvas() {
     const ambientLight = new THREE.AmbientLight("#ffffff", 1.9);
     scene.add(ambientLight);
 
-    const hemiLight = new THREE.HemisphereLight("#bae6fd", "#0e7490", 1.4); // Light blue sky sky-glow to ocean reflection
+    const hemiLight = new THREE.HemisphereLight("#bae6fd", "#0891b2", 1.4); // Light blue sky sky-glow to ocean reflection
     hemiLight.position.set(0, 120, 0);
     scene.add(hemiLight);
 
@@ -635,65 +590,134 @@ export default function MapCanvas() {
     scene.add(dirLight);
     scene.add(dirLight.target); // Essential for directional light target tracking
 
-    // 4. Flat Ocean Base Plane (extended to avoid edge clipping)
+    // 4. Flat Ocean Base Plane with custom ShaderMaterial for cartoony caustics & reef gradients
     const oceanGeo = new THREE.PlaneGeometry(10000, 10000);
     oceanGeo.rotateX(-Math.PI / 2);
-    
     const oceanMat = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0.0 }
-      },
+      lights: true,
+      uniforms: THREE.UniformsUtils.merge([
+        THREE.UniformsLib.lights,
+        THREE.UniformsLib.shadowmap,
+        {
+          uTime: { value: 0.0 },
+          uColorShallow: { value: new THREE.Color("#22d3ee") }, // Bright turquoise
+          uColorDeep: { value: new THREE.Color("#0891b2") },    // Rich deep teal-cyan
+          uCausticColor: { value: new THREE.Color("#ffffff") }  // White caustics grid
+        }
+      ]),
       vertexShader: `
-        varying vec3 vPosition;
+        #include <common>
+        #include <shadowmap_pars_vertex>
+        varying vec2 vUv;
+        varying vec3 vWorldPosition;
+
         void main() {
-          vPosition = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          vUv = uv;
+          #include <beginnormal_vertex>
+          #include <defaultnormal_vertex>
+          #include <normal_vertex>
+          #include <begin_vertex>
+          #include <worldpos_vertex>
+          #include <shadowmap_vertex>
+          
+          vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * viewMatrix * vec4(vWorldPosition, 1.0);
         }
       `,
       fragmentShader: `
-        uniform float uTime;
-        varying vec3 vPosition;
+        #include <common>
+        #include <packing>
+        #include <lights_pars_begin>
+        #include <shadowmap_pars_fragment>
+        #include <shadowmask_pars_fragment>
 
-        // Cellular caustic generator (Voronoi/cellular noise approximation)
-        float getCaustic(vec2 uv, float time) {
-          vec2 p = uv * 0.08;
-          vec2 i = vec2(p);
-          float c = 1.0;
-          float intent = 0.005;
-          
-          for (int n = 0; n < 4; n++) {
-            float t = time * (1.1 - (3.5 / float(n + 1)));
-            i = p + vec2(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x));
-            c += 1.0 / length(vec2(p.x / (sin(i.x + t) / intent), p.y / (cos(i.y + t) / intent)));
+        uniform float uTime;
+        uniform vec3 uColorShallow;
+        uniform vec3 uColorDeep;
+        uniform vec3 uCausticColor;
+        varying vec2 vUv;
+        varying vec3 vWorldPosition;
+
+        // 2D Noise helpers
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+                     mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
+
+        // Fractal Brownian Motion for reef details
+        float fbm(vec2 p) {
+          float v = 0.0;
+          float a = 0.5;
+          vec2 shift = vec2(100.0);
+          mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+          for (int i = 0; i < 4; ++i) {
+            v += a * noise(p);
+            p = rot * p * 2.0 + shift;
+            a *= 0.5;
           }
+          return v;
+        }
+
+        // Animated wobbly grid caustics (Wind Waker style)
+        float getCaustics(vec2 uv, float time) {
+          vec2 p = uv * 0.07;
+          vec2 i = p;
+          float c = 0.0;
+          float shift = time * 0.75;
           
-          c /= float(4);
-          c = 1.17 - sqrt(c);
-          c = pow(abs(c), 8.0);
-          return c * 0.12;
+          for (int n = 0; n < 3; n++) {
+            float t = shift * (1.0 - (1.5 / float(n + 1)));
+            i = p + vec2(
+              cos(t - i.x) + sin(t + i.y), 
+              sin(t - i.y) + cos(t + i.x)
+            );
+            c += 1.0 / length(vec2(
+              p.x / (sin(i.x + t) / 0.008), 
+              p.y / (cos(i.y + t) / 0.008)
+            ));
+          }
+          c /= 3.0;
+          c = 1.35 - pow(c, 1.15);
+          return clamp(pow(abs(c), 7.5), 0.0, 1.0);
         }
 
         void main() {
-          // Dynamic gradient based on coordinates (center-out radial falloff)
-          float dist = length(vPosition.xz) / 1200.0;
-          dist = clamp(dist, 0.0, 1.0);
-
-          // Rich water colors: bright turquoise near continents, deep ocean blue further out
-          vec3 shallowColor = vec3(0.047, 0.529, 0.627); // #0c87a0 (Vibrant turquoise-cyan)
-          vec3 deepColor = vec3(0.055, 0.384, 0.478);    // #0e627a (Vibrant deep blue)
+          // Calculate world-locked coordinate map for seamless zoom/pan
+          vec2 worldUV = vWorldPosition.xz * 0.14; 
           
-          vec3 baseColor = mix(shallowColor, deepColor, dist);
+          // Generate procedural depth variation reef effect
+          float depthFactor = fbm(worldUV * 0.16 + vec2(uTime * 0.015, uTime * 0.007));
+          
+          // Interpolate shallow and deep ocean colors
+          vec3 waterColor = mix(uColorShallow, uColorDeep, depthFactor);
+          
+          // Animated overlapping caustics grid
+          float caustic1 = getCaustics(worldUV, uTime);
+          float caustic2 = getCaustics(worldUV * 1.25 + vec2(9.3, 13.7), uTime * 0.82 + 15.2);
+          float causticIntensity = max(caustic1, caustic2 * 0.68);
+          
+          // Modulate caustics intensity based on depth (less visible in deep reefs)
+          float causticScale = mix(0.48, 0.12, depthFactor);
+          vec3 baseColor = waterColor + uCausticColor * causticIntensity * causticScale;
 
-          float caustic = getCaustic(vPosition.xz, uTime);
-          vec3 waterColor = baseColor + vec3(caustic * 0.5, caustic * 0.75, caustic * 0.85);
-
-          gl_FragColor = vec4(waterColor, 1.0);
+          // Shadow mask check (returns 0.0 in shadow, 1.0 in light)
+          float shadow = getShadowMask();
+          
+          // Apply a stylized cartoony shadow (darker/bluer instead of pitch black)
+          vec3 shadowColor = baseColor * mix(0.68, 0.85, depthFactor);
+          vec3 finalColor = mix(shadowColor, baseColor, shadow);
+          
+          gl_FragColor = vec4(finalColor, 1.0);
         }
-      `,
-      transparent: false,
-      depthWrite: true
+      `
     });
-
     const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
     oceanMesh.position.y = -0.01; // Slightly below ground level
     oceanMesh.receiveShadow = true;
@@ -764,43 +788,27 @@ export default function MapCanvas() {
         const processPolygon = (polygonCoords) => {
           const outerRing = polygonCoords[0];
           const contour = outerRing.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
-          const centroid = new THREE.Vector2(centroidLon * mapScale, centroidLat * mapScale);
-
-          const getScaledContour = (pts, factor) => {
-            return pts.map(p => new THREE.Vector2(
-              centroid.x + factor * (p.x - centroid.x),
-              centroid.y + factor * (p.y - centroid.y)
-            ));
-          };
-
-          const createShape = (contourPts, holesList) => {
-            const shp = new THREE.Shape();
-            for (let i = 0; i < contourPts.length; i++) {
-              if (i === 0) shp.moveTo(contourPts[i].x, contourPts[i].y);
-              else shp.lineTo(contourPts[i].x, contourPts[i].y);
-            }
-            if (holesList) {
-              holesList.forEach(holePts => {
-                const holePath = new THREE.Path();
-                for (let i = 0; i < holePts.length; i++) {
-                  if (i === 0) holePath.moveTo(holePts[i].x, holePts[i].y);
-                  else holePath.lineTo(holePts[i].x, holePts[i].y);
-                }
-                shp.holes.push(holePath);
-              });
-            }
-            return shp;
-          };
-
+          
+          const shape = new THREE.Shape();
+          for (let i = 0; i < contour.length; i++) {
+            if (i === 0) shape.moveTo(contour[i].x, contour[i].y);
+            else shape.lineTo(contour[i].x, contour[i].y);
+          }
+          
           const holes = [];
           for (let h = 1; h < polygonCoords.length; h++) {
             const holeCoords = polygonCoords[h];
+            const holePath = new THREE.Path();
             const holePoints = holeCoords.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
+            for (let i = 0; i < holePoints.length; i++) {
+              if (i === 0) holePath.moveTo(holePoints[i].x, holePoints[i].y);
+              else holePath.lineTo(holePoints[i].x, holePoints[i].y);
+            }
+            shape.holes.push(holePath);
             holes.push(holePoints);
           }
 
-          // 1. Create clean flat-top ExtrudeGeometry for base layer
-          const shape = createShape(contour, holes);
+          // 1. Create clean flat-top ExtrudeGeometry with bevel disabled to merge adjacent countries into solid continents
           const extrudeSettings = {
             depth: countryHeight,
             bevelEnabled: false
@@ -815,62 +823,6 @@ export default function MapCanvas() {
           mesh.castShadow = true;
           mesh.receiveShadow = true;
           countriesGroup.add(mesh);
-
-          // 2. Add Plateau Layer if applicable
-          if (meta.hasPlateau) {
-            const pContour = getScaledContour(contour, 0.72);
-            const pHoles = holes.map(h => getScaledContour(h, 0.72));
-            const pShape = createShape(pContour, pHoles);
-            
-            const pGeom = new THREE.ExtrudeGeometry(pShape, {
-              depth: 0.22,
-              bevelEnabled: false
-            });
-            pGeom.rotateX(-Math.PI / 2);
-
-            let plateauColor = "#b45309"; // Default brown
-            if (meta.biome === "desert") plateauColor = "#f59e0b"; // Rich orange-yellow
-            else if (meta.biome === "glacial") plateauColor = "#ffffff"; // Pure white
-
-            const plateauTopMat = new THREE.MeshStandardMaterial({
-              color: plateauColor,
-              flatShading: true,
-              roughness: 0.75,
-              metalness: 0.05
-            });
-
-            const plateauMesh = new THREE.Mesh(pGeom, [plateauTopMat, sideMaterial]);
-            plateauMesh.position.y = countryHeight; // Sit on base layer
-            plateauMesh.castShadow = true;
-            plateauMesh.receiveShadow = true;
-            mesh.add(plateauMesh);
-
-            // 3. Add Mountain Peaks Layer if applicable (on top of plateau)
-            if (meta.hasPeaks) {
-              const peakContour = getScaledContour(contour, 0.45);
-              const peakHoles = holes.map(h => getScaledContour(h, 0.45));
-              const peakShape = createShape(peakContour, peakHoles);
-
-              const peakGeom = new THREE.ExtrudeGeometry(peakShape, {
-                depth: 0.18,
-                bevelEnabled: false
-              });
-              peakGeom.rotateX(-Math.PI / 2);
-
-              const peakTopMat = new THREE.MeshStandardMaterial({
-                color: "#ffffff", // Pure white
-                flatShading: true,
-                roughness: 0.75,
-                metalness: 0.05
-              });
-
-              const peakMesh = new THREE.Mesh(peakGeom, [peakTopMat, sideMaterial]);
-              peakMesh.position.y = countryHeight + 0.22; // Sit on top of plateau
-              peakMesh.castShadow = true;
-              peakMesh.receiveShadow = true;
-              mesh.add(peakMesh);
-            }
-          }
 
           // 2. Add Contour Borders on top of the mesh
           const segments = [];
@@ -891,7 +843,9 @@ export default function MapCanvas() {
             );
           });
 
+
           // 4. Neon Cyan Water Shelf
+          const centroid = new THREE.Vector2(centroidLon * mapScale, centroidLat * mapScale);
           const scaledContour = contour.map(p => {
             const sx = centroid.x + 1.025 * (p.x - centroid.x);
             const sy = centroid.y + 1.025 * (p.y - centroid.y);
@@ -1027,8 +981,8 @@ export default function MapCanvas() {
         new THREE.Vector3(basePos.x, 15.0, basePos.z),
         new THREE.Vector3(0, -1, 0)
       );
-      const intersects = ray.intersectObjects(countriesGroup.children, true);
-      let yHeight = 0.35; // fallback
+      const intersects = ray.intersectObjects(countriesGroup.children);
+      let yHeight = 0.9; // fallback
       if (intersects.length > 0) {
         yHeight = intersects[0].point.y;
       }
@@ -1096,13 +1050,9 @@ export default function MapCanvas() {
           }
 
           // B. Check Raycast intersection for Countries to highlight country hover
-          const countryIntersects = raycaster.intersectObjects(countriesGroup.children, true);
+          const countryIntersects = raycaster.intersectObjects(countriesGroup.children);
           if (countryIntersects.length > 0) {
-            let intersectedCountry = countryIntersects[0].object;
-            // Resolve parent mesh if hovered mesh is a child (plateau or peaks)
-            while (intersectedCountry.parent && intersectedCountry.parent !== countriesGroup) {
-              intersectedCountry = intersectedCountry.parent;
-            }
+            const intersectedCountry = countryIntersects[0].object;
             
             // Handle hover mesh highlights
             if (hoveredMesh !== intersectedCountry) {
@@ -1177,7 +1127,7 @@ export default function MapCanvas() {
         }
 
         // Raycast against the entire world (ocean or country landmasses)
-        const countryIntersects = raycaster.intersectObjects(countriesGroup.children, true);
+        const countryIntersects = raycaster.intersectObjects(countriesGroup.children);
         if (countryIntersects.length > 0) {
           const point = countryIntersects[0].point;
           const coords = vector3ToLatLon(point);
@@ -1282,10 +1232,6 @@ export default function MapCanvas() {
       requestAnimationFrame(animate);
 
       const elapsedTime = clock.getElapsedTime();
-
-      if (oceanMat.uniforms && oceanMat.uniforms.uTime) {
-        oceanMat.uniforms.uTime.value = elapsedTime;
-      }
 
       const xLimit = 180 * mapScale + 100;
       const zLimit = 90 * mapScale + 80;
@@ -1396,6 +1342,10 @@ export default function MapCanvas() {
         gridOpacity = Math.max(0.0, Math.min(1.0, rawOpacity));
       }
       gridHelper.material.opacity = gridOpacity;
+
+      if (oceanMat.uniforms && oceanMat.uniforms.uTime) {
+        oceanMat.uniforms.uTime.value = elapsedTime;
+      }
 
       renderer.render(scene, camera);
     };
