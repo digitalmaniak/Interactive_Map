@@ -369,18 +369,55 @@ const getCountryContinent = (countryCode, lat, lon) => {
   return "Asia";
 };
 
-const UNIFORM_HEIGHT = 0.45;
+const UNIFORM_HEIGHT = 0.35;
 
 const getCountryMetadata = (countryCode, centroidLat, centroidLon) => {
-  const continent = getCountryContinent(countryCode, centroidLat, centroidLon);
-  const colorHex = continentColors[continent] || "#d8e2dc";
+  const meta = countryMetadata[countryCode];
+  
+  // Default values
+  let biome = "forest";
+  let baseColor = "#16a34a"; // forest green
+  let heightVal = 1.0;
+  
+  if (meta) {
+    biome = meta.biome;
+    heightVal = meta.height;
+  } else {
+    // Fallback based on latitude
+    if (centroidLat > 55 || centroidLat < -50) {
+      biome = "glacial";
+    } else if (Math.abs(centroidLat) >= 15 && Math.abs(centroidLat) <= 35) {
+      biome = "desert";
+    } else if (Math.abs(centroidLat) < 15) {
+      biome = "savanna";
+    }
+  }
+
+  // Set vibrant colors
+  if (biome === "glacial") {
+    baseColor = "#a5f3fc"; // Ice-blue base
+  } else if (biome === "desert") {
+    baseColor = "#fde047"; // Desert yellow
+  } else if (biome === "forest") {
+    baseColor = "#16a34a"; // Foliage green
+  } else if (biome === "savanna" || biome === "grassland") {
+    baseColor = "#a3e635"; // Savanna lime green
+  }
+
+  // Determine if this country gets a secondary terraced plateau
+  const hasPlateau = (biome === "desert" || biome === "glacial" || heightVal >= 1.2);
+  
+  // Determine if this country gets a third mountain peaks layer
+  const hasPeaks = (heightVal >= 1.8 && biome !== "desert");
+
   return {
     height: UNIFORM_HEIGHT,
-    color: new THREE.Color(colorHex),
-    continent: continent
+    color: new THREE.Color(baseColor),
+    biome: biome,
+    hasPlateau,
+    hasPeaks
   };
 };
-
 
 const isPointInPolygon = (point, vs) => {
   const x = point[0], y = point[1];
@@ -408,14 +445,22 @@ const isPointInFeature = (lon, lat, feature) => {
 };
 
 const setMeshEmissive = (mesh, colorHex) => {
-  if (!mesh || !mesh.material) return;
-  if (Array.isArray(mesh.material)) {
-    mesh.material.forEach((mat) => {
-      if (mat.emissive) mat.emissive.setHex(colorHex);
-    });
-  } else {
-    if (mesh.material.emissive) mesh.material.emissive.setHex(colorHex);
-  }
+  if (!mesh) return;
+  
+  const highlight = (obj) => {
+    if (obj.material) {
+      if (Array.isArray(obj.material)) {
+        obj.material.forEach((mat) => {
+          if (mat.emissive) mat.emissive.setHex(colorHex);
+        });
+      } else {
+        if (obj.material.emissive) obj.material.emissive.setHex(colorHex);
+      }
+    }
+  };
+
+  highlight(mesh);
+  mesh.children.forEach(highlight); // Highlight child plateaus/peaks
 };
 
 
@@ -593,11 +638,62 @@ export default function MapCanvas() {
     // 4. Flat Ocean Base Plane (extended to avoid edge clipping)
     const oceanGeo = new THREE.PlaneGeometry(10000, 10000);
     oceanGeo.rotateX(-Math.PI / 2);
-    const oceanMat = new THREE.MeshStandardMaterial({
-      color: "#0e7490", // Deep cyan ocean
-      roughness: 0.2,
-      metalness: 0.1
+    
+    const oceanMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0.0 }
+      },
+      vertexShader: `
+        varying vec3 vPosition;
+        void main() {
+          vPosition = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec3 vPosition;
+
+        // Cellular caustic generator (Voronoi/cellular noise approximation)
+        float getCaustic(vec2 uv, float time) {
+          vec2 p = uv * 0.08;
+          vec2 i = vec2(p);
+          float c = 1.0;
+          float intent = 0.005;
+          
+          for (int n = 0; n < 4; n++) {
+            float t = time * (1.1 - (3.5 / float(n + 1)));
+            i = p + vec2(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x));
+            c += 1.0 / length(vec2(p.x / (sin(i.x + t) / intent), p.y / (cos(i.y + t) / intent)));
+          }
+          
+          c /= float(4);
+          c = 1.17 - sqrt(c);
+          c = pow(abs(c), 8.0);
+          return c * 0.12;
+        }
+
+        void main() {
+          // Dynamic gradient based on coordinates (center-out radial falloff)
+          float dist = length(vPosition.xz) / 1200.0;
+          dist = clamp(dist, 0.0, 1.0);
+
+          // Rich water colors: bright turquoise near continents, deep ocean blue further out
+          vec3 shallowColor = vec3(0.047, 0.529, 0.627); // #0c87a0 (Vibrant turquoise-cyan)
+          vec3 deepColor = vec3(0.055, 0.384, 0.478);    // #0e627a (Vibrant deep blue)
+          
+          vec3 baseColor = mix(shallowColor, deepColor, dist);
+
+          float caustic = getCaustic(vPosition.xz, uTime);
+          vec3 waterColor = baseColor + vec3(caustic * 0.5, caustic * 0.75, caustic * 0.85);
+
+          gl_FragColor = vec4(waterColor, 1.0);
+        }
+      `,
+      transparent: false,
+      depthWrite: true
     });
+
     const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
     oceanMesh.position.y = -0.01; // Slightly below ground level
     oceanMesh.receiveShadow = true;
@@ -668,27 +764,43 @@ export default function MapCanvas() {
         const processPolygon = (polygonCoords) => {
           const outerRing = polygonCoords[0];
           const contour = outerRing.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
-          
-          const shape = new THREE.Shape();
-          for (let i = 0; i < contour.length; i++) {
-            if (i === 0) shape.moveTo(contour[i].x, contour[i].y);
-            else shape.lineTo(contour[i].x, contour[i].y);
-          }
-          
+          const centroid = new THREE.Vector2(centroidLon * mapScale, centroidLat * mapScale);
+
+          const getScaledContour = (pts, factor) => {
+            return pts.map(p => new THREE.Vector2(
+              centroid.x + factor * (p.x - centroid.x),
+              centroid.y + factor * (p.y - centroid.y)
+            ));
+          };
+
+          const createShape = (contourPts, holesList) => {
+            const shp = new THREE.Shape();
+            for (let i = 0; i < contourPts.length; i++) {
+              if (i === 0) shp.moveTo(contourPts[i].x, contourPts[i].y);
+              else shp.lineTo(contourPts[i].x, contourPts[i].y);
+            }
+            if (holesList) {
+              holesList.forEach(holePts => {
+                const holePath = new THREE.Path();
+                for (let i = 0; i < holePts.length; i++) {
+                  if (i === 0) holePath.moveTo(holePts[i].x, holePts[i].y);
+                  else holePath.lineTo(holePts[i].x, holePts[i].y);
+                }
+                shp.holes.push(holePath);
+              });
+            }
+            return shp;
+          };
+
           const holes = [];
           for (let h = 1; h < polygonCoords.length; h++) {
             const holeCoords = polygonCoords[h];
-            const holePath = new THREE.Path();
             const holePoints = holeCoords.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
-            for (let i = 0; i < holePoints.length; i++) {
-              if (i === 0) holePath.moveTo(holePoints[i].x, holePoints[i].y);
-              else holePath.lineTo(holePoints[i].x, holePoints[i].y);
-            }
-            shape.holes.push(holePath);
             holes.push(holePoints);
           }
 
-          // 1. Create clean flat-top ExtrudeGeometry with bevel disabled to merge adjacent countries into solid continents
+          // 1. Create clean flat-top ExtrudeGeometry for base layer
+          const shape = createShape(contour, holes);
           const extrudeSettings = {
             depth: countryHeight,
             bevelEnabled: false
@@ -703,6 +815,62 @@ export default function MapCanvas() {
           mesh.castShadow = true;
           mesh.receiveShadow = true;
           countriesGroup.add(mesh);
+
+          // 2. Add Plateau Layer if applicable
+          if (meta.hasPlateau) {
+            const pContour = getScaledContour(contour, 0.72);
+            const pHoles = holes.map(h => getScaledContour(h, 0.72));
+            const pShape = createShape(pContour, pHoles);
+            
+            const pGeom = new THREE.ExtrudeGeometry(pShape, {
+              depth: 0.22,
+              bevelEnabled: false
+            });
+            pGeom.rotateX(-Math.PI / 2);
+
+            let plateauColor = "#b45309"; // Default brown
+            if (meta.biome === "desert") plateauColor = "#f59e0b"; // Rich orange-yellow
+            else if (meta.biome === "glacial") plateauColor = "#ffffff"; // Pure white
+
+            const plateauTopMat = new THREE.MeshStandardMaterial({
+              color: plateauColor,
+              flatShading: true,
+              roughness: 0.75,
+              metalness: 0.05
+            });
+
+            const plateauMesh = new THREE.Mesh(pGeom, [plateauTopMat, sideMaterial]);
+            plateauMesh.position.y = countryHeight; // Sit on base layer
+            plateauMesh.castShadow = true;
+            plateauMesh.receiveShadow = true;
+            mesh.add(plateauMesh);
+
+            // 3. Add Mountain Peaks Layer if applicable (on top of plateau)
+            if (meta.hasPeaks) {
+              const peakContour = getScaledContour(contour, 0.45);
+              const peakHoles = holes.map(h => getScaledContour(h, 0.45));
+              const peakShape = createShape(peakContour, peakHoles);
+
+              const peakGeom = new THREE.ExtrudeGeometry(peakShape, {
+                depth: 0.18,
+                bevelEnabled: false
+              });
+              peakGeom.rotateX(-Math.PI / 2);
+
+              const peakTopMat = new THREE.MeshStandardMaterial({
+                color: "#ffffff", // Pure white
+                flatShading: true,
+                roughness: 0.75,
+                metalness: 0.05
+              });
+
+              const peakMesh = new THREE.Mesh(peakGeom, [peakTopMat, sideMaterial]);
+              peakMesh.position.y = countryHeight + 0.22; // Sit on top of plateau
+              peakMesh.castShadow = true;
+              peakMesh.receiveShadow = true;
+              mesh.add(peakMesh);
+            }
+          }
 
           // 2. Add Contour Borders on top of the mesh
           const segments = [];
@@ -723,9 +891,7 @@ export default function MapCanvas() {
             );
           });
 
-
           // 4. Neon Cyan Water Shelf
-          const centroid = new THREE.Vector2(centroidLon * mapScale, centroidLat * mapScale);
           const scaledContour = contour.map(p => {
             const sx = centroid.x + 1.025 * (p.x - centroid.x);
             const sy = centroid.y + 1.025 * (p.y - centroid.y);
@@ -861,8 +1027,8 @@ export default function MapCanvas() {
         new THREE.Vector3(basePos.x, 15.0, basePos.z),
         new THREE.Vector3(0, -1, 0)
       );
-      const intersects = ray.intersectObjects(countriesGroup.children);
-      let yHeight = 0.9; // fallback
+      const intersects = ray.intersectObjects(countriesGroup.children, true);
+      let yHeight = 0.35; // fallback
       if (intersects.length > 0) {
         yHeight = intersects[0].point.y;
       }
@@ -930,9 +1096,13 @@ export default function MapCanvas() {
           }
 
           // B. Check Raycast intersection for Countries to highlight country hover
-          const countryIntersects = raycaster.intersectObjects(countriesGroup.children);
+          const countryIntersects = raycaster.intersectObjects(countriesGroup.children, true);
           if (countryIntersects.length > 0) {
-            const intersectedCountry = countryIntersects[0].object;
+            let intersectedCountry = countryIntersects[0].object;
+            // Resolve parent mesh if hovered mesh is a child (plateau or peaks)
+            while (intersectedCountry.parent && intersectedCountry.parent !== countriesGroup) {
+              intersectedCountry = intersectedCountry.parent;
+            }
             
             // Handle hover mesh highlights
             if (hoveredMesh !== intersectedCountry) {
@@ -1007,7 +1177,7 @@ export default function MapCanvas() {
         }
 
         // Raycast against the entire world (ocean or country landmasses)
-        const countryIntersects = raycaster.intersectObjects(countriesGroup.children);
+        const countryIntersects = raycaster.intersectObjects(countriesGroup.children, true);
         if (countryIntersects.length > 0) {
           const point = countryIntersects[0].point;
           const coords = vector3ToLatLon(point);
@@ -1112,6 +1282,10 @@ export default function MapCanvas() {
       requestAnimationFrame(animate);
 
       const elapsedTime = clock.getElapsedTime();
+
+      if (oceanMat.uniforms && oceanMat.uniforms.uTime) {
+        oceanMat.uniforms.uTime.value = elapsedTime;
+      }
 
       const xLimit = 180 * mapScale + 100;
       const zLimit = 90 * mapScale + 80;
