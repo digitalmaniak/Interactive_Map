@@ -297,44 +297,87 @@ const countryMetadata = {
   "ATA": { height: 2.5, biome: "glacial" }
 };
 
-const biomeColors = {
-  glacial: "#f1f5f9",   // Polar white
-  desert: "#fde047",    // Sunny desert yellow
-  forest: "#4ade80",    // Vibrant forest green
-  grassland: "#a7f3d0", // Soft mint green
-  savanna: "#fed7aa"    // Warm peach/savanna
+const continentColors = {
+  NorthAmerica: "#ffcad4", // Soft rose pink
+  SouthAmerica: "#f4acb7", // Warm pinkish-cream
+  Europe: "#b5e2fa",       // Soft sky blue
+  Asia: "#d8e2dc",         // Soft sage
+  Africa: "#ffe5d9",       // Pale peach
+  Oceania: "#c5dedd",      // Soft light teal
+  Antarctica: "#eae2b7"    // Soft parchment/sand
 };
 
-// Retrieve country height, color, and biome metadata
-const getCountryMetadata = (countryCode, centroidLat) => {
-  const meta = countryMetadata[countryCode];
-  if (meta) {
-    return {
-      height: meta.height,
-      color: new THREE.Color(biomeColors[meta.biome]),
-      biome: meta.biome
-    };
+const getCountryContinent = (countryCode, lat, lon) => {
+  const mapping = {
+    "USA": "NorthAmerica", "CAN": "NorthAmerica", "MEX": "NorthAmerica", "GRL": "NorthAmerica",
+    "CUB": "NorthAmerica", "HTI": "NorthAmerica", "DOM": "NorthAmerica", "JAM": "NorthAmerica",
+    "GTM": "NorthAmerica", "HND": "NorthAmerica", "SLV": "NorthAmerica", "NIC": "NorthAmerica",
+    "CRI": "NorthAmerica", "PAN": "NorthAmerica", "BHS": "NorthAmerica", "BLZ": "NorthAmerica",
+    
+    "BRA": "SouthAmerica", "ARG": "SouthAmerica", "CHL": "SouthAmerica", "PER": "SouthAmerica", 
+    "COL": "SouthAmerica", "VEN": "SouthAmerica", "BOL": "SouthAmerica", "ECU": "SouthAmerica",
+    "PRY": "SouthAmerica", "URY": "SouthAmerica", "SUR": "SouthAmerica", "GUY": "SouthAmerica",
+    "GUF": "SouthAmerica", "FLK": "SouthAmerica",
+
+    "FRA": "Europe", "DEU": "Europe", "GBR": "Europe", "ITA": "Europe", "ESP": "Europe",
+    "UKR": "Europe", "POL": "Europe", "ROU": "Europe", "NLD": "Europe", "BEL": "Europe",
+    "CHE": "Europe", "AUT": "Europe", "SWE": "Europe", "NOR": "Europe", "FIN": "Europe",
+    "DNK": "Europe", "ISL": "Europe", "IRL": "Europe", "PRT": "Europe", "GRC": "Europe",
+    "ALB": "Europe", "AND": "Europe", "BIH": "Europe", "BGR": "Europe", "BLR": "Europe",
+    "HRV": "Europe", "CZE": "Europe", "EST": "Europe", "HUN": "Europe", "LVA": "Europe",
+    "LTU": "Europe", "MDA": "Europe", "MKD": "Europe", "MNE": "Europe", "SRB": "Europe",
+    "SVK": "Europe", "SVN": "Europe", "KOS": "Europe",
+
+    "AUS": "Oceania", "NZL": "Oceania", "PNG": "Oceania", "FJI": "Oceania", "SLB": "Oceania",
+    "VUT": "Oceania", "NCL": "Oceania",
+
+    "ATA": "Antarctica", "ATF": "Antarctica",
+
+    "EGY": "Africa", "ZAF": "Africa", "DZA": "Africa", "LBY": "Africa", "SDN": "Africa",
+    "COD": "Africa", "AGO": "Africa", "MDG": "Africa", "ETH": "Africa", "KEN": "Africa",
+    "TZA": "Africa", "NGA": "Africa", "MAR": "Africa", "MOZ": "Africa", "CIV": "Africa",
+    "GHA": "Africa", "CMR": "Africa", "SEN": "Africa", "TUN": "Africa", "SSD": "Africa",
+    "SOM": "Africa", "CAF": "Africa", "TCD": "Africa", "NER": "Africa", "MLI": "Africa",
+    "MRT": "Africa", "ESH": "Africa", "GIN": "Africa", "GNB": "Africa", "SLE": "Africa",
+    "LBR": "Africa", "TGO": "Africa", "BEN": "Africa", "GAB": "Africa", "COG": "Africa",
+    "NAM": "Africa", "BWA": "Africa", "ZWE": "Africa", "ZMB": "Africa", "MWI": "Africa",
+    "RWA": "Africa", "BDI": "Africa", "UGA": "Africa", "ERI": "Africa", "DJI": "Africa",
+    "LSO": "Africa", "SWZ": "Africa", "GMB": "Africa", "GNQ": "Africa",
+
+    "RUS": "Asia", "CHN": "Asia", "IND": "Asia", "JPN": "Asia", "KOR": "Asia",
+    "KAZ": "Asia", "MNG": "Asia", "SAU": "Asia", "IRN": "Asia", "TUR": "Asia",
+    "PAK": "Asia", "AFG": "Asia", "NPL": "Asia", "BTN": "Asia", "THA": "Asia",
+    "VNM": "Asia", "IDN": "Asia", "PHL": "Asia", "MYS": "Asia", "BGD": "Asia",
+    "LKA": "Asia", "IRQ": "Asia", "SYR": "Asia", "JOR": "Asia", "ARE": "Asia",
+    "YEM": "Asia", "OMN": "Asia", "PRK": "Asia", "TWN": "Asia", "KHM": "Asia",
+    "LAO": "Asia", "MMR": "Asia", "KGZ": "Asia", "TJK": "Asia", "TKM": "Asia",
+    "UZB": "Asia", "GEO": "Asia", "AZE": "Asia", "ARM": "Asia", "ISR": "Asia",
+    "LBN": "Asia", "PSE": "Asia", "KWT": "Asia", "QAT": "Asia", "BHR": "Asia",
+    "CYP": "Asia", "TLS": "Asia"
+  };
+
+  if (mapping[countryCode]) return mapping[countryCode];
+
+  if (lat < -60) return "Antarctica";
+  if (lon > 110 && lat < 0) return "Oceania";
+  if (lon > -180 && lon < -30) {
+    return lat > 12 ? "NorthAmerica" : "SouthAmerica";
   }
-  
-  // Fallback based on latitude
-  let biome = "forest";
-  let height = 0.9;
-  
-  if (centroidLat > 55 || centroidLat < -50) {
-    biome = "glacial";
-    height = 1.1;
-  } else if (Math.abs(centroidLat) >= 15 && Math.abs(centroidLat) <= 35) {
-    biome = "desert";
-    height = 0.7;
-  } else if (Math.abs(centroidLat) < 15) {
-    biome = "savanna";
-    height = 0.8;
+  if (lon >= -30 && lon <= 60) {
+    return lat > 35 ? "Europe" : "Africa";
   }
-  
+  return "Asia";
+};
+
+const UNIFORM_HEIGHT = 0.45;
+
+const getCountryMetadata = (countryCode, centroidLat, centroidLon) => {
+  const continent = getCountryContinent(countryCode, centroidLat, centroidLon);
+  const colorHex = continentColors[continent] || "#d8e2dc";
   return {
-    height,
-    color: new THREE.Color(biomeColors[biome]),
-    biome
+    height: UNIFORM_HEIGHT,
+    color: new THREE.Color(colorHex),
+    continent: continent
   };
 };
 
@@ -581,7 +624,7 @@ export default function MapCanvas() {
         const centroidLon = ptCount > 0 ? sumLon / ptCount : 0.0;
 
         // Retrieve country-specific average elevation and biome colors
-        const meta = getCountryMetadata(countryCode, centroidLat);
+        const meta = getCountryMetadata(countryCode, centroidLat, centroidLon);
         const countryHeight = meta.height;
         const topMaterial = new THREE.MeshStandardMaterial({
           color: meta.color,
@@ -613,13 +656,10 @@ export default function MapCanvas() {
             holes.push(holePoints);
           }
 
-          // 1. Create clean flat-top ExtrudeGeometry
+          // 1. Create clean flat-top ExtrudeGeometry with bevel disabled to merge adjacent countries into solid continents
           const extrudeSettings = {
             depth: countryHeight,
-            bevelEnabled: true,
-            bevelThickness: 0.05,
-            bevelSize: 0.03,
-            bevelSegments: 2
+            bevelEnabled: false
           };
           const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
           geom.rotateX(-Math.PI / 2); // rotate to sit flat in XZ plane
@@ -694,9 +734,9 @@ export default function MapCanvas() {
       const borderGeom = new THREE.BufferGeometry();
       borderGeom.setAttribute("position", new THREE.Float32BufferAttribute(borderLines, 3));
       const borderMat = new THREE.LineBasicMaterial({
-        color: "#64748b", // slate gray
+        color: "#475569", // darker slate gray for better contrast
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.45,    // higher opacity as requested by the user
         depthWrite: false
       });
       const bordersMesh = new THREE.LineSegments(borderGeom, borderMat);
