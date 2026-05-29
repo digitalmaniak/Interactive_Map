@@ -338,26 +338,6 @@ const getCountryMetadata = (countryCode, centroidLat) => {
   };
 };
 
-const createMountainGeometry = () => {
-  const geom = new THREE.ConeGeometry(0.7, 1.4, 4);
-  geom.translate(0, 0.7, 0); // pivot at base
-  geom.rotateY(Math.PI / 4); // align corners nicely
-  
-  // Assign mountain rock color with white snow cap using vertex colors
-  const count = geom.attributes.position.count;
-  const colors = [];
-  const pos = geom.attributes.position;
-  for (let i = 0; i < count; i++) {
-    const y = pos.getY(i);
-    if (y > 0.9) {
-      colors.push(0.95, 0.95, 0.95); // White snow cap
-    } else {
-      colors.push(0.45, 0.50, 0.60); // Slate gray rock
-    }
-  }
-  geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  return geom;
-};
 
 const setMeshEmissive = (mesh, colorHex) => {
   if (!mesh || !mesh.material) return;
@@ -370,119 +350,6 @@ const setMeshEmissive = (mesh, colorHex) => {
   }
 };
 
-// Geometry generators for trees
-const createPineTreeGeometry = () => {
-  const trunkGeo = new THREE.CylinderGeometry(0.08, 0.12, 0.6, 4);
-  trunkGeo.translate(0, 0.3, 0);
-  const trunkCount = trunkGeo.attributes.position.count;
-  const trunkColors = [];
-  for (let i = 0; i < trunkCount; i++) {
-    trunkColors.push(0.47, 0.21, 0.06); // Brown
-  }
-  trunkGeo.setAttribute('color', new THREE.Float32BufferAttribute(trunkColors, 3));
-
-  const leavesGeo = new THREE.ConeGeometry(0.35, 1.2, 4);
-  leavesGeo.translate(0, 1.0, 0);
-  const leavesCount = leavesGeo.attributes.position.count;
-  const leavesColors = [];
-  for (let i = 0; i < leavesCount; i++) {
-    leavesColors.push(0.09, 0.39, 0.20); // Deep green
-  }
-  leavesGeo.setAttribute('color', new THREE.Float32BufferAttribute(leavesColors, 3));
-
-  const trunkNonIndexed = trunkGeo.toNonIndexed();
-  const leavesNonIndexed = leavesGeo.toNonIndexed();
-
-  const mergedPos = new Float32Array(trunkNonIndexed.attributes.position.array.length + leavesNonIndexed.attributes.position.array.length);
-  mergedPos.set(trunkNonIndexed.attributes.position.array);
-  mergedPos.set(leavesNonIndexed.attributes.position.array, trunkNonIndexed.attributes.position.array.length);
-
-  const mergedColor = new Float32Array(trunkNonIndexed.attributes.color.array.length + leavesNonIndexed.attributes.color.array.length);
-  mergedColor.set(trunkNonIndexed.attributes.color.array);
-  mergedColor.set(leavesNonIndexed.attributes.color.array, trunkNonIndexed.attributes.color.array.length);
-
-  const mergedGeo = new THREE.BufferGeometry();
-  mergedGeo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
-  mergedGeo.setAttribute('color', new THREE.BufferAttribute(mergedColor, 3));
-  mergedGeo.computeVertexNormals();
-
-  trunkGeo.dispose(); leavesGeo.dispose();
-  trunkNonIndexed.dispose(); leavesNonIndexed.dispose();
-  return mergedGeo;
-};
-
-const createPalmTreeGeometry = () => {
-  const seg1 = new THREE.CylinderGeometry(0.08, 0.1, 0.4, 4);
-  seg1.translate(0, 0.2, 0);
-  
-  const seg2 = new THREE.CylinderGeometry(0.07, 0.08, 0.4, 4);
-  seg2.rotateZ(0.12);
-  seg2.translate(0.02, 0.55, 0);
-
-  const seg3 = new THREE.CylinderGeometry(0.06, 0.07, 0.4, 4);
-  seg3.rotateZ(0.24);
-  seg3.translate(0.08, 0.9, 0);
-
-  const t1 = seg1.toNonIndexed();
-  const t2 = seg2.toNonIndexed();
-  const t3 = seg3.toNonIndexed();
-
-  const trunkPos = new Float32Array(t1.attributes.position.array.length + t2.attributes.position.array.length + t3.attributes.position.array.length);
-  trunkPos.set(t1.attributes.position.array);
-  trunkPos.set(t2.attributes.position.array, t1.attributes.position.array.length);
-  trunkPos.set(t3.attributes.position.array, t1.attributes.position.array.length + t2.attributes.position.array.length);
-
-  const trunkColors = new Float32Array(trunkPos.length);
-  for (let i = 0; i < trunkColors.length; i += 3) {
-    trunkColors[i] = 0.63;
-    trunkColors[i+1] = 0.38;
-    trunkColors[i+2] = 0.03;
-  }
-
-  const frondGeos = [];
-  for (let i = 0; i < 5; i++) {
-    const frond = new THREE.BoxGeometry(0.6, 0.02, 0.15);
-    frond.translate(0.25, 0, 0);
-    frond.rotateY((i * Math.PI * 2) / 5);
-    frond.rotateZ(-0.2);
-    frond.translate(0.12, 1.1, 0);
-    frondGeos.push(frond.toNonIndexed());
-  }
-
-  let frondsPosLength = 0;
-  frondGeos.forEach(g => frondsPosLength += g.attributes.position.array.length);
-  const frondsPos = new Float32Array(frondsPosLength);
-  let offset = 0;
-  frondGeos.forEach(g => {
-    frondsPos.set(g.attributes.position.array, offset);
-    offset += g.attributes.position.array.length;
-  });
-
-  const frondsColors = new Float32Array(frondsPos.length);
-  for (let i = 0; i < frondsColors.length; i += 3) {
-    frondsColors[i] = 0.13;
-    frondsColors[i+1] = 0.77;
-    frondsColors[i+2] = 0.36;
-  }
-
-  const finalPos = new Float32Array(trunkPos.length + frondsPos.length);
-  finalPos.set(trunkPos);
-  finalPos.set(frondsPos, trunkPos.length);
-
-  const finalColor = new Float32Array(trunkColors.length + frondsColors.length);
-  finalColor.set(trunkColors);
-  finalColor.set(frondsColors, trunkColors.length);
-
-  const mergedGeo = new THREE.BufferGeometry();
-  mergedGeo.setAttribute('position', new THREE.BufferAttribute(finalPos, 3));
-  mergedGeo.setAttribute('color', new THREE.BufferAttribute(finalColor, 3));
-  mergedGeo.computeVertexNormals();
-
-  seg1.dispose(); seg2.dispose(); seg3.dispose();
-  t1.dispose(); t2.dispose(); t3.dispose();
-  frondGeos.forEach(g => g.dispose());
-  return mergedGeo;
-};
 
 
 
@@ -675,10 +542,6 @@ export default function MapCanvas() {
     scene.add(shelvesGroup);
 
     const borderLines = []; // Collect border coordinate pairs
-    const mountainInstances = [];
-    const pineTreeInstances = [];
-    const palmTreeInstances = [];
-    const cityBuildingInstances = [];
 
     const shelfMat = new THREE.MeshBasicMaterial({
       color: "#22d3ee",
@@ -787,43 +650,6 @@ export default function MapCanvas() {
             );
           });
 
-          // 3. Extract top cap centroids to scatter instanced trees and mountains
-          const tempGeom = new THREE.ShapeGeometry(shape);
-          const posAttr = tempGeom.attributes.position;
-          const indexAttr = tempGeom.index;
-
-          if (indexAttr) {
-            const arr = indexAttr.array;
-            for (let i = 0; i < indexAttr.count; i += 3) {
-              const i0 = arr[i], i1 = arr[i+1], i2 = arr[i+2];
-              const p0 = new THREE.Vector2(posAttr.getX(i0), posAttr.getY(i0));
-              const p1 = new THREE.Vector2(posAttr.getX(i1), posAttr.getY(i1));
-              const p2 = new THREE.Vector2(posAttr.getX(i2), posAttr.getY(i2));
-
-              const cx = (p0.x + p1.x + p2.x) / 3;
-              const cy = (p0.y + p1.y + p2.y) / 3;
-              const cz = -cy;
-
-              const hash = Math.sin(cx * 12.9898 + cz * 78.233) * 43758.5453;
-              const rand = Math.abs(hash - Math.floor(hash));
-
-              // If country is mountainous, spawn mountains
-              if (countryHeight > 1.3 && rand < 0.18) {
-                mountainInstances.push({ x: cx, y: countryHeight, z: cz, rand });
-              }
-              // If forest/savanna biome, spawn trees
-              else if (meta.biome === "forest" || meta.biome === "savanna") {
-                if (rand < 0.10) {
-                  if (centroidLat > 25 || centroidLat < -25) {
-                    pineTreeInstances.push({ x: cx, y: countryHeight, z: cz, rand });
-                  } else {
-                    palmTreeInstances.push({ x: cx, y: countryHeight, z: cz, rand });
-                  }
-                }
-              }
-            }
-          }
-          tempGeom.dispose();
 
           // 4. Neon Cyan Water Shelf
           const centroid = new THREE.Vector2(centroidLon * mapScale, centroidLat * mapScale);
@@ -855,179 +681,12 @@ export default function MapCanvas() {
           });
         }
 
-        // 5. City scatter at capital location
-        let capLat = feature.properties.capital_lat;
-        let capLon = feature.properties.capital_lon;
-        if (capLat === undefined || capLon === undefined) {
-          const cap = capitals[countryCode] || capitals[countryName];
-          if (cap) {
-            capLat = cap.lat;
-            capLon = cap.lon;
-          } else if (ptCount > 0) {
-            capLat = centroidLat;
-            capLon = centroidLon;
-          }
-        }
-
-        if (capLat !== undefined && capLon !== undefined) {
-          const basePos = latLonToVector3(capLat, capLon, 0.0);
-          
-          const buildingColors = [
-            new THREE.Color("#fed7aa"), // pastel orange
-            new THREE.Color("#fbcfe8"), // pastel pink
-            new THREE.Color("#cffafe"), // pastel cyan
-            new THREE.Color("#e0e7ff"), // pastel indigo
-            new THREE.Color("#fef08a")  // pastel yellow
-          ];
-
-          for (let b = 0; b < 3; b++) {
-            const bHash = Math.sin(basePos.x * (b + 1) * 31.4 + basePos.z * 7.1) * 43758.5453;
-            const bRand = Math.abs(bHash - Math.floor(bHash));
-            const dx = (bRand - 0.5) * 1.8;
-            const dz = (Math.sin(bHash) * 0.5) * 1.8;
-
-            const bx = basePos.x + dx;
-            const bz = basePos.z + dz;
-            const by = countryHeight;
-
-            const bw = 0.25 + (bRand * 0.15);
-            const bh = 0.5 + (Math.cos(bHash) * 0.2) * 1.8;
-
-            const col = buildingColors[Math.floor(bRand * buildingColors.length)];
-
-            cityBuildingInstances.push({
-              x: bx,
-              y: by + bh / 2,
-              z: bz,
-              w: bw,
-              h: bh,
-              col: col
-            });
-          }
-        }
       } catch (err) {
         console.error(`Error processing custom geometry for ${countryName}:`, err);
       }
     });
 
-    // 6. Define assetScaleUniform and material compile helper for dynamic scaling of all instanced assets
-    const assetScaleUniform = { value: 1.0 };
-    const createScaledAssetMaterial = (params) => {
-      const mat = new THREE.MeshStandardMaterial(params);
-      mat.onBeforeCompile = (shader) => {
-        shader.uniforms.assetScale = assetScaleUniform;
-        shader.vertexShader = `
-          uniform float assetScale;
-          ${shader.vertexShader}
-        `.replace(
-          `#include <begin_vertex>`,
-          `
-          #include <begin_vertex>
-          transformed.xyz *= assetScale;
-          `
-        );
-      };
-      return mat;
-    };
 
-    // Add InstancedMesh layers for Mountains, Pine Trees, Palm Trees, and Capital Buildings
-    if (mountainInstances.length > 0) {
-      const mountainGeo = createMountainGeometry();
-      const mountainMat = createScaledAssetMaterial({
-        vertexColors: true,
-        flatShading: true,
-        roughness: 0.8,
-        metalness: 0.1
-      });
-      const mountainMesh = new THREE.InstancedMesh(mountainGeo, mountainMat, mountainInstances.length);
-      mountainMesh.castShadow = true;
-      mountainMesh.receiveShadow = true;
-      
-      const matrix = new THREE.Matrix4();
-      mountainInstances.forEach((inst, idx) => {
-        const position = new THREE.Vector3(inst.x, inst.y, inst.z);
-        const rotation = new THREE.Euler(0, inst.rand * Math.PI * 2, 0);
-        const q = new THREE.Quaternion().setFromEuler(rotation);
-        const sVal = 0.7 + Math.abs(inst.rand * 0.5);
-        const scale = new THREE.Vector3(sVal, sVal, sVal);
-        matrix.compose(position, q, scale);
-        mountainMesh.setMatrixAt(idx, matrix);
-      });
-      scene.add(mountainMesh);
-    }
-
-    if (pineTreeInstances.length > 0) {
-      const pineGeo = createPineTreeGeometry();
-      const pineMat = createScaledAssetMaterial({
-        vertexColors: true,
-        flatShading: true,
-        roughness: 0.8,
-        metalness: 0.1
-      });
-      const pineMesh = new THREE.InstancedMesh(pineGeo, pineMat, pineTreeInstances.length);
-      pineMesh.castShadow = true;
-      pineMesh.receiveShadow = true;
-      
-      const matrix = new THREE.Matrix4();
-      pineTreeInstances.forEach((inst, idx) => {
-        const position = new THREE.Vector3(inst.x, inst.y, inst.z);
-        const rotation = new THREE.Euler(0, inst.rand * Math.PI * 2, 0);
-        const q = new THREE.Quaternion().setFromEuler(rotation);
-        const sVal = 0.8 + Math.abs(inst.rand * 0.4);
-        const scale = new THREE.Vector3(sVal, sVal, sVal);
-        matrix.compose(position, q, scale);
-        pineMesh.setMatrixAt(idx, matrix);
-      });
-      scene.add(pineMesh);
-    }
-
-    if (palmTreeInstances.length > 0) {
-      const palmGeo = createPalmTreeGeometry();
-      const palmMat = createScaledAssetMaterial({
-        vertexColors: true,
-        flatShading: true,
-        roughness: 0.8,
-        metalness: 0.1
-      });
-      const palmMesh = new THREE.InstancedMesh(palmGeo, palmMat, palmTreeInstances.length);
-      palmMesh.castShadow = true;
-      palmMesh.receiveShadow = true;
-      
-      const matrix = new THREE.Matrix4();
-      palmTreeInstances.forEach((inst, idx) => {
-        const position = new THREE.Vector3(inst.x, inst.y, inst.z);
-        const rotation = new THREE.Euler(0, inst.rand * Math.PI * 2, 0);
-        const q = new THREE.Quaternion().setFromEuler(rotation);
-        const sVal = 0.8 + Math.abs(inst.rand * 0.4);
-        const scale = new THREE.Vector3(sVal, sVal, sVal);
-        matrix.compose(position, q, scale);
-        palmMesh.setMatrixAt(idx, matrix);
-      });
-      scene.add(palmMesh);
-    }
-
-    if (cityBuildingInstances.length > 0) {
-      const buildingGeo = new THREE.BoxGeometry(1, 1, 1);
-      const buildingMat = createScaledAssetMaterial({
-        flatShading: true,
-        roughness: 0.6,
-        metalness: 0.1
-      });
-      const buildingMesh = new THREE.InstancedMesh(buildingGeo, buildingMat, cityBuildingInstances.length);
-      buildingMesh.castShadow = true;
-      buildingMesh.receiveShadow = true;
-      
-      const matrix = new THREE.Matrix4();
-      cityBuildingInstances.forEach((inst, idx) => {
-        const position = new THREE.Vector3(inst.x, inst.y, inst.z);
-        const q = new THREE.Quaternion();
-        const scale = new THREE.Vector3(inst.w, inst.h, inst.w);
-        matrix.compose(position, q, scale);
-        buildingMesh.setMatrixAt(idx, matrix);
-        buildingMesh.setColorAt(idx, inst.col);
-      });
-      scene.add(buildingMesh);
-    }
 
     // 6. Draw Country Borders raised slightly above landmasses
     if (borderLines.length > 0) {
@@ -1382,8 +1041,6 @@ export default function MapCanvas() {
       const S_min = 0.75; // Clean and small when zoomed in
       const pinScaleVal = S_min + (S_max - S_min) * Math.pow(1 - tZ, 2.0);
 
-      // Dynamically scale scattered instanced assets (2.0 at min zoom, 1.0 at max zoom)
-      assetScaleUniform.value = 2.0 - tZ;
 
       pinGroup.children.forEach((pin, idx) => {
         pin.rotation.y += 0.015;
