@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
 import { supabase } from "../lib/supabase/client";
+import WorldMap from "./WorldMap";
 
 // Pastel color palette for countries (paper-craft map look)
 const countryColors = [
@@ -361,19 +361,6 @@ const getCountryContinent = (countryCode, lat, lon) => {
   return "Asia";
 };
 
-const UNIFORM_HEIGHT = 0.45;
-
-const getCountryMetadata = (countryCode, centroidLat, centroidLon) => {
-  const continent = getCountryContinent(countryCode, centroidLat, centroidLon);
-  const colorHex = continentColors[continent] || "#d8e2dc";
-  return {
-    height: UNIFORM_HEIGHT,
-    color: new THREE.Color(colorHex),
-    continent: continent
-  };
-};
-
-
 const isPointInPolygon = (point, vs) => {
   const x = point[0], y = point[1];
   let inside = false;
@@ -414,9 +401,6 @@ const setMeshEmissive = (mesh, colorHex) => {
 
 
 export default function MapCanvas() {
-  const containerRef = useRef(null);
-  const canvasRef = useRef(null);
-  
   // React States
   const [loadingProgress, setLoadingProgress] = useState(10);
   const [loadingLog, setLoadingLog] = useState("CONNECTING TO WORLD GEOMETRY ATLAS...");
@@ -457,16 +441,9 @@ export default function MapCanvas() {
   const [clickedCoords, setClickedCoords] = useState({ lat: 0, lon: 0 });
   const [activePin, setActivePin] = useState(null);
   const [isAddingEntry, setIsAddingEntry] = useState(false);
+  const [flyTo, setFlyTo] = useState(null);
 
   // Three.js Element Refs
-  const pinGroupRef = useRef(null);
-  const countriesGroupRef = useRef(null);
-  const pinGeomRef = useRef(null);
-  const pinMatRef = useRef(null);
-  const pathsGroupRef = useRef(null);
-  const pathMaterialsRef = useRef([]);
-  const flyToPinRef = useRef(null);
-  const animationTargetRef = useRef(null);
 
   const activePinRef = useRef(activePin);
   const isAddingEntryRef = useRef(isAddingEntry);
@@ -495,30 +472,40 @@ export default function MapCanvas() {
     setEditingLogId(null);
   };
 
+  // --- WorldMap callbacks ---
+  const handlePinClick = (pin) => {
+    setFlyTo({ lat: pin.latitude, lon: pin.longitude });
+    setActivePin(pin);
+    setActiveTab("Travel Journals");
+    setIsAddingLog(false);
+    setIsAddingEntry(false);
+    setIsConfirmingDelete(false);
+  };
+
+  // Clicking the map closes the panel when open; clicking land (when closed)
+  // starts a new memory at that spot; clicking open ocean does nothing.
+  const handleMapClick = ({ lat, lon, isLand }) => {
+    if (activeTab === "Travel Journals") {
+      closeJournalPanel();
+      return;
+    }
+    if (isLand) {
+      setClickedCoords({ lat: parseFloat(lat.toFixed(4)), lon: parseFloat(lon.toFixed(4)) });
+      setActiveTab("Travel Journals");
+      setIsAddingEntry(true);
+    }
+  };
+
+  const handleHoverRegion = (name) => {
+    setHoveredCountry(name || "Hover over map");
+  };
+
   // Reset inline edit modes whenever the active pin changes
   useEffect(() => {
     setIsEditingPin(false);
     setEditingLogId(null);
   }, [activePin?.id]);
 
-  // Map Scale conversion factor (scaled up for higher resolution details)
-  const mapScale = 8.0;
-
-  // Coordinate Conversion Utility Functions
-  const latLonToVector3 = (lat, lon, y = 0.8) => {
-    const x = lon * mapScale;
-    const z = -lat * mapScale;
-    return new THREE.Vector3(x, y, z);
-  };
-
-  const vector3ToLatLon = (vec) => {
-    const lon = vec.x / mapScale;
-    const lat = -vec.z / mapScale;
-    return {
-      lat: parseFloat(lat.toFixed(4)),
-      lon: parseFloat(lon.toFixed(4))
-    };
-  };
 
   // Safely format a stored date string as "MMM YYYY"; returns null for missing/invalid
   // values so callers can fall back instead of rendering the Unix epoch ("Dec 1969").
@@ -589,1001 +576,6 @@ export default function MapCanvas() {
   }, []);
 
   // 2. Initialize Three.js World Map
-  useEffect(() => {
-    if (typeof window === "undefined" || !isLoaded || !geoJsonData || !statesData) return;
-
-    const container = containerRef.current;
-    if (!container) return;
-
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-
-    // 0. Offscreen canvas for generating geographical distance field to continents
-    const canvasMask = document.createElement("canvas");
-    canvasMask.width = 1024;
-    canvasMask.height = 512;
-    const ctxMask = canvasMask.getContext("2d");
-
-    // Clear with solid black (water = 0.0)
-    ctxMask.fillStyle = "#000000";
-    ctxMask.fillRect(0, 0, canvasMask.width, canvasMask.height);
-
-    const drawAllLand = () => {
-      geoJsonData.features.forEach((feature) => {
-        const geometry = feature.geometry;
-        if (!geometry) return;
-        if (feature.properties.name === "Antarctica") return;
-
-        const drawPolygon = (polygonCoords) => {
-          const outerRing = polygonCoords[0];
-          if (!outerRing || outerRing.length === 0) return;
-          ctxMask.beginPath();
-          outerRing.forEach((coord, idx) => {
-            const px = ((coord[0] + 180) / 360) * canvasMask.width;
-            const py = ((90 - coord[1]) / 180) * canvasMask.height;
-            if (idx === 0) ctxMask.moveTo(px, py);
-            else ctxMask.lineTo(px, py);
-          });
-          ctxMask.closePath();
-          ctxMask.fill();
-        };
-
-        if (geometry.type === "Polygon") {
-          drawPolygon(geometry.coordinates);
-        } else if (geometry.type === "MultiPolygon") {
-          geometry.coordinates.forEach(drawPolygon);
-        }
-      });
-    };
-
-    // Pass 1: Draw continents with shadow blur to create a soft geographical distance gradient (extended to 128px for wider glow)
-    ctxMask.shadowColor = "#ffffff";
-    ctxMask.shadowBlur = 128;
-    ctxMask.fillStyle = "#ffffff";
-    drawAllLand();
-
-    // Pass 2: Draw solid with NO blur to lock land points to 100% white (1.0)
-    ctxMask.shadowBlur = 0;
-    ctxMask.fillStyle = "#ffffff";
-    drawAllLand();
-
-    const distanceMapTexture = new THREE.CanvasTexture(canvasMask);
-    distanceMapTexture.minFilter = THREE.LinearFilter;
-    distanceMapTexture.magFilter = THREE.LinearFilter;
-
-    // 1. Scene & Renderer Setup
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#0c4a6e"); // Blend with deep navy-blue cartoony ocean
-    scene.fog = new THREE.FogExp2("#0c4a6e", 0.0004);
-
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
-      antialias: true,
-      alpha: false,
-    });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-    // 2. Orthographic Camera Setup
-    const aspect = width / height;
-    const frustumSize = 75;
-
-    // Calculate perfect initial zoom to fit the map with padding
-    const mapHeight = 180 * mapScale;
-    const mapWidth = 360 * mapScale;
-    const verticalZoom = frustumSize / (mapHeight + 40);
-    const horizontalZoom = (frustumSize * aspect) / (mapWidth + 80);
-    const initialZoom = Math.min(verticalZoom, horizontalZoom);
-
-    const camera = new THREE.OrthographicCamera(
-      (-frustumSize * aspect) / 2,
-      (frustumSize * aspect) / 2,
-      frustumSize / 2,
-      -frustumSize / 2,
-      1,
-      5000
-    );
-    camera.zoom = initialZoom;
-    camera.updateProjectionMatrix();
-    camera.position.set(0, 1100, 850); // Isometric camera tilt looking north-east
-    camera.lookAt(0, 0, 0);
-
-    // 3. Bright Natural Light Rigging (Hemisphere + Sunlight)
-    const ambientLight = new THREE.AmbientLight("#ffffff", 1.9);
-    scene.add(ambientLight);
-
-    const hemiLight = new THREE.HemisphereLight("#bae6fd", "#0c4a6e", 1.4); // Light blue sky sky-glow to ocean reflection
-    hemiLight.position.set(0, 120, 0);
-    scene.add(hemiLight);
-
-    const dirLight = new THREE.DirectionalLight("#fffbeb", 2.0); // Warm sunny tint
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    // Focused shadow frustum centered at camera target
-    const shadowFrustum = 160;
-    dirLight.shadow.camera.left = -shadowFrustum;
-    dirLight.shadow.camera.right = shadowFrustum;
-    dirLight.shadow.camera.top = shadowFrustum;
-    dirLight.shadow.camera.bottom = -shadowFrustum;
-    dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 400;
-    dirLight.shadow.bias = -0.0005;
-    scene.add(dirLight);
-    scene.add(dirLight.target); // Essential for directional light target tracking
-
-    // 4. Flat Ocean Base Plane with custom ShaderMaterial for cartoony caustics & reef gradients
-    const oceanGeo = new THREE.PlaneGeometry(10000, 10000);
-    oceanGeo.rotateX(-Math.PI / 2);
-    const oceanMat = new THREE.MeshStandardMaterial({
-      color: "#0c4a6e",
-      roughness: 0.8,
-      metalness: 0.1
-    });
-
-    oceanMat.userData = {
-      uTime: { value: 0.0 },
-      uColorShallow: { value: new THREE.Color("#22d3ee") }, // Bright turquoise
-      uColorMedium: { value: new THREE.Color("#0891b2") },  // Vibrant teal-cyan
-      uColorDeep: { value: new THREE.Color("#0c4a6e") },    // Rich deep navy blue
-      uCausticColor: { value: new THREE.Color("#ffffff") }, // White caustics grid
-      uDistanceMap: { value: distanceMapTexture }
-    };
-
-    oceanMat.onBeforeCompile = (shader) => {
-      // Link custom uniforms to the compiled shader
-      shader.uniforms.uTime = oceanMat.userData.uTime;
-      shader.uniforms.uColorShallow = oceanMat.userData.uColorShallow;
-      shader.uniforms.uColorMedium = oceanMat.userData.uColorMedium;
-      shader.uniforms.uColorDeep = oceanMat.userData.uColorDeep;
-      shader.uniforms.uCausticColor = oceanMat.userData.uCausticColor;
-      shader.uniforms.uDistanceMap = oceanMat.userData.uDistanceMap;
-
-      // 1. Inject varying declaration into vertex shader
-      shader.vertexShader = shader.vertexShader.replace(
-        '#include <common>',
-        `#include <common>
-        varying vec3 vWorldPosition;`
-      );
-
-      // 2. Compute world position in vertex shader
-      shader.vertexShader = shader.vertexShader.replace(
-        '#include <worldpos_vertex>',
-        `#include <worldpos_vertex>
-        vWorldPosition = (modelMatrix * vec4( transformed, 1.0 )).xyz;`
-      );
-
-      // 3. Inject uniform and custom logic declarations into fragment shader
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <common>',
-        `#include <common>
-        uniform float uTime;
-        uniform vec3 uColorShallow;
-        uniform vec3 uColorMedium;
-        uniform vec3 uColorDeep;
-        uniform vec3 uCausticColor;
-        uniform sampler2D uDistanceMap;
-        varying vec3 vWorldPosition;
-
-        // 2D Hash helper
-        vec2 hash2(vec2 p) {
-          return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453);
-        }
-
-        // 2D Noise helper
-        float hash(vec2 p) {
-          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-        }
-
-        float noise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          return mix(mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
-                     mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-        }
-
-        // Worley noise cellular edge detector (computes F2 - F1 for crisp borders)
-        float getCellularEdges(vec2 uv, float time) {
-          vec2 p = uv * 0.128; // 50% smaller cell size again (double frequency)
-          vec2 n = floor(p);
-          vec2 f = fract(p);
-
-          float F1 = 8.0;
-          float F2 = 8.0;
-
-          for (int j = -1; j <= 1; j++) {
-            for (int i = -1; i <= 1; i++) {
-              vec2 g = vec2(float(i), float(j));
-              vec2 o = hash2(n + g);
-              // Slowly animate the cell points
-              o = 0.5 + 0.5 * sin(time * 0.55 + o * 6.2831);
-              vec2 r = g + o - f;
-              float d = dot(r, r); // squared distance
-
-              if (d < F1) {
-                F2 = F1;
-                F1 = d;
-              } else if (d < F2) {
-                F2 = d;
-              }
-            }
-          }
-          
-          float d1 = sqrt(F1);
-          float d2 = sqrt(F2);
-          float diff = d2 - d1;
-          
-          // Crisp polygonal cell boundary lines (uniform thickness)
-          float edgeThickness = 0.045;
-          return 1.0 - smoothstep(0.0, edgeThickness, diff);
-        }
-        `
-      );
-
-      // 4. Overwrite base material color before lighting and shadow calculations are applied
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <color_fragment>',
-        `#include <color_fragment>
-        // Calculate world-locked coordinate map for seamless zoom/pan
-        vec2 worldUV = vWorldPosition.xz * 0.14; 
-        
-        // Map world space position to (0, 1) equirectangular UV for sampling the distance map
-        float mapU = (vWorldPosition.x / (180.0 * 8.0)) * 0.5 + 0.5;
-        float mapV = ((-vWorldPosition.z) / (90.0 * 8.0)) * 0.5 + 0.5;
-        vec2 maskUV = clamp(vec2(mapU, mapV), 0.0, 1.0);
-        
-        // Use a flat deep color for the ocean as requested
-        vec3 waterColor = uColorDeep;
-        
-        // Apply wobbly coordinate distortion to Voronoi cell shapes
-        vec2 distortedUV = worldUV + vec2(
-          sin(worldUV.y * 0.08 + uTime * 0.3) * 0.6,
-          cos(worldUV.x * 0.08 + uTime * 0.3) * 0.6
-        );
-        
-        float caustic = getCellularEdges(distortedUV, uTime);
-        
-        // Use a constant caustic scale to keep things flat and uniform
-        float causticScale = 0.07;
-        
-        // Overlay sharp, bright caustic lines on top of the base ocean water
-        diffuseColor.rgb = mix(waterColor, waterColor + uCausticColor * causticScale, caustic);
-        `
-      );
-    };
-    const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
-    oceanMesh.position.y = -0.01; // Slightly below ground level
-    oceanMesh.receiveShadow = true;
-    scene.add(oceanMesh);
-
-    // Grid helper (extended in all directions, matching 8.0 unit squares)
-    const gridHelper = new THREE.GridHelper(8000, 1000, 0xffffff, 0xffffff);
-    gridHelper.position.y = 0.01;
-    gridHelper.material.transparent = true;
-    gridHelper.material.opacity = 0.0;
-    scene.add(gridHelper);
-
-    // Groups to organize extruded landmasses, borders, and water shelves
-    const countriesGroup = new THREE.Group();
-    countriesGroupRef.current = countriesGroup;
-    scene.add(countriesGroup);
-
-
-    const borderLines = []; // Collect border coordinate pairs
-
-
-
-    const sideMaterial = new THREE.MeshStandardMaterial({
-      color: "#a89f91", // uniform sandstone side walls
-      flatShading: true,
-      roughness: 0.85,
-      metalness: 0.05
-    });
-
-    geoJsonData.features.forEach((feature) => {
-      const countryName = feature.properties.name || "Unknown";
-      if (countryName === "Antarctica") return;
-      const countryCode = feature.id || "UNK";
-      const geometryType = feature.geometry.type;
-      const coordinates = feature.geometry.coordinates;
-
-      try {
-        // Calculate a centroid to determine latitude for fallback rules and local scaling
-        let sumLat = 0, sumLon = 0, ptCount = 0;
-        const collectPoints = (coords) => {
-          if (typeof coords[0] === "number") {
-            sumLon += coords[0];
-            sumLat += coords[1];
-            ptCount++;
-          } else {
-            coords.forEach(collectPoints);
-          }
-        };
-        collectPoints(coordinates);
-        const centroidLat = ptCount > 0 ? sumLat / ptCount : 0.0;
-        const centroidLon = ptCount > 0 ? sumLon / ptCount : 0.0;
-
-        // Retrieve country-specific average elevation and biome colors
-        const meta = getCountryMetadata(countryCode, centroidLat, centroidLon);
-        const countryHeight = meta.height;
-        const topMaterial = new THREE.MeshStandardMaterial({
-          color: meta.color,
-          flatShading: true,
-          roughness: 0.75,
-          metalness: 0.05
-        });
-
-        const processPolygon = (polygonCoords) => {
-          const outerRing = polygonCoords[0];
-          const contour = outerRing.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
-          
-          const shape = new THREE.Shape();
-          for (let i = 0; i < contour.length; i++) {
-            if (i === 0) shape.moveTo(contour[i].x, contour[i].y);
-            else shape.lineTo(contour[i].x, contour[i].y);
-          }
-          
-          const holes = [];
-          for (let h = 1; h < polygonCoords.length; h++) {
-            const holeCoords = polygonCoords[h];
-            const holePath = new THREE.Path();
-            const holePoints = holeCoords.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
-            for (let i = 0; i < holePoints.length; i++) {
-              if (i === 0) holePath.moveTo(holePoints[i].x, holePoints[i].y);
-              else holePath.lineTo(holePoints[i].x, holePoints[i].y);
-            }
-            shape.holes.push(holePath);
-            holes.push(holePoints);
-          }
-
-          // 1. Create clean flat-top ExtrudeGeometry with bevel disabled to merge adjacent countries into solid continents
-          const extrudeSettings = {
-            depth: countryHeight,
-            bevelEnabled: false
-          };
-          const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-          geom.rotateX(-Math.PI / 2); // rotate to sit flat in XZ plane
-
-          // Material 0 = top/bottom caps, Material 1 = extruded sides
-          const mesh = new THREE.Mesh(geom, [topMaterial, sideMaterial]);
-          mesh.name = countryName;
-          mesh.userData = { countryCode, countryName };
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-          countriesGroup.add(mesh);
-
-          // 2. Add Contour Borders on top of the mesh
-          const segments = [];
-          for (let i = 0; i < contour.length; i++) {
-            const next = (i + 1) % contour.length;
-            segments.push({ a: contour[i], b: contour[next] });
-          }
-          holes.forEach(hole => {
-            for (let i = 0; i < hole.length; i++) {
-              const next = (i + 1) % hole.length;
-              segments.push({ a: hole[i], b: hole[next] });
-            }
-          });
-          segments.forEach(seg => {
-            borderLines.push(
-              seg.a.x, countryHeight + 0.02, -seg.a.y,
-              seg.b.x, countryHeight + 0.02, -seg.b.y
-            );
-          });
-        };
-
-        if (geometryType === "Polygon") {
-          processPolygon(coordinates);
-        } else if (geometryType === "MultiPolygon") {
-          coordinates.forEach((polyCoords) => {
-            processPolygon(polyCoords);
-          });
-        }
-
-      } catch (err) {
-        console.error(`Error processing custom geometry for ${countryName}:`, err);
-      }
-    });
-
-
-
-    // 6. Draw Country Borders raised slightly above landmasses
-    if (borderLines.length > 0) {
-      const borderGeom = new THREE.BufferGeometry();
-      borderGeom.setAttribute("position", new THREE.Float32BufferAttribute(borderLines, 3));
-      const borderMat = new THREE.LineBasicMaterial({
-        color: "#475569", // darker slate gray for better contrast
-        transparent: true,
-        opacity: 0.45,    // higher opacity as requested by the user
-        depthWrite: false
-      });
-      const bordersMesh = new THREE.LineSegments(borderGeom, borderMat);
-      scene.add(bordersMesh);
-    }
-
-    // 6.5 Draw US State Borders as a subtle subdivision overlay
-    if (statesData && statesData.features) {
-      const stateLines = [];
-      statesData.features.forEach((feature) => {
-        const geometryType = feature.geometry.type;
-        const coordinates = feature.geometry.coordinates;
-
-        const processStatePolygon = (polygonCoords) => {
-          const outerRing = polygonCoords[0];
-          const contour = outerRing.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
-          
-          // Add contour borders
-          for (let i = 0; i < contour.length; i++) {
-            const next = (i + 1) % contour.length;
-            stateLines.push(
-              contour[i].x, UNIFORM_HEIGHT + 0.012, -contour[i].y,
-              contour[next].x, UNIFORM_HEIGHT + 0.012, -contour[next].y
-            );
-          }
-
-          // Add holes if any
-          for (let h = 1; h < polygonCoords.length; h++) {
-            const holeCoords = polygonCoords[h];
-            const holePoints = holeCoords.map(coord => new THREE.Vector2(coord[0] * mapScale, coord[1] * mapScale));
-            for (let i = 0; i < holePoints.length; i++) {
-              const next = (i + 1) % holePoints.length;
-              stateLines.push(
-                holePoints[i].x, UNIFORM_HEIGHT + 0.012, -holePoints[i].y,
-                holePoints[next].x, UNIFORM_HEIGHT + 0.012, -holePoints[next].y
-              );
-            }
-          }
-        };
-
-        try {
-          if (geometryType === "Polygon") {
-            processStatePolygon(coordinates);
-          } else if (geometryType === "MultiPolygon") {
-            coordinates.forEach((polyCoords) => {
-              processStatePolygon(polyCoords);
-            });
-          }
-        } catch (err) {
-          console.error(`Error processing state geometry:`, err);
-        }
-      });
-
-      if (stateLines.length > 0) {
-        const stateGeom = new THREE.BufferGeometry();
-        stateGeom.setAttribute("position", new THREE.Float32BufferAttribute(stateLines, 3));
-        const stateMat = new THREE.LineBasicMaterial({
-          color: "#475569", // match color family
-          transparent: true,
-          opacity: 0.22,    // more subtle than country borders to maintain visual hierarchy
-          depthWrite: false
-        });
-        const stateMesh = new THREE.LineSegments(stateGeom, stateMat);
-        scene.add(stateMesh);
-      }
-    }
-
-    // 7. AddVisited 3D Memory Pins
-    const pinGroup = new THREE.Group();
-    pinGroupRef.current = pinGroup;
-    scene.add(pinGroup);
-
-    const pathsGroup = new THREE.Group();
-    pathsGroupRef.current = pathsGroup;
-    scene.add(pathsGroup);
-
-    const pinGeom = new THREE.ConeGeometry(1.2, 4.0, 4);
-    pinGeom.rotateX(Math.PI); // Point down
-    pinGeom.translate(0, 2.0, 0); // Center translation pivot at tip
-
-    const pinMat = new THREE.MeshStandardMaterial({
-      color: "#f43f5e", // Rose pink
-      emissive: "#ff3b30",
-      emissiveIntensity: 0.25, // self-glowing so it stands out against dark cyan / green
-      roughness: 0.4,
-      metalness: 0.1
-    });
-    pinGeomRef.current = pinGeom;
-    pinMatRef.current = pinMat;
-
-    // Pins will be generated dynamically by a separate useEffect sync
-    // 8. Interactive Dragging, Pan, and Raycasting Click/Hover Panning
-    let isDragging = false;
-    let dragMoveCount = 0; // count dragging frames to distinguish click from drag
-    const currentMousePosition = { x: 0, y: 0 };
-    const previousFrameMousePosition = { x: 0, y: 0 };
-    const cameraTarget = new THREE.Vector3(0, 0, -140);
-    const dragVelocity = { x: 0, y: 0 };
-    const friction = 0.92;
-    let hoveredMesh = null;
-    let hoveredPin = null;
-
-    const handleMouseDown = (e) => {
-      isDragging = true;
-      animationTargetRef.current = null;
-      dragMoveCount = 0;
-      currentMousePosition.x = e.clientX;
-      currentMousePosition.y = e.clientY;
-      previousFrameMousePosition.x = e.clientX;
-      previousFrameMousePosition.y = e.clientY;
-      dragVelocity.x = 0;
-      dragVelocity.y = 0;
-    };
-
-    const handleMouseMove = (e) => {
-      // Initialize Raycasting setup for Hover states
-      const rect = renderer.domElement.getBoundingClientRect();
-      const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      const mouseY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), camera);
-
-      if (!isDragging) {
-        // A. Check Raycast intersection for Pinned Memory points
-        const pinIntersects = raycaster.intersectObjects(pinGroup.children);
-        if (pinIntersects.length > 0) {
-          document.body.style.cursor = "pointer";
-          const collidedPin = pinIntersects[0].object;
-          if (hoveredPin !== collidedPin) {
-            if (hoveredPin) {
-              hoveredPin.material.color.setHex(0xf43f5e);
-              hoveredPin.material.emissive.setHex(0xff3b30);
-            }
-            hoveredPin = collidedPin;
-            hoveredPin.material.color.setHex(0x4f46e5); // Change to Indigo
-            hoveredPin.material.emissive.setHex(0x4f46e5); // Emissive Indigo
-            setHoveredCountry(collidedPin.userData.city);
-          }
-        } else {
-          document.body.style.cursor = "default";
-          if (hoveredPin) {
-            hoveredPin.material.color.setHex(0xf43f5e);
-            hoveredPin.material.emissive.setHex(0xff3b30);
-            hoveredPin = null;
-          }
-
-          // B. Check Raycast intersection for Countries to highlight country hover
-          const countryIntersects = raycaster.intersectObjects(countriesGroup.children);
-          if (countryIntersects.length > 0) {
-            const intersectedCountry = countryIntersects[0].object;
-            
-            // Handle hover mesh highlights
-            if (hoveredMesh !== intersectedCountry) {
-              if (hoveredMesh) setMeshEmissive(hoveredMesh, 0x000000);
-              hoveredMesh = intersectedCountry;
-              setMeshEmissive(hoveredMesh, 0x1e1b4b); // Soft indigo glow
-            }
-
-            // Update display name (checking for US state if USA is hovered)
-            if (intersectedCountry.userData.countryCode === "USA") {
-              let stateName = null;
-              if (statesData && statesData.features) {
-                const latLon = vector3ToLatLon(countryIntersects[0].point);
-                for (let i = 0; i < statesData.features.length; i++) {
-                  const feature = statesData.features[i];
-                  if (isPointInFeature(latLon.lon, latLon.lat, feature)) {
-                    stateName = feature.properties.name;
-                    break;
-                  }
-                }
-              }
-              if (stateName) {
-                setHoveredCountry(`${stateName}, USA`);
-              } else {
-                setHoveredCountry("United States of America");
-              }
-            } else {
-              setHoveredCountry(intersectedCountry.userData.countryName);
-            }
-          } else {
-            if (hoveredMesh) {
-              setMeshEmissive(hoveredMesh, 0x000000);
-              hoveredMesh = null;
-              setHoveredCountry("Hover over map");
-            }
-          }
-        }
-        return;
-      }
-
-      currentMousePosition.x = e.clientX;
-      currentMousePosition.y = e.clientY;
-      dragMoveCount++;
-    };
-
-    const handleMouseUp = (e) => {
-      isDragging = false;
-
-      // If dragMoveCount is tiny, treat this as a Click!
-      if (dragMoveCount < 5) {
-        const rect = renderer.domElement.getBoundingClientRect();
-        const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-        const mouseY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-        
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), camera);
-
-        // Check if user clicked a Pin
-        const pinIntersects = raycaster.intersectObjects(pinGroup.children);
-        if (pinIntersects.length > 0) {
-          const pinData = pinIntersects[0].object.userData;
-          const clickedPin = {
-            id: pinData.id,
-            title: pinData.title,
-            location_name: pinData.location_name,
-            latitude: pinData.latitude,
-            longitude: pinData.longitude,
-            start_date: pinData.start_date,
-            end_date: pinData.end_date,
-            trip_type: pinData.trip_type,
-            logs: pinData.logs || []
-          };
-          flyToPinRef.current = clickedPin;
-          setActivePin(clickedPin);
-          setActiveTab("Travel Journals");
-          setIsAddingLog(false);
-          setIsAddingEntry(false);
-          setIsConfirmingDelete(false);
-          return;
-        }
-
-        // Raycast against the entire world (ocean or country landmasses)
-        const countryIntersects = raycaster.intersectObjects(countriesGroup.children);
-        if (countryIntersects.length > 0) {
-          // Clicking the map while the panel is open dismisses it
-          if (activeTabRef.current === "Travel Journals") {
-            closeJournalPanel();
-            return;
-          }
-          // Panel closed: clicking land starts a new memory at that spot
-          const point = countryIntersects[0].point;
-          const coords = vector3ToLatLon(point);
-          setClickedCoords(coords);
-          setActiveTab("Travel Journals");
-          setIsAddingEntry(true); // Open "Add New Memory" panel
-          return;
-        }
-
-        const oceanIntersects = raycaster.intersectObject(oceanMesh);
-        if (oceanIntersects.length > 0) {
-          if (activeTabRef.current === "Travel Journals") {
-            closeJournalPanel();
-            return;
-          }
-        }
-      }
-    };
-
-    const handleWheel = (e) => {
-      e.preventDefault();
-      animationTargetRef.current = null;
-      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-      const minZoom = initialZoom * 0.95;
-      const maxZoom = 45.0;
-      camera.zoom = Math.max(minZoom, Math.min(maxZoom, camera.zoom * factor));
-      camera.updateProjectionMatrix();
-    };
-
-    const canvasElement = canvasRef.current;
-    canvasElement.addEventListener("mousedown", handleMouseDown);
-    canvasElement.addEventListener("mousemove", handleMouseMove);
-    canvasElement.addEventListener("mouseup", handleMouseUp);
-    canvasElement.addEventListener("wheel", handleWheel, { passive: false });
-
-    // Touch Support
-    let touchStartDist = 0;
-    const handleTouchStart = (e) => {
-      if (e.touches.length === 1) {
-        isDragging = true;
-        dragMoveCount = 0;
-        currentMousePosition.x = e.touches[0].clientX;
-        currentMousePosition.y = e.touches[0].clientY;
-        previousFrameMousePosition.x = e.touches[0].clientX;
-        previousFrameMousePosition.y = e.touches[0].clientY;
-        dragVelocity.x = 0;
-        dragVelocity.y = 0;
-      } else if (e.touches.length === 2) {
-        isDragging = false;
-        touchStartDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-      }
-    };
-
-    const handleTouchMove = (e) => {
-      if (isDragging && e.touches.length === 1) {
-        currentMousePosition.x = e.touches[0].clientX;
-        currentMousePosition.y = e.touches[0].clientY;
-        dragMoveCount++;
-      } else if (e.touches.length === 2) {
-        const dist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-        const factor = dist / touchStartDist;
-        const minZoom = initialZoom * 0.95;
-        const maxZoom = 45.0;
-        camera.zoom = Math.max(minZoom, Math.min(maxZoom, camera.zoom * factor));
-        camera.updateProjectionMatrix();
-        touchStartDist = dist;
-      }
-    };
-
-    canvasElement.addEventListener("touchstart", handleTouchStart, { passive: true });
-    canvasElement.addEventListener("touchmove", handleTouchMove, { passive: true });
-    canvasElement.addEventListener("touchend", (e) => handleMouseUp(e.changedTouches[0]));
-
-    // 9. Resize Observer
-    const handleResize = () => {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      const aspect = w / h;
-
-      camera.left = (-frustumSize * aspect) / 2;
-      camera.right = (frustumSize * aspect) / 2;
-      camera.top = frustumSize / 2;
-      camera.bottom = -frustumSize / 2;
-      camera.updateProjectionMatrix();
-
-      renderer.setSize(w, h);
-    };
-
-    const resizeObserver = new ResizeObserver(() => handleResize());
-    resizeObserver.observe(container);
-
-    // 10. Animation Loop
-    const clock = new THREE.Clock();
-
-    let animationFrameId;
-    const animate = () => {
-      animationFrameId = requestAnimationFrame(animate);
-
-      const elapsedTime = clock.getElapsedTime();
-
-      const xLimit = 180 * mapScale + 100;
-      const zLimit = 90 * mapScale + 80;
-
-      if (isDragging) {
-        const deltaX = currentMousePosition.x - previousFrameMousePosition.x;
-        const deltaY = currentMousePosition.y - previousFrameMousePosition.y;
-
-        const clientWidth = renderer.domElement.clientWidth;
-        const clientHeight = renderer.domElement.clientHeight;
-
-        const worldWidth = (frustumSize * (clientWidth / clientHeight)) / camera.zoom;
-        const worldHeight = frustumSize / camera.zoom;
-
-        const H_u = worldWidth / clientWidth;
-        const V_u = worldHeight / clientHeight;
-
-        const moveX = -H_u * deltaX;
-        const moveZ = -1.2637 * V_u * deltaY;
-
-        cameraTarget.x += moveX;
-        cameraTarget.z += moveZ;
-
-        cameraTarget.x = Math.max(-xLimit, Math.min(xLimit, cameraTarget.x));
-        cameraTarget.z = Math.max(-zLimit, Math.min(zLimit, cameraTarget.z));
-
-        // Smooth velocity tracking
-        dragVelocity.x = dragVelocity.x * 0.2 + deltaX * 0.8;
-        dragVelocity.y = dragVelocity.y * 0.2 + deltaY * 0.8;
-
-        previousFrameMousePosition.x = currentMousePosition.x;
-        previousFrameMousePosition.y = currentMousePosition.y;
-      } else {
-        // Apply drag inertia decay
-        const speed = Math.sqrt(dragVelocity.x * dragVelocity.x + dragVelocity.y * dragVelocity.y);
-        if (speed > 0.05) {
-          const clientWidth = renderer.domElement.clientWidth;
-          const clientHeight = renderer.domElement.clientHeight;
-
-          const worldWidth = (frustumSize * (clientWidth / clientHeight)) / camera.zoom;
-          const worldHeight = frustumSize / camera.zoom;
-
-          const H_u = worldWidth / clientWidth;
-          const V_u = worldHeight / clientHeight;
-
-          const moveX = -H_u * dragVelocity.x;
-          const moveZ = -1.2637 * V_u * dragVelocity.y;
-
-          cameraTarget.x += moveX;
-          cameraTarget.z += moveZ;
-
-          cameraTarget.x = Math.max(-xLimit, Math.min(xLimit, cameraTarget.x));
-          cameraTarget.z = Math.max(-zLimit, Math.min(zLimit, cameraTarget.z));
-
-          dragVelocity.x *= friction;
-          dragVelocity.y *= friction;
-        } else {
-          dragVelocity.x = 0;
-          dragVelocity.y = 0;
-        }
-      }
-
-      if (flyToPinRef.current) {
-        const pinPos = latLonToVector3(flyToPinRef.current.latitude, flyToPinRef.current.longitude, 10.0);
-
-        const targetZoom = 45.0 * 0.28; // Zoom 70% into the final destination (0.4 * 0.7 = 0.28)
-        
-        animationTargetRef.current = {
-          startX: cameraTarget.x,
-          startZ: cameraTarget.z,
-          startZoom: camera.zoom,
-          x: pinPos.x,
-          z: pinPos.z,
-          zoom: targetZoom,
-          progress: 0.0,
-          distance: Math.sqrt((pinPos.x - cameraTarget.x)**2 + (pinPos.z - cameraTarget.z)**2)
-        };
-        flyToPinRef.current = null;
-      }
-
-      if (animationTargetRef.current) {
-        const anim = animationTargetRef.current;
-        
-        // Duration based on distance: 1.5s for close points, ~8.25s for furthest points (increased by 50%)
-        const durationSecs = 1.5 + (Math.min(90.0, anim.distance) / 90.0) * 6.75;
-        const progressStep = 1.0 / (durationSecs * 60.0);
-        
-        anim.progress += progressStep;
-        if (anim.progress >= 1.0) {
-            anim.progress = 1.0;
-        }
-
-        const t = anim.progress;
-        
-        // Logarithmic Zoom Interpolation
-        const logStartZoom = Math.log(anim.startZoom);
-        const logTargetZoom = Math.log(anim.zoom);
-        
-        // Parabolic arc calculations
-        const peakLogZoom = Math.log(2.0);
-        const logZoomDropNeeded = Math.max(0, Math.min(logStartZoom, logTargetZoom) - peakLogZoom);
-        
-        // Force full zoom out for destination-to-destination flights regardless of distance
-        const isDestToDest = anim.startZoom > 5.0 && anim.zoom > 5.0;
-        const distanceFactor = isDestToDest ? 1.0 : Math.min(1.0, anim.distance / 30.0);
-        
-        const actualLogDrop = logZoomDropNeeded * distanceFactor;
-
-        // Cubic ease-in-out for zoom and parabolic flights
-        const zoomEase = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-
-        let transEase = zoomEase;
-        
-        // If we are mostly just zooming (no significant parabola), separate translation easing 
-        // to avoid sliding while heavily zoomed in.
-        if (actualLogDrop < 0.1) {
-            if (anim.startZoom < anim.zoom) {
-                // Zooming IN. We want to complete translation early while still zoomed out! (Quartic Ease-Out)
-                transEase = 1.0 - Math.pow(1.0 - t, 4);
-            } else {
-                // Zooming OUT. We want to delay translation until we are zoomed out! (Quartic Ease-In)
-                transEase = Math.pow(t, 4);
-            }
-        }
-
-        cameraTarget.x = anim.startX + (anim.x - anim.startX) * transEase;
-        cameraTarget.z = anim.startZ + (anim.z - anim.startZ) * transEase;
-        
-        const currentLogZoom = logStartZoom + (logTargetZoom - logStartZoom) * zoomEase;
-        const finalLogZoom = currentLogZoom - Math.sin(t * Math.PI) * actualLogDrop;
-        
-        camera.zoom = Math.exp(finalLogZoom);
-
-        camera.updateProjectionMatrix();
-
-        if (anim.progress >= 1.0) {
-           animationTargetRef.current = null;
-        }
-      }
-
-      // Copy camera target instantly for crisp 1-to-1 tracking and inertia
-      const cameraPositionTarget = new THREE.Vector3(
-        cameraTarget.x,
-        cameraTarget.y + 1100,
-        cameraTarget.z + 850
-      );
-      camera.position.copy(cameraPositionTarget);
-
-      const lookTarget = camera.position.clone().add(new THREE.Vector3(0, -1100, -850));
-      camera.lookAt(lookTarget);
-
-      // Keep directional light centered over the camera target for sharp follow-shadows
-      dirLight.position.set(cameraTarget.x + 80, cameraTarget.y + 130, cameraTarget.z + 45);
-      dirLight.target.position.copy(cameraTarget);
-      dirLight.target.updateMatrixWorld();
-
-      // Animate visited pin markers (hover floating & pulsing + dynamic scaling)
-      const minZ = initialZoom;
-      const maxZ = 45.0;
-      const tZ = Math.max(0.0, Math.min(1.0, (camera.zoom - minZ) / (maxZ - minZ)));
-      
-      // Target screen size for the pins (visually). 
-      // Bigger when zoomed out (e.g. 2.0), smaller when zoomed in (e.g. 0.6875).
-      const screenScaleMax = 1.5;
-      const screenScaleMin = 4.125;
-      
-      // Use a smoothing curve so it feels natural as you zoom
-      const easeT = Math.pow(tZ, 0.6);
-      const targetScreenSize = screenScaleMax - (screenScaleMax - screenScaleMin) * easeT;
-      
-      // Calculate world scale needed to maintain this visual screen size given the orthographic camera.zoom
-      const pinScaleVal = targetScreenSize / camera.zoom;
-
-
-      pinGroup.children.forEach((pin, idx) => {
-        pin.rotation.y += 0.015;
-        // Bouncing motion scaled by pin size so it is visible when zoomed out
-        const baseHeight = pin.userData.countryHeight || 0.9;
-        const bounceAmplitude = 0.12 * pinScaleVal;
-        pin.position.y = baseHeight + (0.2 * pinScaleVal) + Math.sin(elapsedTime * 2.5 + idx) * bounceAmplitude;
-        // Dynamic scale
-        pin.scale.set(pinScaleVal, pinScaleVal, pinScaleVal);
-      });
-
-      // Dynamic grid opacity based on zoom level:
-
-      const minZoom = initialZoom;
-      const maxZoom = 45.0;
-      const targetZoom = maxZoom * 0.25;
-      const zoomRange = targetZoom - minZoom;
-      let gridOpacity = 0.0;
-      if (zoomRange > 0) {
-        const rawOpacity = (camera.zoom - minZoom) / zoomRange;
-        gridOpacity = Math.max(0.0, Math.min(1.0, rawOpacity));
-      }
-      gridHelper.material.opacity = gridOpacity;
-
-      if (oceanMat.userData && oceanMat.userData.uTime) {
-        oceanMat.userData.uTime.value = elapsedTime;
-      }
-
-      if (pathMaterialsRef.current && pathMaterialsRef.current.length > 0) {
-        pathMaterialsRef.current.forEach(anim => {
-          if (anim.curve && anim.sphere) {
-            anim.progress += 0.003;
-            if (anim.progress > 1) anim.progress = 0;
-            const pt = anim.curve.getPointAt(anim.progress);
-            anim.sphere.position.copy(pt);
-          }
-        });
-      }
-
-      renderer.render(scene, camera);
-    };
-
-    animate();
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-      resizeObserver.disconnect();
-      if (canvasElement) {
-        canvasElement.removeEventListener("mousedown", handleMouseDown);
-        canvasElement.removeEventListener("mousemove", handleMouseMove);
-        canvasElement.removeEventListener("mouseup", handleMouseUp);
-        canvasElement.removeEventListener("wheel", handleWheel);
-        canvasElement.removeEventListener("touchstart", handleTouchStart);
-        canvasElement.removeEventListener("touchmove", handleTouchMove);
-      }
-      scene.traverse((obj) => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) {
-          if (Array.isArray(obj.material)) {
-            obj.material.forEach((mat) => mat.dispose());
-          } else {
-            obj.material.dispose();
-          }
-        }
-      });
-      renderer.dispose();
-    };
-  }, [isLoaded, geoJsonData, statesData]);
   // Fetch pins from Supabase
   useEffect(() => {
     if (!session) return;
@@ -1602,101 +594,6 @@ export default function MapCanvas() {
     loadPins();
   }, [session]);
 
-  // Sync pins and draw flight paths whenever pins state changes
-  useEffect(() => {
-    if (isLoaded && pinGroupRef.current && countriesGroupRef.current && pinGeomRef.current && pathsGroupRef.current) {
-      
-      // 1. Clear existing pins and paths
-      while(pinGroupRef.current.children.length > 0) {
-        pinGroupRef.current.remove(pinGroupRef.current.children[0]);
-      }
-      while(pathsGroupRef.current.children.length > 0) {
-        pathsGroupRef.current.remove(pathsGroupRef.current.children[0]);
-      }
-      pathMaterialsRef.current = [];
-
-      if (pins.length === 0) return;
-
-      // 2. Sort pins chronologically
-      const sortedPins = [...pins].sort((a, b) => new Date(a.start_date || 0) - new Date(b.start_date || 0));
-
-      const pinPositions = [];
-
-      // 3. Render Pins
-      sortedPins.forEach((pinData) => {
-        const basePos = latLonToVector3(pinData.latitude, pinData.longitude, 10.0);
-        const ray = new THREE.Raycaster(
-          new THREE.Vector3(basePos.x, 15.0, basePos.z),
-          new THREE.Vector3(0, -1, 0)
-        );
-        const intersects = ray.intersectObjects(countriesGroupRef.current.children);
-        let yHeight = 0.9;
-        if (intersects.length > 0) {
-          yHeight = intersects[0].point.y;
-        }
-        const pinMesh = new THREE.Mesh(pinGeomRef.current, pinMatRef.current.clone());
-        pinMesh.position.set(basePos.x, yHeight + 0.1, basePos.z);
-        pinMesh.castShadow = true;
-        pinMesh.userData = { isPin: true, ...pinData, countryHeight: yHeight };
-        pinGroupRef.current.add(pinMesh);
-
-        pinPositions.push(pinMesh.position.clone());
-      });
-
-      // 4. Draw Flight Paths
-      if (pinPositions.length > 1) {
-        for (let i = 0; i < pinPositions.length - 1; i++) {
-          const v1 = pinPositions[i];
-          const v2 = pinPositions[i + 1];
-          const distance = v1.distanceTo(v2);
-          
-          if (distance < 0.1) continue;
-
-          const midPoint = v1.clone().lerp(v2, 0.5);
-          const baseLength = midPoint.length();
-          const arcHeight = Math.max(distance * 0.3, 2.0);
-          midPoint.normalize().multiplyScalar(baseLength + arcHeight);
-
-          const curve = new THREE.QuadraticBezierCurve3(v1, midPoint, v2);
-          
-          // 1. Thick glowing tube
-          const tubeGeometry = new THREE.TubeGeometry(curve, 64, 0.08, 8, false);
-          const tubeMaterial = new THREE.MeshStandardMaterial({
-            color: "#3b82f6",
-            emissive: "#60a5fa",
-            emissiveIntensity: 2.0,
-            transparent: true,
-            opacity: 0.6,
-          });
-          const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
-          pathsGroupRef.current.add(tubeMesh);
-
-          // 2. Traveling glowing sphere (Pulse)
-          const sphereGeometry = new THREE.SphereGeometry(0.25, 16, 16);
-          const sphereMaterial = new THREE.MeshStandardMaterial({
-            color: "#ffffff",
-            emissive: "#ffffff",
-            emissiveIntensity: 5.0,
-          });
-          const pulseSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-          pathsGroupRef.current.add(pulseSphere);
-
-          // 3. Store animation data
-          pathMaterialsRef.current.push({
-            curve: curve,
-            sphere: pulseSphere,
-            progress: Math.random() // stagger the pulses
-          });
-        }
-      }
-    }
-  }, [isLoaded, pins]);
-
-  useEffect(() => {
-    if (pathsGroupRef.current) {
-      pathsGroupRef.current.visible = showFlightPaths && !activePin;
-    }
-  }, [showFlightPaths, activePin, isLoaded]);
 
   // ----------------------------------------------------
   // DYNAMIC PIN MANAGEMENT
@@ -1774,14 +671,7 @@ export default function MapCanvas() {
       
       setPins((prev) => prev.map(p => p.id === savedPin.id ? savedPin : p));
       setActivePin(savedPin);
-      
-      if (pinGroupRef.current) {
-        const pinMesh = pinGroupRef.current.children.find(child => child.userData.id === savedPin.id);
-        if (pinMesh) {
-          pinMesh.userData = { ...pinMesh.userData, ...savedPin };
-        }
-      }
-      
+
       setIsAddingLog(false);
       setNewLogTitle("");
       setNewLogContent("");
@@ -2003,12 +893,12 @@ export default function MapCanvas() {
             <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <input type="email" placeholder="Email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} style={{ padding: "0.75rem", borderRadius: "6px", border: "none", background: "rgba(255,255,255,0.8)", color: "#000" }} />
               <input type="password" placeholder="Password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} style={{ padding: "0.75rem", borderRadius: "6px", border: "none", background: "rgba(255,255,255,0.8)", color: "#000" }} />
-              <button type="submit" disabled={authLoading} style={{ background: "#3b82f6", color: "white", padding: "0.75rem", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: "bold" }}>
+              <button type="submit" disabled={authLoading} style={{ background: "var(--accent)", color: "white", padding: "0.75rem", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: "bold" }}>
                 {authLoading ? "Loading..." : (isSignUp ? "Sign Up" : "Login")}
               </button>
             </form>
             <div style={{ textAlign: "center", marginTop: "1rem", fontSize: "0.8rem" }}>
-              <button onClick={() => setIsSignUp(!isSignUp)} style={{ background: "none", border: "none", color: "#60a5fa", cursor: "pointer", textDecoration: "underline" }}>
+              <button onClick={() => setIsSignUp(!isSignUp)} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", textDecoration: "underline" }}>
                 {isSignUp ? "Already have an account? Login" : "Need an account? Sign Up"}
               </button>
             </div>
@@ -2035,9 +925,21 @@ export default function MapCanvas() {
         </div>
       </div>
 
-      {/* 2. Main High-Density World Map Canvas Container */}
-      <div ref={containerRef} className="canvas-container">
-        <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+      {/* 2. Flat 2D world map (D3-geo SVG) */}
+      <div className="canvas-container">
+        {isLoaded && geoJsonData && (
+          <WorldMap
+            geoJson={geoJsonData}
+            statesGeoJson={statesData}
+            pins={pins}
+            activePinId={activePin?.id || null}
+            showPaths={showFlightPaths && !activePin}
+            flyTo={flyTo}
+            onPinClick={handlePinClick}
+            onMapClick={handleMapClick}
+            onHoverRegion={handleHoverRegion}
+          />
+        )}
       </div>
 
       {/* --- UI Layer Overlay --- */}
@@ -2154,7 +1056,7 @@ export default function MapCanvas() {
                 </div>
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", flexShrink: 0 }}>
                   <button className="glass-pill btn-green" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={handleAddPin}>ADD MEMORY</button>
-                  <button className="glass-pill icon-button" style={{ flex: 1, background: "rgba(0,0,0,0.05)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "#374151" }} onClick={() => setIsAddingEntry(false)}>CANCEL</button>
+                  <button className="glass-pill icon-button" style={{ flex: 1, background: "rgba(0,0,0,0.05)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "#374151" }} onClick={closeJournalPanel}>CANCEL</button>
                 </div>
               </div>
             ) : activePin ? (
@@ -2214,7 +1116,7 @@ export default function MapCanvas() {
                   <div className="sidebar-scrollbar" style={{ overflowY: "auto", paddingRight: "0.5rem", flexGrow: 1 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "0.8rem", color: "#3b82f6", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "0.25rem" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--muted)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "0.25rem" }}>
                           {formatPinDate(activePin.start_date) || "Undated"}{activePin.end_date && activePin.end_date !== activePin.start_date ? ` – ${formatPinDate(activePin.end_date)}` : ""}
                         </div>
                         <h2 style={{ fontSize: "1.5rem", margin: "0 0 0.5rem 0", fontWeight: 700, color: "#111827", lineHeight: 1.2 }}>{activePin.location_name}</h2>
@@ -2250,7 +1152,7 @@ export default function MapCanvas() {
                         <div key={log.id || idx} style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.05)", padding: "1rem", borderRadius: "8px", marginBottom: "1rem" }}>
                           <div style={{ fontWeight: 600, fontSize: "0.9rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.4rem", color: "#111827", marginBottom: "0.5rem" }}>
                             <span style={{ flex: 1 }}>{log.title}</span>
-                            <span style={{ fontSize: "0.65rem", background: "rgba(59, 130, 246, 0.1)", color: "#2563eb", padding: "0.2rem 0.5rem", borderRadius: "4px" }}>{log.category}</span>
+                            <span style={{ fontSize: "0.65rem", background: "rgba(0, 0, 0, 0.05)", color: "var(--muted)", padding: "0.2rem 0.5rem", borderRadius: "4px", fontWeight: 600 }}>{log.category}</span>
                             <button title="Edit log" onClick={() => startEditingLog(log)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#475569", padding: 0, display: "flex" }}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                             </button>
@@ -2315,7 +1217,7 @@ export default function MapCanvas() {
                         transition: "all 0.2s ease"
                       }}
                       onClick={() => {
-                        flyToPinRef.current = pin;
+                        setFlyTo({ lat: pin.latitude, lon: pin.longitude });
                         setActivePin(pin);
                         setIsAddingLog(false);
                         setIsAddingEntry(false);
@@ -2324,7 +1226,7 @@ export default function MapCanvas() {
                       onMouseOver={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.05)"; }}
                       onMouseOut={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.02)"; }}
                     >
-                      <div style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      <div style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                         {formatPinDate(pin.start_date) || "Undated"}
                       </div>
                       <div style={{ fontSize: "1.1rem", color: "#111827", fontWeight: 600, margin: "0.25rem 0" }}>
@@ -2357,7 +1259,7 @@ export default function MapCanvas() {
             <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", width: "200px" }}>
               <button
                 className="glass-pill"
-                style={{fontSize: "0.6rem", width: "100%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: showFlightPaths ? "#60a5fa" : "#94a3b8", cursor: "pointer", padding: "0.5rem", borderRadius: "8px"}}
+                style={{fontSize: "0.6rem", width: "100%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: showFlightPaths ? "var(--accent)" : "#94a3b8", cursor: "pointer", padding: "0.5rem", borderRadius: "8px"}}
                 onClick={() => setShowFlightPaths(!showFlightPaths)}
               >
                 {showFlightPaths ? "HIDE FLIGHT PATHS" : "SHOW FLIGHT PATHS"}
