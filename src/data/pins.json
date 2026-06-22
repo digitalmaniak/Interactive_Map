@@ -1,0 +1,807 @@
+[
+  {
+    "id": "p1",
+    "title": "Tropical Escape",
+    "location_name": "Runaway Bay, Jamaica",
+    "latitude": 18.4596,
+    "longitude": -77.3351,
+    "start_date": "2015-10-01",
+    "end_date": "2015-10-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.388Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_195",
+        "log_date": "2015-10-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.388Z"
+      }
+    ]
+  },
+  {
+    "id": "p2",
+    "title": "City Exploration",
+    "location_name": "Taipei (Taipei 101), Taiwan",
+    "latitude": 25.033,
+    "longitude": 121.5654,
+    "start_date": "2017-05-01",
+    "end_date": "2017-05-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_405",
+        "log_date": "2017-05-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p3",
+    "title": "Island Exploration",
+    "location_name": "Bali, Indonesia",
+    "latitude": -8.3405,
+    "longitude": 115.092,
+    "start_date": "2017-05-01",
+    "end_date": "2017-05-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_956",
+        "log_date": "2017-05-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p4",
+    "title": "Summer Getaway",
+    "location_name": "Pocono Mountains, Pennsylvania",
+    "latitude": 41.1643,
+    "longitude": -75.3346,
+    "start_date": "2019-07-01",
+    "end_date": "2019-07-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_453",
+        "log_date": "2019-07-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p5",
+    "title": "Sightseeing",
+    "location_name": "Capital District, Washington, D.C.",
+    "latitude": 38.9072,
+    "longitude": -77.0369,
+    "start_date": "2019-06-01",
+    "end_date": "2019-06-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_894",
+        "log_date": "2019-06-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p6",
+    "title": "Coastal Trip",
+    "location_name": "Punta Cana, Dominican Republic",
+    "latitude": 18.582,
+    "longitude": -68.4055,
+    "start_date": "2021-04-01",
+    "end_date": "2021-04-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_904",
+        "log_date": "2021-04-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p7",
+    "title": "Mountainous DR",
+    "location_name": "Jarabacoa, Dominican Republic",
+    "latitude": 19.1171,
+    "longitude": -70.6403,
+    "start_date": "2021-07-01",
+    "end_date": "2021-07-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_735",
+        "log_date": "2021-07-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p8",
+    "title": "Rock Climbing & Coast",
+    "location_name": "Joshua Tree & Los Angeles, California",
+    "latitude": 34.1347,
+    "longitude": -116.3131,
+    "start_date": "2021-12-01",
+    "end_date": "2021-12-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_48",
+        "log_date": "2021-12-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p10",
+    "title": "Snowboarding",
+    "location_name": "Killington & Stowe areas, Vermont",
+    "latitude": 43.6262,
+    "longitude": -72.7795,
+    "start_date": "2023-01-01",
+    "end_date": "2023-01-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_355",
+        "log_date": "2023-01-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p11",
+    "title": "Snowboarding",
+    "location_name": "Loon or Waterville Valley, New Hampshire",
+    "latitude": 44.0362,
+    "longitude": -71.6214,
+    "start_date": "2023-02-01",
+    "end_date": "2023-02-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_762",
+        "log_date": "2023-02-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p12",
+    "title": "Island/Surf Vibes",
+    "location_name": "Bocas del Toro & Bastimentos Island, Panama",
+    "latitude": 9.34,
+    "longitude": -82.2404,
+    "start_date": "2023-09-01",
+    "end_date": "2023-09-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_704",
+        "log_date": "2023-09-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p13",
+    "title": "Pura Vida / Travel",
+    "location_name": "Puerto Viejo de Talamanca & Alajuela, Costa Rica",
+    "latitude": 9.6586,
+    "longitude": -82.7547,
+    "start_date": "2023-09-01",
+    "end_date": "2023-09-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_175",
+        "log_date": "2023-09-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p14",
+    "title": "Winter Sports",
+    "location_name": "Mont-Tremblant, Quebec, Canada",
+    "latitude": 46.1185,
+    "longitude": -74.5962,
+    "start_date": "2023-12-01",
+    "end_date": "2023-12-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_533",
+        "log_date": "2023-12-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p15",
+    "title": "Snowboarding Run",
+    "location_name": "Green Mountains, Vermont",
+    "latitude": 43.9873,
+    "longitude": -73.0787,
+    "start_date": "2024-02-01",
+    "end_date": "2024-02-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_871",
+        "log_date": "2024-02-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p16",
+    "title": "SIGGRAPH 24 / Rock Climbing & Riding",
+    "location_name": "Denver & Vail area, Colorado",
+    "latitude": 39.7392,
+    "longitude": -104.9903,
+    "start_date": "2024-08-01",
+    "end_date": "2024-08-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_886",
+        "log_date": "2024-08-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p17",
+    "title": "Tropical Travel",
+    "location_name": "Coastal Strip, Florida",
+    "latitude": 25.7617,
+    "longitude": -80.1918,
+    "start_date": "2024-09-01",
+    "end_date": "2024-09-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_541",
+        "log_date": "2024-09-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p18",
+    "title": "City Exploration",
+    "location_name": "Seoul, South Korea",
+    "latitude": 37.5665,
+    "longitude": 126.978,
+    "start_date": "2024-12-01",
+    "end_date": "2024-12-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_159",
+        "log_date": "2024-12-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p19",
+    "title": "Snowboarding Run",
+    "location_name": "Winter Highlands, New Hampshire",
+    "latitude": 44.25,
+    "longitude": -71.5,
+    "start_date": "2025-01-01",
+    "end_date": "2025-01-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_377",
+        "log_date": "2025-01-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p21",
+    "title": "Snowboarding Run",
+    "location_name": "Green Mountains, Vermont",
+    "latitude": 43.9873,
+    "longitude": -73.0787,
+    "start_date": "2025-02-01",
+    "end_date": "2025-02-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_821",
+        "log_date": "2025-02-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p22",
+    "title": "Hiking / Coastal Expedition",
+    "location_name": "Acadia National Park, Maine",
+    "latitude": 44.3386,
+    "longitude": -68.2733,
+    "start_date": "2025-07-01",
+    "end_date": "2025-07-01",
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_911",
+        "log_date": "2025-07-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p23",
+    "title": "Acatenango Volcano Hike",
+    "location_name": "Guatemala City & Lake Atitlán, Guatemala",
+    "latitude": 14.6907,
+    "longitude": -91.2025,
+    "start_date": "2025-08-01",
+    "end_date": "2025-08-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_306",
+        "log_date": "2025-08-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p24",
+    "title": "Snowboarding / Alpine Circuit",
+    "location_name": "Chamonix (The Alps), France",
+    "latitude": 45.9237,
+    "longitude": 6.8694,
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_859",
+        "log_date": "2026-02-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p25",
+    "title": "Alpine Circuit",
+    "location_name": "Aosta Valley, Italy",
+    "latitude": 45.7373,
+    "longitude": 7.3201,
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_368",
+        "log_date": "2026-02-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p26",
+    "title": "Alpine Circuit",
+    "location_name": "Geneva, Täsch & Andermatt, Switzerland",
+    "latitude": 46.6339,
+    "longitude": 8.5956,
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_393",
+        "log_date": "2026-02-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p27",
+    "title": "Alpine Circuit",
+    "location_name": "Sölden & St. Anton am Arlberg, Austria",
+    "latitude": 47.1303,
+    "longitude": 10.2662,
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_406",
+        "log_date": "2026-02-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p28",
+    "title": "Alpine Circuit",
+    "location_name": "Malbun, Liechtenstein",
+    "latitude": 47.1018,
+    "longitude": 9.6083,
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_496",
+        "log_date": "2026-02-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p29",
+    "title": "Alpine Circuit / Transit",
+    "location_name": "Bavaria, Germany",
+    "latitude": 48.1351,
+    "longitude": 11.582,
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-01",
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_400",
+        "log_date": "2026-02-01",
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p30",
+    "title": "Snowboarding",
+    "location_name": "Mammoth Mountain / Eastern Sierra, California",
+    "latitude": 37.6308,
+    "longitude": -119.0326,
+    "start_date": null,
+    "end_date": null,
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_745",
+        "log_date": null,
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p31",
+    "title": "Snowboarding",
+    "location_name": "Park City Mountain (Wasatch Range), Utah",
+    "latitude": 40.6461,
+    "longitude": -111.498,
+    "start_date": null,
+    "end_date": null,
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_379",
+        "log_date": null,
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p32",
+    "title": "Havasu Falls Hike / Camping",
+    "location_name": "Havasu Falls, Arizona",
+    "latitude": 36.2552,
+    "longitude": -112.6979,
+    "start_date": null,
+    "end_date": null,
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_887",
+        "log_date": null,
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p33",
+    "title": "Las Vegas MGM Grand Casino",
+    "location_name": "Las Vegas, Nevada",
+    "latitude": 36.1026,
+    "longitude": -115.1703,
+    "start_date": null,
+    "end_date": null,
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_604",
+        "log_date": null,
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p34",
+    "title": "Rock Climbing & Bouldering",
+    "location_name": "Red Rocks, Nevada",
+    "latitude": 36.1336,
+    "longitude": -115.4273,
+    "start_date": null,
+    "end_date": null,
+    "trip_type": "Domestic",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_234",
+        "log_date": null,
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p35",
+    "title": "Tourist & Food",
+    "location_name": "Tokyo, Japan",
+    "latitude": 35.6762,
+    "longitude": 139.6503,
+    "start_date": null,
+    "end_date": null,
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_719",
+        "log_date": null,
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p36",
+    "title": "Snowboarding Niseko",
+    "location_name": "Hokkaido, Japan",
+    "latitude": 42.8048,
+    "longitude": 140.6874,
+    "start_date": null,
+    "end_date": null,
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_234",
+        "log_date": null,
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  },
+  {
+    "id": "p37",
+    "title": "Vacation / All-Inclusive",
+    "location_name": "Cancun, Mexico",
+    "latitude": 21.1606,
+    "longitude": -86.8475,
+    "start_date": null,
+    "end_date": null,
+    "trip_type": "International",
+    "created_at": "2026-06-11T21:34:47.394Z",
+    "updated_at": "2026-06-11T21:34:47.394Z",
+    "logs": [
+      {
+        "id": "log_1781215171636_487",
+        "log_date": null,
+        "title": "Initial Entry",
+        "content": "Visited this location.",
+        "category": "Experience",
+        "media_urls": [],
+        "created_at": "2026-06-11T21:34:47.394Z"
+      }
+    ]
+  }
+]

@@ -2,15 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-
-// Pre-defined visited travel locations
-const initialPins = [
-  { id: "p1", name: "Tokyo Outing", city: "Tokyo, Japan", lat: 35.6762, lon: 139.6503, date: "2025-01-29", details: "Explored Tsukiji Outer Market early morning. Incredible sushi and street food options!" },
-  { id: "p2", name: "Paris Memories", city: "Paris, France", lat: 48.8566, lon: 2.3522, date: "2024-09-15", details: "Bistro lunch near Notre Dame. Visited the Louvre museum and walked along the Seine at sunset." },
-  { id: "p3", name: "Manhattan Outing", city: "New York, USA", lat: 40.7128, lon: -74.0060, date: "2024-11-04", details: "Walked across the Brooklyn Bridge. Explored West Village cozy restaurants and jazz clubs." },
-  { id: "p4", name: "Rome Journal", city: "Rome, Italy", lat: 41.9028, lon: 12.4964, date: "2024-06-20", details: "Amazing pasta carbonara in Trastevere. Visited the Colosseum and Roman Forum early in the morning." },
-  { id: "p5", name: "Sydney Coastal Walk", city: "Sydney, Australia", lat: -33.8688, lon: 151.2093, date: "2025-03-10", details: "Bondi to Bronte coastal walk. Saw humpback whales migrating from the cliffs. Spectacular views!" }
-];
+import { supabase } from "../lib/supabase/client";
 
 // Pastel color palette for countries (paper-craft map look)
 const countryColors = [
@@ -432,12 +424,55 @@ export default function MapCanvas() {
   const [geoJsonData, setGeoJsonData] = useState(null);
   const [statesData, setStatesData] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [pins, setPins] = useState([]);
+  const [newPinName, setNewPinName] = useState("");
+  const [newPinCity, setNewPinCity] = useState("");
+  const [newPinDetails, setNewPinDetails] = useState("");
+  const [newPinStartDate, setNewPinStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [newPinEndDate, setNewPinEndDate] = useState(new Date().toISOString().split("T")[0]);
+  const [isAddingLog, setIsAddingLog] = useState(false);
+  const [newLogTitle, setNewLogTitle] = useState("");
+  const [newLogContent, setNewLogContent] = useState("");
+  const [newLogCategory, setNewLogCategory] = useState("Experience");
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   
+  // Auth States
+  const [session, setSession] = useState(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showFlightPaths, setShowFlightPaths] = useState(false);
+  const [activeTab, setActiveTab] = useState("Interactive Map");
+  const [selectedJournalPin, setSelectedJournalPin] = useState(null);
+
   // Interactive HUD States
   const [hoveredCountry, setHoveredCountry] = useState("Hover over map");
   const [clickedCoords, setClickedCoords] = useState({ lat: 0, lon: 0 });
   const [activePin, setActivePin] = useState(null);
   const [isAddingEntry, setIsAddingEntry] = useState(false);
+
+  // Three.js Element Refs
+  const pinGroupRef = useRef(null);
+  const countriesGroupRef = useRef(null);
+  const pinGeomRef = useRef(null);
+  const pinMatRef = useRef(null);
+  const pathsGroupRef = useRef(null);
+  const pathMaterialsRef = useRef([]);
+  const flyToPinRef = useRef(null);
+  const animationTargetRef = useRef(null);
+
+  const activePinRef = useRef(activePin);
+  const isAddingEntryRef = useRef(isAddingEntry);
+
+  useEffect(() => {
+    activePinRef.current = activePin;
+  }, [activePin]);
+
+  useEffect(() => {
+    isAddingEntryRef.current = isAddingEntry;
+  }, [isAddingEntry]);
 
   // Map Scale conversion factor (scaled up for higher resolution details)
   const mapScale = 8.0;
@@ -527,10 +562,63 @@ export default function MapCanvas() {
     const width = container.clientWidth;
     const height = container.clientHeight;
 
+    // 0. Offscreen canvas for generating geographical distance field to continents
+    const canvasMask = document.createElement("canvas");
+    canvasMask.width = 1024;
+    canvasMask.height = 512;
+    const ctxMask = canvasMask.getContext("2d");
+
+    // Clear with solid black (water = 0.0)
+    ctxMask.fillStyle = "#000000";
+    ctxMask.fillRect(0, 0, canvasMask.width, canvasMask.height);
+
+    const drawAllLand = () => {
+      geoJsonData.features.forEach((feature) => {
+        const geometry = feature.geometry;
+        if (!geometry) return;
+        if (feature.properties.name === "Antarctica") return;
+
+        const drawPolygon = (polygonCoords) => {
+          const outerRing = polygonCoords[0];
+          if (!outerRing || outerRing.length === 0) return;
+          ctxMask.beginPath();
+          outerRing.forEach((coord, idx) => {
+            const px = ((coord[0] + 180) / 360) * canvasMask.width;
+            const py = ((90 - coord[1]) / 180) * canvasMask.height;
+            if (idx === 0) ctxMask.moveTo(px, py);
+            else ctxMask.lineTo(px, py);
+          });
+          ctxMask.closePath();
+          ctxMask.fill();
+        };
+
+        if (geometry.type === "Polygon") {
+          drawPolygon(geometry.coordinates);
+        } else if (geometry.type === "MultiPolygon") {
+          geometry.coordinates.forEach(drawPolygon);
+        }
+      });
+    };
+
+    // Pass 1: Draw continents with shadow blur to create a soft geographical distance gradient (extended to 128px for wider glow)
+    ctxMask.shadowColor = "#ffffff";
+    ctxMask.shadowBlur = 128;
+    ctxMask.fillStyle = "#ffffff";
+    drawAllLand();
+
+    // Pass 2: Draw solid with NO blur to lock land points to 100% white (1.0)
+    ctxMask.shadowBlur = 0;
+    ctxMask.fillStyle = "#ffffff";
+    drawAllLand();
+
+    const distanceMapTexture = new THREE.CanvasTexture(canvasMask);
+    distanceMapTexture.minFilter = THREE.LinearFilter;
+    distanceMapTexture.magFilter = THREE.LinearFilter;
+
     // 1. Scene & Renderer Setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#0891b2"); // Blend with deep cartoony ocean
-    scene.fog = new THREE.FogExp2("#0891b2", 0.0004);
+    scene.background = new THREE.Color("#0c4a6e"); // Blend with deep navy-blue cartoony ocean
+    scene.fog = new THREE.FogExp2("#0c4a6e", 0.0004);
 
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
@@ -570,7 +658,7 @@ export default function MapCanvas() {
     const ambientLight = new THREE.AmbientLight("#ffffff", 1.9);
     scene.add(ambientLight);
 
-    const hemiLight = new THREE.HemisphereLight("#bae6fd", "#0891b2", 1.4); // Light blue sky sky-glow to ocean reflection
+    const hemiLight = new THREE.HemisphereLight("#bae6fd", "#0c4a6e", 1.4); // Light blue sky sky-glow to ocean reflection
     hemiLight.position.set(0, 120, 0);
     scene.add(hemiLight);
 
@@ -593,49 +681,62 @@ export default function MapCanvas() {
     // 4. Flat Ocean Base Plane with custom ShaderMaterial for cartoony caustics & reef gradients
     const oceanGeo = new THREE.PlaneGeometry(10000, 10000);
     oceanGeo.rotateX(-Math.PI / 2);
-    const oceanMat = new THREE.ShaderMaterial({
-      lights: true,
-      uniforms: THREE.UniformsUtils.merge([
-        THREE.UniformsLib.lights,
-        THREE.UniformsLib.shadowmap,
-        {
-          uTime: { value: 0.0 },
-          uColorShallow: { value: new THREE.Color("#22d3ee") }, // Bright turquoise
-          uColorDeep: { value: new THREE.Color("#0891b2") },    // Rich deep teal-cyan
-          uCausticColor: { value: new THREE.Color("#ffffff") }  // White caustics grid
-        }
-      ]),
-      vertexShader: `
-        #include <common>
-        #include <shadowmap_pars_vertex>
-        varying vec2 vUv;
-        varying vec3 vWorldPosition;
+    const oceanMat = new THREE.MeshStandardMaterial({
+      color: "#0c4a6e",
+      roughness: 0.8,
+      metalness: 0.1
+    });
 
-        void main() {
-          vUv = uv;
-          #include <begin_vertex>
-          #include <project_vertex>
-          #include <worldpos_vertex>
-          #include <shadowmap_vertex>
-          
-          vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-        }
-      `,
-      fragmentShader: `
-        #include <common>
-        #include <packing>
-        #include <lights_pars_begin>
-        #include <shadowmap_pars_fragment>
-        #include <shadowmask_pars_fragment>
+    oceanMat.userData = {
+      uTime: { value: 0.0 },
+      uColorShallow: { value: new THREE.Color("#22d3ee") }, // Bright turquoise
+      uColorMedium: { value: new THREE.Color("#0891b2") },  // Vibrant teal-cyan
+      uColorDeep: { value: new THREE.Color("#0c4a6e") },    // Rich deep navy blue
+      uCausticColor: { value: new THREE.Color("#ffffff") }, // White caustics grid
+      uDistanceMap: { value: distanceMapTexture }
+    };
 
+    oceanMat.onBeforeCompile = (shader) => {
+      // Link custom uniforms to the compiled shader
+      shader.uniforms.uTime = oceanMat.userData.uTime;
+      shader.uniforms.uColorShallow = oceanMat.userData.uColorShallow;
+      shader.uniforms.uColorMedium = oceanMat.userData.uColorMedium;
+      shader.uniforms.uColorDeep = oceanMat.userData.uColorDeep;
+      shader.uniforms.uCausticColor = oceanMat.userData.uCausticColor;
+      shader.uniforms.uDistanceMap = oceanMat.userData.uDistanceMap;
+
+      // 1. Inject varying declaration into vertex shader
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vWorldPosition;`
+      );
+
+      // 2. Compute world position in vertex shader
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <worldpos_vertex>',
+        `#include <worldpos_vertex>
+        vWorldPosition = (modelMatrix * vec4( transformed, 1.0 )).xyz;`
+      );
+
+      // 3. Inject uniform and custom logic declarations into fragment shader
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <common>',
+        `#include <common>
         uniform float uTime;
         uniform vec3 uColorShallow;
+        uniform vec3 uColorMedium;
         uniform vec3 uColorDeep;
         uniform vec3 uCausticColor;
-        varying vec2 vUv;
+        uniform sampler2D uDistanceMap;
         varying vec3 vWorldPosition;
 
-        // 2D Noise helpers
+        // 2D Hash helper
+        vec2 hash2(vec2 p) {
+          return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453);
+        }
+
+        // 2D Noise helper
         float hash(vec2 p) {
           return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
         }
@@ -648,73 +749,75 @@ export default function MapCanvas() {
                      mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
         }
 
-        // Fractal Brownian Motion for reef details
-        float fbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.5;
-          vec2 shift = vec2(100.0);
-          mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-          for (int i = 0; i < 4; ++i) {
-            v += a * noise(p);
-            p = rot * p * 2.0 + shift;
-            a *= 0.5;
+        // Worley noise cellular edge detector (computes F2 - F1 for crisp borders)
+        float getCellularEdges(vec2 uv, float time) {
+          vec2 p = uv * 0.128; // 50% smaller cell size again (double frequency)
+          vec2 n = floor(p);
+          vec2 f = fract(p);
+
+          float F1 = 8.0;
+          float F2 = 8.0;
+
+          for (int j = -1; j <= 1; j++) {
+            for (int i = -1; i <= 1; i++) {
+              vec2 g = vec2(float(i), float(j));
+              vec2 o = hash2(n + g);
+              // Slowly animate the cell points
+              o = 0.5 + 0.5 * sin(time * 0.55 + o * 6.2831);
+              vec2 r = g + o - f;
+              float d = dot(r, r); // squared distance
+
+              if (d < F1) {
+                F2 = F1;
+                F1 = d;
+              } else if (d < F2) {
+                F2 = d;
+              }
+            }
           }
-          return v;
+          
+          float d1 = sqrt(F1);
+          float d2 = sqrt(F2);
+          float diff = d2 - d1;
+          
+          // Crisp polygonal cell boundary lines (uniform thickness)
+          float edgeThickness = 0.045;
+          return 1.0 - smoothstep(0.0, edgeThickness, diff);
         }
+        `
+      );
 
-        // Animated wobbly grid caustics (Wind Waker style)
-        float getCaustics(vec2 uv, float time) {
-          vec2 p = uv * 0.07;
-          vec2 i = p;
-          float c = 0.0;
-          float shift = time * 0.75;
-          
-          for (int n = 0; n < 3; n++) {
-            float t = shift * (1.0 - (1.5 / float(n + 1)));
-            i = p + vec2(
-              cos(t - i.x) + sin(t + i.y), 
-              sin(t - i.y) + cos(t + i.x)
-            );
-            c += 1.0 / length(vec2(
-              p.x / (sin(i.x + t) / 0.008), 
-              p.y / (cos(i.y + t) / 0.008)
-            ));
-          }
-          c /= 3.0;
-          c = 1.35 - pow(c, 1.15);
-          return clamp(pow(abs(c), 7.5), 0.0, 1.0);
-        }
-
-        void main() {
-          // Calculate world-locked coordinate map for seamless zoom/pan
-          vec2 worldUV = vWorldPosition.xz * 0.14; 
-          
-          // Generate procedural depth variation reef effect
-          float depthFactor = fbm(worldUV * 0.16 + vec2(uTime * 0.015, uTime * 0.007));
-          
-          // Interpolate shallow and deep ocean colors
-          vec3 waterColor = mix(uColorShallow, uColorDeep, depthFactor);
-          
-          // Animated overlapping caustics grid
-          float caustic1 = getCaustics(worldUV, uTime);
-          float caustic2 = getCaustics(worldUV * 1.25 + vec2(9.3, 13.7), uTime * 0.82 + 15.2);
-          float causticIntensity = max(caustic1, caustic2 * 0.68);
-          
-          // Modulate caustics intensity based on depth (less visible in deep reefs)
-          float causticScale = mix(0.48, 0.12, depthFactor);
-          vec3 baseColor = waterColor + uCausticColor * causticIntensity * causticScale;
-
-          // Shadow mask check (returns 0.0 in shadow, 1.0 in light)
-          float shadow = getShadowMask();
-          
-          // Apply a stylized cartoony shadow (darker/bluer instead of pitch black)
-          vec3 shadowColor = baseColor * mix(0.68, 0.85, depthFactor);
-          vec3 finalColor = mix(shadowColor, baseColor, shadow);
-          
-          gl_FragColor = vec4(finalColor, 1.0);
-        }
-      `
-    });
+      // 4. Overwrite base material color before lighting and shadow calculations are applied
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        // Calculate world-locked coordinate map for seamless zoom/pan
+        vec2 worldUV = vWorldPosition.xz * 0.14; 
+        
+        // Map world space position to (0, 1) equirectangular UV for sampling the distance map
+        float mapU = (vWorldPosition.x / (180.0 * 8.0)) * 0.5 + 0.5;
+        float mapV = ((-vWorldPosition.z) / (90.0 * 8.0)) * 0.5 + 0.5;
+        vec2 maskUV = clamp(vec2(mapU, mapV), 0.0, 1.0);
+        
+        // Use a flat deep color for the ocean as requested
+        vec3 waterColor = uColorDeep;
+        
+        // Apply wobbly coordinate distortion to Voronoi cell shapes
+        vec2 distortedUV = worldUV + vec2(
+          sin(worldUV.y * 0.08 + uTime * 0.3) * 0.6,
+          cos(worldUV.x * 0.08 + uTime * 0.3) * 0.6
+        );
+        
+        float caustic = getCellularEdges(distortedUV, uTime);
+        
+        // Use a constant caustic scale to keep things flat and uniform
+        float causticScale = 0.07;
+        
+        // Overlay sharp, bright caustic lines on top of the base ocean water
+        diffuseColor.rgb = mix(waterColor, waterColor + uCausticColor * causticScale, caustic);
+        `
+      );
+    };
     const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
     oceanMesh.position.y = -0.01; // Slightly below ground level
     oceanMesh.receiveShadow = true;
@@ -729,19 +832,13 @@ export default function MapCanvas() {
 
     // Groups to organize extruded landmasses, borders, and water shelves
     const countriesGroup = new THREE.Group();
+    countriesGroupRef.current = countriesGroup;
     scene.add(countriesGroup);
 
-    const shelvesGroup = new THREE.Group();
-    scene.add(shelvesGroup);
 
     const borderLines = []; // Collect border coordinate pairs
 
-    const shelfMat = new THREE.MeshBasicMaterial({
-      color: "#22d3ee",
-      transparent: true,
-      opacity: 0.55,
-      side: THREE.DoubleSide
-    });
+
 
     const sideMaterial = new THREE.MeshStandardMaterial({
       color: "#a89f91", // uniform sandstone side walls
@@ -752,6 +849,7 @@ export default function MapCanvas() {
 
     geoJsonData.features.forEach((feature) => {
       const countryName = feature.properties.name || "Unknown";
+      if (countryName === "Antarctica") return;
       const countryCode = feature.id || "UNK";
       const geometryType = feature.geometry.type;
       const coordinates = feature.geometry.coordinates;
@@ -839,28 +937,6 @@ export default function MapCanvas() {
               seg.b.x, countryHeight + 0.02, -seg.b.y
             );
           });
-
-
-          // 4. Neon Cyan Water Shelf
-          const centroid = new THREE.Vector2(centroidLon * mapScale, centroidLat * mapScale);
-          const scaledContour = contour.map(p => {
-            const sx = centroid.x + 1.025 * (p.x - centroid.x);
-            const sy = centroid.y + 1.025 * (p.y - centroid.y);
-            return new THREE.Vector2(sx, sy);
-          });
-
-          const shelfShape = new THREE.Shape();
-          for (let i = 0; i < scaledContour.length; i++) {
-            if (i === 0) shelfShape.moveTo(scaledContour[i].x, scaledContour[i].y);
-            else shelfShape.lineTo(scaledContour[i].x, scaledContour[i].y);
-          }
-
-          const shelfGeom = new THREE.ShapeGeometry(shelfShape);
-          shelfGeom.rotateX(-Math.PI / 2);
-
-          const shelfMesh = new THREE.Mesh(shelfGeom, shelfMat);
-          shelfMesh.position.y = 0.08;
-          shelvesGroup.add(shelfMesh);
         };
 
         if (geometryType === "Polygon") {
@@ -955,7 +1031,12 @@ export default function MapCanvas() {
 
     // 7. AddVisited 3D Memory Pins
     const pinGroup = new THREE.Group();
+    pinGroupRef.current = pinGroup;
     scene.add(pinGroup);
+
+    const pathsGroup = new THREE.Group();
+    pathsGroupRef.current = pathsGroup;
+    scene.add(pathsGroup);
 
     const pinGeom = new THREE.ConeGeometry(1.2, 4.0, 4);
     pinGeom.rotateX(Math.PI); // Point down
@@ -968,36 +1049,16 @@ export default function MapCanvas() {
       roughness: 0.4,
       metalness: 0.1
     });
+    pinGeomRef.current = pinGeom;
+    pinMatRef.current = pinMat;
 
-    initialPins.forEach((pinData) => {
-      // Convert lat/lon to X/Z, starting high at Y = 10.0
-      const basePos = latLonToVector3(pinData.lat, pinData.lon, 10.0);
-      
-      // Raycast down to find the country mesh's flat-top elevation
-      const ray = new THREE.Raycaster(
-        new THREE.Vector3(basePos.x, 15.0, basePos.z),
-        new THREE.Vector3(0, -1, 0)
-      );
-      const intersects = ray.intersectObjects(countriesGroup.children);
-      let yHeight = 0.9; // fallback
-      if (intersects.length > 0) {
-        yHeight = intersects[0].point.y;
-      }
-      
-      const pinMesh = new THREE.Mesh(pinGeom, pinMat.clone());
-      pinMesh.position.set(basePos.x, yHeight + 0.1, basePos.z);
-      pinMesh.castShadow = true;
-      pinMesh.userData = { isPin: true, ...pinData, countryHeight: yHeight };
-      
-      pinGroup.add(pinMesh);
-    });
-
+    // Pins will be generated dynamically by a separate useEffect sync
     // 8. Interactive Dragging, Pan, and Raycasting Click/Hover Panning
     let isDragging = false;
     let dragMoveCount = 0; // count dragging frames to distinguish click from drag
     const currentMousePosition = { x: 0, y: 0 };
     const previousFrameMousePosition = { x: 0, y: 0 };
-    const cameraTarget = new THREE.Vector3(0, 0, 0);
+    const cameraTarget = new THREE.Vector3(0, 0, -140);
     const dragVelocity = { x: 0, y: 0 };
     const friction = 0.92;
     let hoveredMesh = null;
@@ -1005,6 +1066,7 @@ export default function MapCanvas() {
 
     const handleMouseDown = (e) => {
       isDragging = true;
+      animationTargetRef.current = null;
       dragMoveCount = 0;
       currentMousePosition.x = e.clientX;
       currentMousePosition.y = e.clientY;
@@ -1037,6 +1099,7 @@ export default function MapCanvas() {
             hoveredPin = collidedPin;
             hoveredPin.material.color.setHex(0x4f46e5); // Change to Indigo
             hoveredPin.material.emissive.setHex(0x4f46e5); // Emissive Indigo
+            setHoveredCountry(collidedPin.userData.city);
           }
         } else {
           document.body.style.cursor = "default";
@@ -1112,41 +1175,59 @@ export default function MapCanvas() {
         if (pinIntersects.length > 0) {
           const pinData = pinIntersects[0].object.userData;
           setActivePin({
-            name: pinData.name,
-            city: pinData.city,
-            lat: pinData.lat,
-            lon: pinData.lon,
-            date: pinData.date,
-            details: pinData.details
+            id: pinData.id,
+            title: pinData.title,
+            location_name: pinData.location_name,
+            latitude: pinData.latitude,
+            longitude: pinData.longitude,
+            start_date: pinData.start_date,
+            end_date: pinData.end_date,
+            trip_type: pinData.trip_type,
+            logs: pinData.logs || []
           });
+          setIsAddingLog(false);
           setIsAddingEntry(false);
+          setIsConfirmingDelete(false);
           return;
         }
 
         // Raycast against the entire world (ocean or country landmasses)
         const countryIntersects = raycaster.intersectObjects(countriesGroup.children);
         if (countryIntersects.length > 0) {
+          if (activePinRef.current) {
+            setActivePin(null);
+            setIsConfirmingDelete(false);
+            return;
+          }
+          if (isAddingEntryRef.current) {
+            setIsAddingEntry(false);
+            return;
+          }
           const point = countryIntersects[0].point;
           const coords = vector3ToLatLon(point);
           setClickedCoords(coords);
-          setActivePin(null); // Clear active memory view
           setIsAddingEntry(true); // Open "Add New Memory" panel
           return;
         }
 
         const oceanIntersects = raycaster.intersectObject(oceanMesh);
         if (oceanIntersects.length > 0) {
-          const point = oceanIntersects[0].point;
-          const coords = vector3ToLatLon(point);
-          setClickedCoords(coords);
-          setActivePin(null);
-          setIsAddingEntry(true);
+          if (activePinRef.current) {
+            setActivePin(null);
+            setIsConfirmingDelete(false);
+            return;
+          }
+          if (isAddingEntryRef.current) {
+            setIsAddingEntry(false);
+            return;
+          }
         }
       }
     };
 
     const handleWheel = (e) => {
       e.preventDefault();
+      animationTargetRef.current = null;
       const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
       const minZoom = initialZoom * 0.95;
       const maxZoom = 45.0;
@@ -1291,6 +1372,84 @@ export default function MapCanvas() {
         }
       }
 
+      if (flyToPinRef.current) {
+        const pinPos = latLonToVector3(flyToPinRef.current.latitude, flyToPinRef.current.longitude, 10.0);
+        
+        const targetZoom = 45.0 * 0.28; // Zoom 70% into the final destination (0.4 * 0.7 = 0.28)
+        
+        animationTargetRef.current = {
+          startX: cameraTarget.x,
+          startZ: cameraTarget.z,
+          startZoom: camera.zoom,
+          x: pinPos.x,
+          z: pinPos.z,
+          zoom: targetZoom,
+          progress: 0.0,
+          distance: Math.sqrt((pinPos.x - cameraTarget.x)**2 + (pinPos.z - cameraTarget.z)**2)
+        };
+        flyToPinRef.current = null;
+      }
+
+      if (animationTargetRef.current) {
+        const anim = animationTargetRef.current;
+        
+        // Duration based on distance: 1.5s for close points, ~8.25s for furthest points (increased by 50%)
+        const durationSecs = 1.5 + (Math.min(90.0, anim.distance) / 90.0) * 6.75;
+        const progressStep = 1.0 / (durationSecs * 60.0);
+        
+        anim.progress += progressStep;
+        if (anim.progress >= 1.0) {
+            anim.progress = 1.0;
+        }
+
+        const t = anim.progress;
+        
+        // Logarithmic Zoom Interpolation
+        const logStartZoom = Math.log(anim.startZoom);
+        const logTargetZoom = Math.log(anim.zoom);
+        
+        // Parabolic arc calculations
+        const peakLogZoom = Math.log(2.0);
+        const logZoomDropNeeded = Math.max(0, Math.min(logStartZoom, logTargetZoom) - peakLogZoom);
+        
+        // Force full zoom out for destination-to-destination flights regardless of distance
+        const isDestToDest = anim.startZoom > 5.0 && anim.zoom > 5.0;
+        const distanceFactor = isDestToDest ? 1.0 : Math.min(1.0, anim.distance / 30.0);
+        
+        const actualLogDrop = logZoomDropNeeded * distanceFactor;
+
+        // Cubic ease-in-out for zoom and parabolic flights
+        const zoomEase = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        let transEase = zoomEase;
+        
+        // If we are mostly just zooming (no significant parabola), separate translation easing 
+        // to avoid sliding while heavily zoomed in.
+        if (actualLogDrop < 0.1) {
+            if (anim.startZoom < anim.zoom) {
+                // Zooming IN. We want to complete translation early while still zoomed out! (Quartic Ease-Out)
+                transEase = 1.0 - Math.pow(1.0 - t, 4);
+            } else {
+                // Zooming OUT. We want to delay translation until we are zoomed out! (Quartic Ease-In)
+                transEase = Math.pow(t, 4);
+            }
+        }
+
+        cameraTarget.x = anim.startX + (anim.x - anim.startX) * transEase;
+        cameraTarget.z = anim.startZ + (anim.z - anim.startZ) * transEase;
+        
+        const currentLogZoom = logStartZoom + (logTargetZoom - logStartZoom) * zoomEase;
+        const finalLogZoom = currentLogZoom - Math.sin(t * Math.PI) * actualLogDrop;
+        
+        camera.zoom = Math.exp(finalLogZoom);
+
+        camera.updateProjectionMatrix();
+
+        if (anim.progress >= 1.0) {
+           animationTargetRef.current = null;
+        }
+      }
+
       // Copy camera target instantly for crisp 1-to-1 tracking and inertia
       const cameraPositionTarget = new THREE.Vector3(
         cameraTarget.x,
@@ -1311,9 +1470,18 @@ export default function MapCanvas() {
       const minZ = initialZoom;
       const maxZ = 45.0;
       const tZ = Math.max(0.0, Math.min(1.0, (camera.zoom - minZ) / (maxZ - minZ)));
-      const S_max = 9.5;  // Very visible when zoomed out
-      const S_min = 0.75; // Clean and small when zoomed in
-      const pinScaleVal = S_min + (S_max - S_min) * Math.pow(1 - tZ, 2.0);
+      
+      // Target screen size for the pins (visually). 
+      // Bigger when zoomed out (e.g. 2.0), smaller when zoomed in (e.g. 0.6875).
+      const screenScaleMax = 1.5;
+      const screenScaleMin = 4.125;
+      
+      // Use a smoothing curve so it feels natural as you zoom
+      const easeT = Math.pow(tZ, 0.6);
+      const targetScreenSize = screenScaleMax - (screenScaleMax - screenScaleMin) * easeT;
+      
+      // Calculate world scale needed to maintain this visual screen size given the orthographic camera.zoom
+      const pinScaleVal = targetScreenSize / camera.zoom;
 
 
       pinGroup.children.forEach((pin, idx) => {
@@ -1327,8 +1495,7 @@ export default function MapCanvas() {
       });
 
       // Dynamic grid opacity based on zoom level:
-      // min zoom (initialZoom) -> opacity 0.0
-      // 25% of max zoom -> opacity 1.0
+
       const minZoom = initialZoom;
       const maxZoom = 45.0;
       const targetZoom = maxZoom * 0.25;
@@ -1340,8 +1507,19 @@ export default function MapCanvas() {
       }
       gridHelper.material.opacity = gridOpacity;
 
-      if (oceanMat.uniforms && oceanMat.uniforms.uTime) {
-        oceanMat.uniforms.uTime.value = elapsedTime;
+      if (oceanMat.userData && oceanMat.userData.uTime) {
+        oceanMat.userData.uTime.value = elapsedTime;
+      }
+
+      if (pathMaterialsRef.current && pathMaterialsRef.current.length > 0) {
+        pathMaterialsRef.current.forEach(anim => {
+          if (anim.curve && anim.sphere) {
+            anim.progress += 0.003;
+            if (anim.progress > 1) anim.progress = 0;
+            const pt = anim.curve.getPointAt(anim.progress);
+            anim.sphere.position.copy(pt);
+          }
+        });
       }
 
       renderer.render(scene, camera);
@@ -1372,9 +1550,332 @@ export default function MapCanvas() {
       renderer.dispose();
     };
   }, [isLoaded, geoJsonData, statesData]);
+  // Fetch pins from Supabase
+  useEffect(() => {
+    if (!session) return;
+    const loadPins = async () => {
+      const { data, error } = await supabase.from('pins').select('*, pin_logs(*)');
+      if (error) {
+        console.error("Failed to load pins from Supabase", error);
+      } else if (data) {
+        const mappedPins = data.map(pin => ({
+          ...pin,
+          logs: pin.pin_logs || []
+        }));
+        setPins(mappedPins);
+      }
+    };
+    loadPins();
+  }, [session]);
+
+  // Sync pins and draw flight paths whenever pins state changes
+  useEffect(() => {
+    if (isLoaded && pinGroupRef.current && countriesGroupRef.current && pinGeomRef.current && pathsGroupRef.current) {
+      
+      // 1. Clear existing pins and paths
+      while(pinGroupRef.current.children.length > 0) {
+        pinGroupRef.current.remove(pinGroupRef.current.children[0]);
+      }
+      while(pathsGroupRef.current.children.length > 0) {
+        pathsGroupRef.current.remove(pathsGroupRef.current.children[0]);
+      }
+      pathMaterialsRef.current = [];
+
+      if (pins.length === 0) return;
+
+      // 2. Sort pins chronologically
+      const sortedPins = [...pins].sort((a, b) => new Date(a.start_date || 0) - new Date(b.start_date || 0));
+
+      const pinPositions = [];
+
+      // 3. Render Pins
+      sortedPins.forEach((pinData) => {
+        const basePos = latLonToVector3(pinData.latitude, pinData.longitude, 10.0);
+        const ray = new THREE.Raycaster(
+          new THREE.Vector3(basePos.x, 15.0, basePos.z),
+          new THREE.Vector3(0, -1, 0)
+        );
+        const intersects = ray.intersectObjects(countriesGroupRef.current.children);
+        let yHeight = 0.9;
+        if (intersects.length > 0) {
+          yHeight = intersects[0].point.y;
+        }
+        const pinMesh = new THREE.Mesh(pinGeomRef.current, pinMatRef.current.clone());
+        pinMesh.position.set(basePos.x, yHeight + 0.1, basePos.z);
+        pinMesh.castShadow = true;
+        pinMesh.userData = { isPin: true, ...pinData, countryHeight: yHeight };
+        pinGroupRef.current.add(pinMesh);
+
+        pinPositions.push(pinMesh.position.clone());
+      });
+
+      // 4. Draw Flight Paths
+      if (pinPositions.length > 1) {
+        for (let i = 0; i < pinPositions.length - 1; i++) {
+          const v1 = pinPositions[i];
+          const v2 = pinPositions[i + 1];
+          const distance = v1.distanceTo(v2);
+          
+          if (distance < 0.1) continue;
+
+          const midPoint = v1.clone().lerp(v2, 0.5);
+          const baseLength = midPoint.length();
+          const arcHeight = Math.max(distance * 0.3, 2.0);
+          midPoint.normalize().multiplyScalar(baseLength + arcHeight);
+
+          const curve = new THREE.QuadraticBezierCurve3(v1, midPoint, v2);
+          
+          // 1. Thick glowing tube
+          const tubeGeometry = new THREE.TubeGeometry(curve, 64, 0.08, 8, false);
+          const tubeMaterial = new THREE.MeshStandardMaterial({
+            color: "#3b82f6",
+            emissive: "#60a5fa",
+            emissiveIntensity: 2.0,
+            transparent: true,
+            opacity: 0.6,
+          });
+          const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+          pathsGroupRef.current.add(tubeMesh);
+
+          // 2. Traveling glowing sphere (Pulse)
+          const sphereGeometry = new THREE.SphereGeometry(0.25, 16, 16);
+          const sphereMaterial = new THREE.MeshStandardMaterial({
+            color: "#ffffff",
+            emissive: "#ffffff",
+            emissiveIntensity: 5.0,
+          });
+          const pulseSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+          pathsGroupRef.current.add(pulseSphere);
+
+          // 3. Store animation data
+          pathMaterialsRef.current.push({
+            curve: curve,
+            sphere: pulseSphere,
+            progress: Math.random() // stagger the pulses
+          });
+        }
+      }
+    }
+  }, [isLoaded, pins]);
+
+  useEffect(() => {
+    if (pathsGroupRef.current) {
+      pathsGroupRef.current.visible = showFlightPaths && !selectedJournalPin;
+    }
+  }, [showFlightPaths, selectedJournalPin, isLoaded]);
+
+  // ----------------------------------------------------
+  // DYNAMIC PIN MANAGEMENT
+  // ----------------------------------------------------
+  const handleAddPin = async () => {
+    if (!newPinName || !newPinCity) return; // Basic validation
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
+      alert("You must be logged in to add a pin.");
+      return;
+    }
+
+    try {
+      const { data: insertedPin, error: pinError } = await supabase.from('pins').insert({
+        user_id: userData.user.id,
+        title: newPinName,
+        location_name: newPinCity,
+        latitude: clickedCoords.lat,
+        longitude: clickedCoords.lon,
+        start_date: newPinStartDate,
+        end_date: newPinEndDate,
+        trip_type: "Unknown",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }).select().single();
+
+      if (pinError) throw pinError;
+
+      const { data: insertedLog, error: logError } = await supabase.from('pin_logs').insert({
+        pin_id: insertedPin.id,
+        log_date: newPinStartDate,
+        title: "Initial Entry",
+        content: newPinDetails,
+        category: "Experience",
+        media_urls: [],
+        created_at: new Date().toISOString()
+      }).select().single();
+
+      if (logError) throw logError;
+
+      const addedPin = { ...insertedPin, logs: [insertedLog] };
+
+      setPins((prev) => [...prev, addedPin]);
+      setIsAddingEntry(false);
+      setActivePin(addedPin);
+      setNewPinName("");
+      setNewPinCity("");
+      setNewPinDetails("");
+      setNewPinStartDate(new Date().toISOString().split("T")[0]);
+      setNewPinEndDate(new Date().toISOString().split("T")[0]);
+
+    } catch (err) {
+      console.error(err);
+      alert("Error adding pin.");
+    }
+  };
+
+  const handleAddLog = async () => {
+    if (!activePin || !newLogTitle || !newLogContent) return;
+    try {
+      const { data: insertedLog, error } = await supabase.from('pin_logs').insert({
+        pin_id: activePin.id,
+        log_date: new Date().toISOString().split("T")[0],
+        title: newLogTitle,
+        content: newLogContent,
+        category: newLogCategory,
+        media_urls: [],
+        created_at: new Date().toISOString()
+      }).select().single();
+
+      if (error) throw error;
+      
+      const updatedLogs = [...(activePin.logs || []), insertedLog];
+      const savedPin = { ...activePin, logs: updatedLogs };
+      
+      setPins((prev) => prev.map(p => p.id === savedPin.id ? savedPin : p));
+      setActivePin(savedPin);
+      
+      if (pinGroupRef.current) {
+        const pinMesh = pinGroupRef.current.children.find(child => child.userData.id === savedPin.id);
+        if (pinMesh) {
+          pinMesh.userData = { ...pinMesh.userData, ...savedPin };
+        }
+      }
+      
+      setIsAddingLog(false);
+      setNewLogTitle("");
+      setNewLogContent("");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRemovePin = async () => {
+    if (!activePin) return;
+
+    try {
+      const { error } = await supabase.from('pins').delete().eq('id', activePin.id);
+      if (error) throw error;
+
+      // Remove from state
+      setPins((prev) => prev.filter((p) => p.id !== activePin.id));
+      setActivePin(null);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleMigrateData = async () => {
+    try {
+      const res = await fetch('/api/pins');
+      const localPins = await res.json();
+      if (!localPins || localPins.length === 0) {
+        alert("No local pins found to migrate!");
+        return;
+      }
+      
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return;
+
+      for (const pin of localPins) {
+        const { data: insertedPin, error: pinError } = await supabase.from('pins').insert({
+          user_id: userData.user.id,
+          title: pin.title,
+          location_name: pin.location_name,
+          latitude: pin.latitude,
+          longitude: pin.longitude,
+          start_date: pin.start_date,
+          end_date: pin.end_date,
+          trip_type: pin.trip_type,
+          created_at: pin.created_at || new Date().toISOString(),
+          updated_at: pin.updated_at || new Date().toISOString()
+        }).select().single();
+
+        if (pinError) { console.error(pinError); continue; }
+
+        if (pin.logs && pin.logs.length > 0) {
+          const logsToInsert = pin.logs.map(log => ({
+            pin_id: insertedPin.id,
+            log_date: log.log_date,
+            title: log.title,
+            content: log.content,
+            category: log.category,
+            media_urls: log.media_urls || [],
+            created_at: log.created_at || new Date().toISOString()
+          }));
+          await supabase.from('pin_logs').insert(logsToInsert);
+        }
+      }
+      alert("Migration complete! Refreshing map data...");
+      const { data, error } = await supabase.from('pins').select('*, pin_logs(*)');
+      if (!error && data) {
+        setPins(data.map(p => ({ ...p, logs: p.pin_logs || [] })));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Migration failed.");
+    }
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    if (isSignUp) {
+      const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+      if (error) alert(error.message);
+      else alert("Check your email for the login link!");
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      if (error) alert(error.message);
+    }
+    setAuthLoading(false);
+  };
 
   return (
     <div className="app-container">
+      {/* Auth Overlay */}
+      {authLoading ? (
+        <div style={{ position: "absolute", zIndex: 9999, width: "100vw", height: "100vh", background: "#0f172a" }} />
+      ) : !session ? (
+        <div style={{ position: "absolute", zIndex: 9999, width: "100vw", height: "100vh", background: "rgba(15, 23, 42, 0.8)", display: "flex", justifyContent: "center", alignItems: "center", color: "#fff", fontFamily: "sans-serif", backdropFilter: "blur(5px)" }}>
+          <div style={{ background: "rgba(255,255,255,0.1)", padding: "2rem", borderRadius: "12px", width: "300px", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.2)", boxShadow: "0 4px 30px rgba(0,0,0,0.1)" }}>
+            <h2 style={{ textAlign: "center", marginBottom: "1.5rem" }}>{isSignUp ? "Create Account" : "Login"}</h2>
+            <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <input type="email" placeholder="Email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} style={{ padding: "0.75rem", borderRadius: "6px", border: "none", background: "rgba(255,255,255,0.8)", color: "#000" }} />
+              <input type="password" placeholder="Password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} style={{ padding: "0.75rem", borderRadius: "6px", border: "none", background: "rgba(255,255,255,0.8)", color: "#000" }} />
+              <button type="submit" disabled={authLoading} style={{ background: "#3b82f6", color: "white", padding: "0.75rem", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: "bold" }}>
+                {authLoading ? "Loading..." : (isSignUp ? "Sign Up" : "Login")}
+              </button>
+            </form>
+            <div style={{ textAlign: "center", marginTop: "1rem", fontSize: "0.8rem" }}>
+              <button onClick={() => setIsSignUp(!isSignUp)} style={{ background: "none", border: "none", color: "#60a5fa", cursor: "pointer", textDecoration: "underline" }}>
+                {isSignUp ? "Already have an account? Login" : "Need an account? Sign Up"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {/* 1. Animated Pastel Gradient Loader Overlay */}
       <div className={`loader-overlay ${isLoaded ? "hidden" : ""}`}>
         <div className="loader-container">
@@ -1400,158 +1901,345 @@ export default function MapCanvas() {
         <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
       </div>
 
-      {/* 2.5 Floating Header & Menu Toggle Trigger */}
-      <div 
-        className={`sidebar-trigger ${isSidebarOpen ? "open" : ""}`}
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-      >
-        <button className="hamburger-btn" aria-label="Toggle Navigation Menu">
-          <span className="hamburger-line"></span>
-          <span className="hamburger-line"></span>
-          <span className="hamburger-line"></span>
-        </button>
-        <div className="trigger-text">
-          <h1 className="sidebar-logo" style={{ fontSize: "1.15rem", margin: 0, padding: 0 }}>
-            ODYSSEY <span className="logo-dot"></span>
-          </h1>
-          <span className="trigger-subtext">
-            SPATIAL TRAVEL JOURNAL
-          </span>
-        </div>
-      </div>
-
-      {/* 3. Frosted-glass Sidebar Panel */}
-      <nav className={`sidebar-panel ${isSidebarOpen ? "open" : ""}`}>
-        {/* Spacer to push menu items below the floating logo trigger */}
-        <div style={{ height: "4.5rem" }} />
-
-        <ul className="sidebar-menu">
-          <li>
-            <div className="menu-item active">
-              <span>Interactive Map</span>
-            </div>
-          </li>
-          <li>
-            <div className="menu-item">
-              <span>Travel Journals</span>
-            </div>
-          </li>
-          <li>
-            <div className="menu-item">
-              <span>Memory Gallery</span>
-            </div>
-          </li>
-          <li>
-            <div className="menu-item">
-              <span>AI Trip Planner</span>
-            </div>
-          </li>
-        </ul>
-
-        <div className="sidebar-footer">
-          <span>WANDERER</span>
-          <span>ONLINE</span>
-        </div>
-      </nav>
-
-      {/* Persistent Exploring Region Badge */}
-      <div className={`exploring-badge ${isSidebarOpen ? "shifted" : ""}`}>
-        <span className="exploring-badge-title">Exploring Region</span>
-        <h4 className="exploring-badge-name">{hoveredCountry}</h4>
-      </div>
-
-      {/* 4. Active Spatial Hover Tracker / Memory HUD Panel */}
-      <div className="overlay-panel">
-        {/* State A: Display Pinned Memory details */}
-        {activePin ? (
-          <div>
-            <h3 className="panel-title">
-              <span>{activePin.name}</span>
-              <span className="logo-dot" style={{ margin: 0, backgroundColor: "var(--accent-rose)", boxShadow: "none" }}></span>
-            </h3>
-            <div className="panel-body">
-              <span style={{ display: "inline-block", background: "rgba(244, 63, 94, 0.08)", color: "var(--accent-rose)", padding: "0.2rem 0.5rem", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 700, marginBottom: "0.5rem" }}>
-                {activePin.city}
-              </span>
-              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "0.75rem" }}>
-                Visited on: <strong>{activePin.date}</strong>
-              </div>
-              <p style={{ fontSize: "0.85rem", color: "var(--text-main)", lineHeight: 1.5, background: "rgba(15, 23, 42, 0.02)", padding: "0.75rem", borderRadius: "10px", border: "1px solid rgba(15,23,42,0.02)" }}>
-                {activePin.details}
-              </p>
-              
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginTop: "1rem", fontSize: "0.75rem", fontFamily: "monospace", color: "var(--text-muted)" }}>
-                <div>Lat: {activePin.lat}</div>
-                <div>Lon: {activePin.lon}</div>
-              </div>
-              <button 
-                className="cyber-btn" 
-                style={{ backgroundColor: "var(--accent-primary)", color: "#fff" }}
-                onClick={() => setActivePin(null)}
-              >
-                CLOSE DETAIL
-              </button>
+      {/* --- UI Layer Overlay --- */}
+      <div className="ui-layer">
+        
+        {/* Top Left */}
+        <div className="top-left-group">
+          <div className="glass-base icon-button hamburger-container">
+            <div className="hamburger-icon">
+              <span></span>
+              <span></span>
+              <span></span>
             </div>
           </div>
-        ) : isAddingEntry ? (
-          /* State B: Display Clicked Coordinates prompt to Add New Memory */
-          <div>
-            <h3 className="panel-title">
-              <span>NEW MEMORY POINT</span>
-              <span className="logo-dot" style={{ margin: 0, backgroundColor: "var(--accent-primary)", boxShadow: "none" }}></span>
-            </h3>
-            <div className="panel-body">
-              <p style={{ fontSize: "0.85rem", marginBottom: "0.75rem" }}>
-                You have targeted a location on the world map. Would you like to record a memory or trip plan here?
-              </p>
-              <div style={{ background: "rgba(79, 70, 229, 0.05)", border: "1px solid rgba(79, 70, 229, 0.15)", padding: "0.75rem", borderRadius: "10px", marginBottom: "1rem" }}>
-                <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--accent-primary)" }}>TARGET COORDINATES</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)", marginTop: "0.25rem" }}>
-                  <div>Lat: <span>{clickedCoords.lat}</span></div>
-                  <div>Lon: <span>{clickedCoords.lon}</span></div>
+        </div>
+
+        {/* Top Center */}
+        <div className="top-center-group">
+          <div className="glass-base glass-pill nav-bar" style={{ position: "relative" }}>
+            <div 
+              className="nav-active-pill"
+              style={{
+                position: "absolute",
+                top: "4px",
+                bottom: "4px",
+                width: "145px",
+                left: activeTab === "Interactive Map" ? "4px" : activeTab === "Travel Journals" ? "152px" : "302px",
+                background: "rgba(255, 255, 255, 0.15)",
+                borderRadius: "20px",
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                zIndex: 0
+              }}
+            />
+            <div 
+              className={`nav-item ${activeTab === "Interactive Map" ? "active" : ""}`}
+              onClick={() => setActiveTab("Interactive Map")}
+              style={{ cursor: "pointer", position: "relative", zIndex: 1, background: "transparent" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+              Interactive Map
+            </div>
+            <div 
+              className={`nav-item ${activeTab === "Travel Journals" ? "active" : ""}`}
+              onClick={() => setActiveTab("Travel Journals")}
+              style={{ cursor: "pointer", position: "relative", zIndex: 1, background: "transparent" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              Travel Journals
+            </div>
+            <div className="nav-item" style={{ position: "relative", zIndex: 1, background: "transparent" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+              Memory Gallery
+            </div>
+            <div className="nav-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              AI Trip Planner
+            </div>
+          </div>
+          
+          <div className="glass-base glass-pill exploring-badge-pill">
+            <span className="label">EXPLORING REGION</span>
+            <span className="value">{hoveredCountry || "World"}</span>
+          </div>
+        </div>
+
+        {/* Top Right */}
+        <div className="top-right-group">
+
+          {pins.length === 0 && (
+            <button className="glass-pill btn-green" style={{ marginBottom: "1rem" }} onClick={handleMigrateData}>
+              MIGRATE OLD DATA
+            </button>
+          )}
+
+          <div 
+            className="glass-base glass-pill profile-widget" 
+            style={{ cursor: "pointer" }} 
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+          >
+            <div className="profile-avatar">👨‍🚀</div>
+            <div className="profile-info">
+              <span className="name">{session?.user?.email?.split('@')[0].toUpperCase() || "WANDERER"}</span>
+              <span className="status">ONLINE</span>
+            </div>
+            <div className="status-dot"></div>
+          </div>
+          {showProfileMenu && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginTop: "0.5rem" }}>
+              <button 
+                className="glass-pill" 
+                style={{fontSize: "0.6rem", width: "100%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: showFlightPaths ? "#60a5fa" : "#94a3b8", cursor: "pointer", padding: "0.5rem", borderRadius: "8px"}} 
+                onClick={() => setShowFlightPaths(!showFlightPaths)}
+              >
+                {showFlightPaths ? "HIDE FLIGHT PATHS" : "SHOW FLIGHT PATHS"}
+              </button>
+              <button 
+                className="glass-pill" 
+                style={{fontSize: "0.6rem", width: "100%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", cursor: "pointer", padding: "0.5rem", borderRadius: "8px"}} 
+                onClick={() => supabase.auth.signOut()}
+              >
+                SIGN OUT
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Travel Journals Sidebar */}
+        {activeTab === "Travel Journals" && session && (
+          <div className="glass-base slide-in-right" style={{
+            position: "absolute",
+            top: "80px",
+            right: "0px",
+            width: "350px",
+            bottom: "0px",
+            display: "flex",
+            flexDirection: "column",
+            padding: "1rem",
+            zIndex: 100,
+            overflow: "hidden",
+            gap: "1rem",
+            backdropFilter: "blur(20px)",
+            borderRadius: "0px",
+            borderRight: "none",
+            borderBottom: "none",
+            borderTop: "none",
+            background: "rgba(255, 255, 255, 0.85)"
+          }}>
+            {!selectedJournalPin ? (
+              <>
+                <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 600, color: "#111827", display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                  Travel Journals
+                </h2>
+                <p style={{ fontSize: "0.85rem", color: "#4b5563", margin: 0, flexShrink: 0 }}>
+                  Chronological history of your adventures.
+                </p>
+
+                <div className="sidebar-scrollbar" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem", overflowY: "auto", paddingRight: "0.5rem" }}>
+                  {[...pins].sort((a, b) => new Date(a.start_date || 0) - new Date(b.start_date || 0)).map((pin, index) => (
+                    <div 
+                      key={pin.id} 
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        padding: "1rem",
+                        cursor: "pointer",
+                        borderRadius: "8px",
+                        border: "1px solid rgba(0,0,0,0.05)",
+                        background: "rgba(0,0,0,0.02)",
+                        transition: "all 0.2s ease"
+                      }}
+                      onClick={() => {
+                        flyToPinRef.current = pin;
+                        setActivePin(pin);
+                        setSelectedJournalPin(pin);
+                        setIsAddingLog(false);
+                        setIsAddingEntry(false);
+                        setIsConfirmingDelete(false);
+                      }}
+                      onMouseOver={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.05)"; }}
+                      onMouseOut={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.02)"; }}
+                    >
+                      <div style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {new Date(pin.start_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                      </div>
+                      <div style={{ fontSize: "1.1rem", color: "#111827", fontWeight: 600, margin: "0.25rem 0" }}>
+                        {pin.location_name}
+                      </div>
+                      <div style={{ fontSize: "0.85rem", color: "#4b5563", lineHeight: 1.4 }}>
+                        {pin.title}
+                      </div>
+                    </div>
+                  ))}
+                  {pins.length === 0 && (
+                    <div style={{ textAlign: "center", color: "#4b5563", fontSize: "0.9rem", padding: "2rem 0" }}>
+                      No travel journals yet. Add a memory pin to the globe!
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                <button 
+                  onClick={() => setSelectedJournalPin(null)}
+                  style={{ 
+                    background: "transparent", border: "none", color: "#4b5563", 
+                    display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0",
+                    cursor: "pointer", fontSize: "0.9rem", fontWeight: "600",
+                    marginBottom: "1rem", transition: "color 0.2s ease"
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.color = "#111827"}
+                  onMouseOut={(e) => e.currentTarget.style.color = "#4b5563"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5"></path><polyline points="12 19 5 12 12 5"></polyline></svg>
+                  Back to Journals
+                </button>
+
+                <div className="sidebar-scrollbar" style={{ overflowY: "auto", paddingRight: "0.5rem", flexGrow: 1 }}>
+                  <div style={{ fontSize: "0.8rem", color: "#3b82f6", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "0.25rem" }}>
+                    {new Date(selectedJournalPin.start_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                  </div>
+                  <h2 style={{ fontSize: "1.5rem", margin: "0 0 0.5rem 0", fontWeight: 700, color: "#111827", lineHeight: 1.2 }}>
+                    {selectedJournalPin.location_name}
+                  </h2>
+                  <p style={{ fontSize: "0.95rem", color: "#374151", margin: "0 0 1.5rem 0", lineHeight: 1.4 }}>
+                    {selectedJournalPin.title}
+                  </p>
+
+                  <h3 style={{ fontSize: "0.85rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "1px", borderBottom: "1px solid rgba(0,0,0,0.1)", paddingBottom: "0.5rem", marginBottom: "1rem" }}>
+                    Log Entries
+                  </h3>
+
+                  {(selectedJournalPin.logs || []).map((log, idx) => (
+                    <div key={idx} style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.05)", padding: "1rem", borderRadius: "8px", marginBottom: "1rem" }}>
+                      <div style={{ fontWeight: 600, fontSize: "0.9rem", display: "flex", justifyContent: "space-between", color: "#111827", marginBottom: "0.5rem" }}>
+                        <span>{log.title}</span>
+                        <span style={{ fontSize: "0.65rem", background: "rgba(59, 130, 246, 0.1)", color: "#2563eb", padding: "0.2rem 0.5rem", borderRadius: "4px" }}>{log.category}</span>
+                      </div>
+                      <p style={{ fontSize: "0.85rem", margin: 0, whiteSpace: "pre-wrap", color: "#374151", lineHeight: 1.6 }}>{log.content}</p>
+                    </div>
+                  ))}
+                  
+                  {(selectedJournalPin.logs || []).length === 0 && (
+                    <div style={{ fontSize: "0.9rem", color: "#6b7280", fontStyle: "italic", textAlign: "center", padding: "2rem 0" }}>
+                      No logs recorded for this trip yet.
+                    </div>
+                  )}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <button 
-                  className="cyber-btn"
-                  style={{ flex: 1, margin: 0 }}
-                  onClick={() => alert(`Creating memory block at Lat: ${clickedCoords.lat}, Lon: ${clickedCoords.lon}`)}
-                >
-                  ADD JOURNAL
-                </button>
-                <button 
-                  className="cyber-btn" 
-                  style={{ flex: 1, margin: 0, background: "transparent", color: "var(--accent-primary)", border: "1px solid var(--accent-primary)" }}
-                  onClick={() => setIsAddingEntry(false)}
-                >
-                  CANCEL
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* State C: Default Viewport Panning Instructions */
-          <div>
-            <h3 className="panel-title">
-              <span>EXPLORING PATH</span>
-              <span className="logo-dot" style={{ margin: 0, backgroundColor: "var(--accent-primary)", boxShadow: "none" }}></span>
-            </h3>
-            <div className="panel-body">
-              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.55 }}>
-                Drag to explore the world map. Scroll to zoom in and out. Click any country to select coordinates, or click the **floating red pins** to open journal summaries and photos.
-              </p>
-              <button 
-                className="cyber-btn"
-                onClick={() => {
-                  setClickedCoords({ lat: 40.7128, lon: -74.0060 });
-                  setIsAddingEntry(true);
-                }}
-              >
-                ADD ENTRY
-              </button>
-            </div>
+            )}
           </div>
         )}
+
+        {/* Center Right Card */}
+        {activePin && !isAddingEntry && activeTab !== "Travel Journals" && (
+          <div className="glass-base glass-panel right-center-card" style={{ right: "1.5rem", transition: "right 0.3s ease" }}>
+            <div className="card-image-placeholder"></div>
+            
+            {activePin ? (
+              isConfirmingDelete ? (
+                <>
+                  <h3 className="card-title">Are you sure?</h3>
+                  <div className="card-desc">
+                    <p style={{ lineHeight: 1.4 }}>This will permanently remove "{activePin.title}" from your memory log.</p>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button className="glass-pill icon-button" style={{ flex: 1, background: "rgba(255,255,255,0.5)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center" }} onClick={() => setIsConfirmingDelete(false)}>CANCEL</button>
+                    <button className="glass-pill btn-red" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={handleRemovePin}>CONFIRM</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="card-title">{activePin.title} - {activePin.location_name}</h3>
+                  <div className="card-desc">
+                    <div style={{ fontSize: "0.7rem", color: "#475569", marginBottom: "0.5rem" }}>Dates: {activePin.start_date} to {activePin.end_date}</div>
+                    
+                    <div style={{ maxHeight: "200px", overflowY: "auto", paddingRight: "5px", marginBottom: "0.5rem" }}>
+                      {(activePin.logs || []).map((log, idx) => (
+                        <div key={idx} style={{ background: "rgba(0,0,0,0.03)", padding: "0.5rem", borderRadius: "4px", marginBottom: "0.5rem" }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.8rem", display: "flex", justifyContent: "space-between" }}>
+                            <span>{log.title}</span>
+                            <span style={{ fontSize: "0.6rem", background: "#e2e8f0", padding: "0.1rem 0.3rem", borderRadius: "4px" }}>{log.category}</span>
+                          </div>
+                          <p style={{ fontSize: "0.7rem", marginTop: "0.25rem", whiteSpace: "pre-wrap" }}>{log.content}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {isAddingLog ? (
+                      <div style={{ background: "rgba(255,255,255,0.5)", padding: "0.5rem", borderRadius: "8px", marginTop: "0.5rem", border: "1px solid #ccc" }}>
+                        <input type="text" placeholder="Log Title (e.g., Best Dinner)" className="pin-input" style={{ marginBottom: "0.25rem" }} value={newLogTitle} onChange={(e) => setNewLogTitle(e.target.value)} />
+                        <textarea placeholder="Experience details..." className="pin-textarea" style={{ minHeight: "40px" }} value={newLogContent} onChange={(e) => setNewLogContent(e.target.value)} />
+                        <select value={newLogCategory} onChange={(e) => setNewLogCategory(e.target.value)} style={{ width: "100%", padding: "0.25rem", borderRadius: "4px", border: "1px solid #ccc", marginBottom: "0.5rem", fontSize: "0.7rem" }}>
+                          <option value="Experience">Experience</option>
+                          <option value="Restaurant">Restaurant</option>
+                          <option value="Lodging">Lodging</option>
+                          <option value="Transit">Transit</option>
+                        </select>
+                        <div style={{ display: "flex", gap: "0.25rem" }}>
+                          <button className="glass-pill btn-green" style={{ flex: 1, padding: "0.25rem", fontSize: "0.6rem" }} onClick={handleAddLog}>SAVE LOG</button>
+                          <button className="glass-pill icon-button" style={{ flex: 1, padding: "0.25rem", fontSize: "0.6rem", background: "#eee" }} onClick={() => setIsAddingLog(false)}>CANCEL</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="glass-pill" style={{ width: "100%", background: "rgba(0,0,0,0.05)", border: "1px dashed #ccc", fontSize: "0.7rem", marginTop: "0.5rem", padding: "0.4rem", cursor: "pointer" }} onClick={() => setIsAddingLog(true)}>+ ADD LOG ENTRY</button>
+                    )}
+
+                  </div>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button className="glass-pill btn-green" style={{ flex: 1 }} onClick={() => { setActivePin(null); setIsConfirmingDelete(false); setIsAddingLog(false); }}>CLOSE</button>
+                    <button className="glass-pill btn-red" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={() => setIsConfirmingDelete(true)}>REMOVE PIN</button>
+                  </div>
+                </>
+              )
+            ) : (
+              <>
+                <h3 className="card-title">NEW MEMORY POINT</h3>
+                <div className="card-desc">
+                  <p style={{ marginBottom: "0.5rem" }}>Record a memory here?</p>
+                  <input type="text" placeholder="Title (e.g. Skiing)" className="pin-input" value={newPinName} onChange={(e) => setNewPinName(e.target.value)} />
+                  <input type="text" placeholder="Location (e.g. Alps)" className="pin-input" value={newPinCity} onChange={(e) => setNewPinCity(e.target.value)} />
+                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: "0.6rem", color: "#64748b" }}>Start Date</label>
+                      <input type="date" className="pin-input" style={{ marginBottom: 0 }} value={newPinStartDate} onChange={(e) => setNewPinStartDate(e.target.value)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: "0.6rem", color: "#64748b" }}>End Date</label>
+                      <input type="date" className="pin-input" style={{ marginBottom: 0 }} value={newPinEndDate} onChange={(e) => setNewPinEndDate(e.target.value)} />
+                    </div>
+                  </div>
+                  <textarea placeholder="Initial log entry details..." className="pin-textarea" value={newPinDetails} onChange={(e) => setNewPinDetails(e.target.value)} />
+                  <div style={{ fontSize: "0.75rem", fontFamily: "monospace", color: "#475569", marginTop: "0.5rem" }}>
+                    Lat: {clickedCoords.lat.toFixed(4)}<br/>
+                    Lon: {clickedCoords.lon.toFixed(4)}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <button className="glass-pill btn-green" style={{ flex: 1 }} onClick={handleAddPin}>ADD</button>
+                  <button className="glass-pill icon-button" style={{ flex: 1, background: "rgba(255,255,255,0.5)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center" }} onClick={() => setIsAddingEntry(false)}>CANCEL</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Bottom Left */}
+        <div className="bottom-left-group">
+
+        </div>
+
+        {/* Bottom Right */}
+        <div className="bottom-right-group">
+          <button className="glass-base glass-pill icon-button btn-icon-right" onClick={() => {
+                setClickedCoords({ lat: 40.7128, lon: -74.0060 });
+                setIsAddingEntry(true);
+              }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+            <span style={{fontSize: "0.8rem", fontWeight: "700", color: "#0f172a"}}>ADD ENTRY</span>
+          </button>
+        </div>
       </div>
     </div>
   );
