@@ -404,6 +404,10 @@ html, body {
 .bottom-left-group {
   bottom: 1.5rem;
   left: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 /* Bottom Right */
@@ -550,6 +554,41 @@ html, body {
 .pin-textarea {
   resize: vertical;
   min-height: 60px;
+}
+
+/* Light-theme inputs for the unified Travel Journals side panel */
+.panel-input, .panel-textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  color: #111827;
+  font-family: inherit;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+  outline: none;
+  transition: all 0.2s;
+}
+.panel-input::placeholder, .panel-textarea::placeholder {
+  color: #9ca3af;
+}
+.panel-input:focus, .panel-textarea:focus {
+  background: #fff;
+  border-color: #3b82f6;
+}
+.panel-textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+.panel-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 0.2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 @keyframes slideInRight {

@@ -435,6 +435,12 @@ export default function MapCanvas() {
   const [newLogContent, setNewLogContent] = useState("");
   const [newLogCategory, setNewLogCategory] = useState("Experience");
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+
+  // Inline edit states for updating an existing pin and its logs
+  const [isEditingPin, setIsEditingPin] = useState(false);
+  const [editPin, setEditPin] = useState({ title: "", location_name: "", start_date: "", end_date: "", latitude: 0, longitude: 0 });
+  const [editingLogId, setEditingLogId] = useState(null);
+  const [editLog, setEditLog] = useState({ title: "", content: "", category: "Experience", log_date: "" });
   
   // Auth States
   const [session, setSession] = useState(null);
@@ -445,7 +451,6 @@ export default function MapCanvas() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showFlightPaths, setShowFlightPaths] = useState(false);
   const [activeTab, setActiveTab] = useState("Interactive Map");
-  const [selectedJournalPin, setSelectedJournalPin] = useState(null);
 
   // Interactive HUD States
   const [hoveredCountry, setHoveredCountry] = useState("Hover over map");
@@ -474,6 +479,12 @@ export default function MapCanvas() {
     isAddingEntryRef.current = isAddingEntry;
   }, [isAddingEntry]);
 
+  // Reset inline edit modes whenever the active pin changes
+  useEffect(() => {
+    setIsEditingPin(false);
+    setEditingLogId(null);
+  }, [activePin?.id]);
+
   // Map Scale conversion factor (scaled up for higher resolution details)
   const mapScale = 8.0;
 
@@ -487,10 +498,19 @@ export default function MapCanvas() {
   const vector3ToLatLon = (vec) => {
     const lon = vec.x / mapScale;
     const lat = -vec.z / mapScale;
-    return { 
-      lat: parseFloat(lat.toFixed(4)), 
-      lon: parseFloat(lon.toFixed(4)) 
+    return {
+      lat: parseFloat(lat.toFixed(4)),
+      lon: parseFloat(lon.toFixed(4))
     };
+  };
+
+  // Safely format a stored date string as "MMM YYYY"; returns null for missing/invalid
+  // values so callers can fall back instead of rendering the Unix epoch ("Dec 1969").
+  const formatPinDate = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
   };
 
   // 1. Fetch GeoJSON Data on Mount
@@ -1174,7 +1194,7 @@ export default function MapCanvas() {
         const pinIntersects = raycaster.intersectObjects(pinGroup.children);
         if (pinIntersects.length > 0) {
           const pinData = pinIntersects[0].object.userData;
-          setActivePin({
+          const clickedPin = {
             id: pinData.id,
             title: pinData.title,
             location_name: pinData.location_name,
@@ -1184,7 +1204,10 @@ export default function MapCanvas() {
             end_date: pinData.end_date,
             trip_type: pinData.trip_type,
             logs: pinData.logs || []
-          });
+          };
+          flyToPinRef.current = clickedPin;
+          setActivePin(clickedPin);
+          setActiveTab("Travel Journals");
           setIsAddingLog(false);
           setIsAddingEntry(false);
           setIsConfirmingDelete(false);
@@ -1206,6 +1229,7 @@ export default function MapCanvas() {
           const point = countryIntersects[0].point;
           const coords = vector3ToLatLon(point);
           setClickedCoords(coords);
+          setActiveTab("Travel Journals");
           setIsAddingEntry(true); // Open "Add New Memory" panel
           return;
         }
@@ -1306,8 +1330,9 @@ export default function MapCanvas() {
     // 10. Animation Loop
     const clock = new THREE.Clock();
 
+    let animationFrameId;
     const animate = () => {
-      requestAnimationFrame(animate);
+      animationFrameId = requestAnimationFrame(animate);
 
       const elapsedTime = clock.getElapsedTime();
 
@@ -1374,7 +1399,7 @@ export default function MapCanvas() {
 
       if (flyToPinRef.current) {
         const pinPos = latLonToVector3(flyToPinRef.current.latitude, flyToPinRef.current.longitude, 10.0);
-        
+
         const targetZoom = 45.0 * 0.28; // Zoom 70% into the final destination (0.4 * 0.7 = 0.28)
         
         animationTargetRef.current = {
@@ -1528,6 +1553,7 @@ export default function MapCanvas() {
     animate();
 
     return () => {
+      cancelAnimationFrame(animationFrameId);
       resizeObserver.disconnect();
       if (canvasElement) {
         canvasElement.removeEventListener("mousedown", handleMouseDown);
@@ -1660,9 +1686,9 @@ export default function MapCanvas() {
 
   useEffect(() => {
     if (pathsGroupRef.current) {
-      pathsGroupRef.current.visible = showFlightPaths && !selectedJournalPin;
+      pathsGroupRef.current.visible = showFlightPaths && !activePin;
     }
-  }, [showFlightPaths, selectedJournalPin, isLoaded]);
+  }, [showFlightPaths, activePin, isLoaded]);
 
   // ----------------------------------------------------
   // DYNAMIC PIN MANAGEMENT
@@ -1768,6 +1794,111 @@ export default function MapCanvas() {
       setActivePin(null);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  // Helper: merge an updated pin into every place it's tracked (list, active card, journal view)
+  const applyPinUpdate = (savedPin) => {
+    setPins((prev) => prev.map((p) => (p.id === savedPin.id ? savedPin : p)));
+    setActivePin((prev) => (prev && prev.id === savedPin.id ? savedPin : prev));
+  };
+
+  const startEditingPin = () => {
+    if (!activePin) return;
+    setEditPin({
+      title: activePin.title || "",
+      location_name: activePin.location_name || "",
+      start_date: activePin.start_date || "",
+      end_date: activePin.end_date || "",
+      latitude: activePin.latitude ?? 0,
+      longitude: activePin.longitude ?? 0,
+    });
+    setEditingLogId(null);
+    setIsAddingLog(false);
+    setIsEditingPin(true);
+  };
+
+  const handleUpdatePin = async () => {
+    if (!activePin) return;
+    if (!editPin.title || !editPin.location_name) {
+      alert("Title and location are required.");
+      return;
+    }
+    const lat = parseFloat(editPin.latitude);
+    const lon = parseFloat(editPin.longitude);
+    if (Number.isNaN(lat) || Number.isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      alert("Latitude must be between -90 and 90, and longitude between -180 and 180.");
+      return;
+    }
+    try {
+      const { data: updatedPin, error } = await supabase.from('pins').update({
+        title: editPin.title,
+        location_name: editPin.location_name,
+        start_date: editPin.start_date || null,
+        end_date: editPin.end_date || null,
+        latitude: lat,
+        longitude: lon,
+        updated_at: new Date().toISOString(),
+      }).eq('id', activePin.id).select().single();
+
+      if (error) throw error;
+
+      applyPinUpdate({ ...activePin, ...updatedPin, logs: activePin.logs || [] });
+      setIsEditingPin(false);
+    } catch (err) {
+      console.error(err);
+      alert("Error updating pin. (Make sure your Supabase 'pins' table has an UPDATE policy enabled.)");
+    }
+  };
+
+  const startEditingLog = (log) => {
+    setEditLog({
+      title: log.title || "",
+      content: log.content || "",
+      category: log.category || "Experience",
+      log_date: log.log_date || "",
+    });
+    setIsAddingLog(false);
+    setEditingLogId(log.id);
+  };
+
+  const handleUpdateLog = async () => {
+    if (!activePin || !editingLogId) return;
+    if (!editLog.title || !editLog.content) {
+      alert("Log title and details are required.");
+      return;
+    }
+    try {
+      const { data: updatedLog, error } = await supabase.from('pin_logs').update({
+        title: editLog.title,
+        content: editLog.content,
+        category: editLog.category,
+        log_date: editLog.log_date || null,
+      }).eq('id', editingLogId).select().single();
+
+      if (error) throw error;
+
+      const updatedLogs = (activePin.logs || []).map((l) => (l.id === editingLogId ? { ...l, ...updatedLog } : l));
+      applyPinUpdate({ ...activePin, logs: updatedLogs });
+      setEditingLogId(null);
+    } catch (err) {
+      console.error(err);
+      alert("Error updating log. (Make sure your Supabase 'pin_logs' table has an UPDATE policy enabled.)");
+    }
+  };
+
+  const handleDeleteLog = async (logId) => {
+    if (!activePin) return;
+    try {
+      const { error } = await supabase.from('pin_logs').delete().eq('id', logId);
+      if (error) throw error;
+
+      const updatedLogs = (activePin.logs || []).filter((l) => l.id !== logId);
+      applyPinUpdate({ ...activePin, logs: updatedLogs });
+      if (editingLogId === logId) setEditingLogId(null);
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting log.");
     }
   };
 
@@ -1964,52 +2095,11 @@ export default function MapCanvas() {
           </div>
         </div>
 
-        {/* Top Right */}
-        <div className="top-right-group">
-
-          {pins.length === 0 && (
-            <button className="glass-pill btn-green" style={{ marginBottom: "1rem" }} onClick={handleMigrateData}>
-              MIGRATE OLD DATA
-            </button>
-          )}
-
-          <div 
-            className="glass-base glass-pill profile-widget" 
-            style={{ cursor: "pointer" }} 
-            onClick={() => setShowProfileMenu(!showProfileMenu)}
-          >
-            <div className="profile-avatar">👨‍🚀</div>
-            <div className="profile-info">
-              <span className="name">{session?.user?.email?.split('@')[0].toUpperCase() || "WANDERER"}</span>
-              <span className="status">ONLINE</span>
-            </div>
-            <div className="status-dot"></div>
-          </div>
-          {showProfileMenu && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginTop: "0.5rem" }}>
-              <button 
-                className="glass-pill" 
-                style={{fontSize: "0.6rem", width: "100%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: showFlightPaths ? "#60a5fa" : "#94a3b8", cursor: "pointer", padding: "0.5rem", borderRadius: "8px"}} 
-                onClick={() => setShowFlightPaths(!showFlightPaths)}
-              >
-                {showFlightPaths ? "HIDE FLIGHT PATHS" : "SHOW FLIGHT PATHS"}
-              </button>
-              <button 
-                className="glass-pill" 
-                style={{fontSize: "0.6rem", width: "100%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", cursor: "pointer", padding: "0.5rem", borderRadius: "8px"}} 
-                onClick={() => supabase.auth.signOut()}
-              >
-                SIGN OUT
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Travel Journals Sidebar */}
         {activeTab === "Travel Journals" && session && (
           <div className="glass-base slide-in-right" style={{
             position: "absolute",
-            top: "80px",
+            top: "0px",
             right: "0px",
             width: "350px",
             bottom: "0px",
@@ -2026,7 +2116,169 @@ export default function MapCanvas() {
             borderTop: "none",
             background: "rgba(255, 255, 255, 0.85)"
           }}>
-            {!selectedJournalPin ? (
+            {isAddingEntry ? (
+              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                <h2 style={{ fontSize: "1.25rem", margin: "0 0 1rem 0", fontWeight: 700, color: "#111827", flexShrink: 0 }}>New Memory Point</h2>
+                <div className="sidebar-scrollbar" style={{ overflowY: "auto", paddingRight: "0.5rem", flexGrow: 1 }}>
+                  <label className="panel-label">Title</label>
+                  <input type="text" placeholder="Title (e.g. Skiing)" className="panel-input" value={newPinName} onChange={(e) => setNewPinName(e.target.value)} />
+                  <label className="panel-label">Location</label>
+                  <input type="text" placeholder="Location (e.g. Alps)" className="panel-input" value={newPinCity} onChange={(e) => setNewPinCity(e.target.value)} />
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <div style={{ flex: 1 }}>
+                      <label className="panel-label">Start Date</label>
+                      <input type="date" className="panel-input" value={newPinStartDate} onChange={(e) => setNewPinStartDate(e.target.value)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className="panel-label">End Date</label>
+                      <input type="date" className="panel-input" value={newPinEndDate} onChange={(e) => setNewPinEndDate(e.target.value)} />
+                    </div>
+                  </div>
+                  <label className="panel-label">Initial Log</label>
+                  <textarea placeholder="Initial log entry details..." className="panel-textarea" value={newPinDetails} onChange={(e) => setNewPinDetails(e.target.value)} />
+                  <div style={{ fontSize: "0.75rem", fontFamily: "monospace", color: "#64748b" }}>
+                    Lat: {clickedCoords.lat.toFixed(4)} · Lon: {clickedCoords.lon.toFixed(4)}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", flexShrink: 0 }}>
+                  <button className="glass-pill btn-green" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={handleAddPin}>ADD MEMORY</button>
+                  <button className="glass-pill icon-button" style={{ flex: 1, background: "rgba(0,0,0,0.05)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "#374151" }} onClick={() => setIsAddingEntry(false)}>CANCEL</button>
+                </div>
+              </div>
+            ) : activePin ? (
+              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                <button
+                  onClick={() => { setActivePin(null); setIsEditingPin(false); setEditingLogId(null); setIsAddingLog(false); setIsConfirmingDelete(false); }}
+                  style={{ background: "transparent", border: "none", color: "#4b5563", display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0", cursor: "pointer", fontSize: "0.9rem", fontWeight: "600", marginBottom: "0.5rem", flexShrink: 0 }}
+                  onMouseOver={(e) => e.currentTarget.style.color = "#111827"}
+                  onMouseOut={(e) => e.currentTarget.style.color = "#4b5563"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5"></path><polyline points="12 19 5 12 12 5"></polyline></svg>
+                  Back to Journals
+                </button>
+
+                {isConfirmingDelete ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "1rem", padding: "1rem 0" }}>
+                    <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 700, color: "#111827" }}>Remove this memory?</h2>
+                    <p style={{ fontSize: "0.9rem", color: "#4b5563", margin: 0, lineHeight: 1.5 }}>This will permanently remove &quot;{activePin.title}&quot; and all of its logs.</p>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button className="glass-pill icon-button" style={{ flex: 1, background: "rgba(0,0,0,0.05)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "#374151" }} onClick={() => setIsConfirmingDelete(false)}>CANCEL</button>
+                      <button className="glass-pill btn-red" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={handleRemovePin}>REMOVE</button>
+                    </div>
+                  </div>
+                ) : isEditingPin ? (
+                  <div className="sidebar-scrollbar" style={{ overflowY: "auto", paddingRight: "0.5rem", flexGrow: 1 }}>
+                    <h3 style={{ fontSize: "0.85rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "1px", marginTop: 0, marginBottom: "1rem" }}>Edit Memory Point</h3>
+                    <label className="panel-label">Title</label>
+                    <input type="text" className="panel-input" value={editPin.title} onChange={(e) => setEditPin({ ...editPin, title: e.target.value })} />
+                    <label className="panel-label">Location</label>
+                    <input type="text" className="panel-input" value={editPin.location_name} onChange={(e) => setEditPin({ ...editPin, location_name: e.target.value })} />
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <div style={{ flex: 1 }}>
+                        <label className="panel-label">Start Date</label>
+                        <input type="date" className="panel-input" value={editPin.start_date || ""} onChange={(e) => setEditPin({ ...editPin, start_date: e.target.value })} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label className="panel-label">End Date</label>
+                        <input type="date" className="panel-input" value={editPin.end_date || ""} onChange={(e) => setEditPin({ ...editPin, end_date: e.target.value })} />
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <div style={{ flex: 1 }}>
+                        <label className="panel-label">Latitude</label>
+                        <input type="number" step="0.0001" className="panel-input" value={editPin.latitude} onChange={(e) => setEditPin({ ...editPin, latitude: e.target.value })} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label className="panel-label">Longitude</label>
+                        <input type="number" step="0.0001" className="panel-input" value={editPin.longitude} onChange={(e) => setEditPin({ ...editPin, longitude: e.target.value })} />
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+                      <button className="glass-pill btn-green" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={handleUpdatePin}>SAVE</button>
+                      <button className="glass-pill icon-button" style={{ flex: 1, background: "rgba(0,0,0,0.05)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "#374151" }} onClick={() => setIsEditingPin(false)}>CANCEL</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="sidebar-scrollbar" style={{ overflowY: "auto", paddingRight: "0.5rem", flexGrow: 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: "0.8rem", color: "#3b82f6", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "0.25rem" }}>
+                          {formatPinDate(activePin.start_date) || "Undated"}{activePin.end_date && activePin.end_date !== activePin.start_date ? ` – ${formatPinDate(activePin.end_date)}` : ""}
+                        </div>
+                        <h2 style={{ fontSize: "1.5rem", margin: "0 0 0.5rem 0", fontWeight: 700, color: "#111827", lineHeight: 1.2 }}>{activePin.location_name}</h2>
+                        <p style={{ fontSize: "0.95rem", color: "#374151", margin: "0 0 1rem 0", lineHeight: 1.4 }}>{activePin.title}</p>
+                      </div>
+                      <button title="Edit pin" onClick={startEditingPin} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#475569", flexShrink: 0, padding: "0.25rem", display: "flex" }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                      </button>
+                    </div>
+
+                    <h3 style={{ fontSize: "0.85rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "1px", borderBottom: "1px solid rgba(0,0,0,0.1)", paddingBottom: "0.5rem", marginBottom: "1rem" }}>Log Entries</h3>
+
+                    {(activePin.logs || []).map((log, idx) => (
+                      editingLogId === log.id ? (
+                        <div key={log.id || idx} style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.1)", padding: "0.75rem", borderRadius: "8px", marginBottom: "1rem" }}>
+                          <input type="text" placeholder="Log Title" className="panel-input" value={editLog.title} onChange={(e) => setEditLog({ ...editLog, title: e.target.value })} />
+                          <textarea placeholder="Experience details..." className="panel-textarea" value={editLog.content} onChange={(e) => setEditLog({ ...editLog, content: e.target.value })} />
+                          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                            <select value={editLog.category} onChange={(e) => setEditLog({ ...editLog, category: e.target.value })} style={{ flex: 1, padding: "0.4rem", borderRadius: "6px", border: "1px solid rgba(0,0,0,0.15)", fontSize: "0.8rem", color: "#111827", background: "#fff" }}>
+                              <option value="Experience">Experience</option>
+                              <option value="Restaurant">Restaurant</option>
+                              <option value="Lodging">Lodging</option>
+                              <option value="Transit">Transit</option>
+                            </select>
+                            <input type="date" value={editLog.log_date || ""} onChange={(e) => setEditLog({ ...editLog, log_date: e.target.value })} style={{ flex: 1, padding: "0.4rem", borderRadius: "6px", border: "1px solid rgba(0,0,0,0.15)", fontSize: "0.8rem", color: "#111827", background: "#fff" }} />
+                          </div>
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <button className="glass-pill btn-green" style={{ flex: 1, padding: "0.4rem", fontSize: "0.7rem", display: "flex", justifyContent: "center" }} onClick={handleUpdateLog}>SAVE LOG</button>
+                            <button className="glass-pill icon-button" style={{ flex: 1, padding: "0.4rem", fontSize: "0.7rem", background: "rgba(0,0,0,0.05)", color: "#374151", display: "flex", justifyContent: "center" }} onClick={() => setEditingLogId(null)}>CANCEL</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div key={log.id || idx} style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.05)", padding: "1rem", borderRadius: "8px", marginBottom: "1rem" }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.9rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.4rem", color: "#111827", marginBottom: "0.5rem" }}>
+                            <span style={{ flex: 1 }}>{log.title}</span>
+                            <span style={{ fontSize: "0.65rem", background: "rgba(59, 130, 246, 0.1)", color: "#2563eb", padding: "0.2rem 0.5rem", borderRadius: "4px" }}>{log.category}</span>
+                            <button title="Edit log" onClick={() => startEditingLog(log)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#475569", padding: 0, display: "flex" }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            </button>
+                            <button title="Delete log" onClick={() => handleDeleteLog(log.id)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#ef4444", padding: 0, display: "flex" }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                          </div>
+                          <p style={{ fontSize: "0.85rem", margin: 0, whiteSpace: "pre-wrap", color: "#374151", lineHeight: 1.6 }}>{log.content}</p>
+                        </div>
+                      )
+                    ))}
+
+                    {(activePin.logs || []).length === 0 && !isAddingLog && (
+                      <div style={{ fontSize: "0.9rem", color: "#6b7280", fontStyle: "italic", textAlign: "center", padding: "1rem 0" }}>No logs recorded for this trip yet.</div>
+                    )}
+
+                    {isAddingLog ? (
+                      <div style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.1)", padding: "0.75rem", borderRadius: "8px", marginBottom: "1rem" }}>
+                        <input type="text" placeholder="Log Title (e.g., Best Dinner)" className="panel-input" value={newLogTitle} onChange={(e) => setNewLogTitle(e.target.value)} />
+                        <textarea placeholder="Experience details..." className="panel-textarea" value={newLogContent} onChange={(e) => setNewLogContent(e.target.value)} />
+                        <select value={newLogCategory} onChange={(e) => setNewLogCategory(e.target.value)} style={{ width: "100%", padding: "0.4rem", borderRadius: "6px", border: "1px solid rgba(0,0,0,0.15)", marginBottom: "0.5rem", fontSize: "0.8rem", color: "#111827", background: "#fff" }}>
+                          <option value="Experience">Experience</option>
+                          <option value="Restaurant">Restaurant</option>
+                          <option value="Lodging">Lodging</option>
+                          <option value="Transit">Transit</option>
+                        </select>
+                        <div style={{ display: "flex", gap: "0.5rem" }}>
+                          <button className="glass-pill btn-green" style={{ flex: 1, padding: "0.4rem", fontSize: "0.7rem", display: "flex", justifyContent: "center" }} onClick={handleAddLog}>SAVE LOG</button>
+                          <button className="glass-pill icon-button" style={{ flex: 1, padding: "0.4rem", fontSize: "0.7rem", background: "rgba(0,0,0,0.05)", color: "#374151", display: "flex", justifyContent: "center" }} onClick={() => setIsAddingLog(false)}>CANCEL</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="glass-pill" style={{ width: "100%", background: "rgba(0,0,0,0.04)", border: "1px dashed #cbd5e1", color: "#475569", fontSize: "0.75rem", marginBottom: "1rem", padding: "0.5rem", cursor: "pointer" }} onClick={() => setIsAddingLog(true)}>+ ADD LOG ENTRY</button>
+                    )}
+
+                    <button className="glass-pill btn-red" style={{ width: "100%", display: "flex", justifyContent: "center", marginTop: "0.5rem" }} onClick={() => setIsConfirmingDelete(true)}>REMOVE PIN</button>
+                  </div>
+                )}
+              </div>
+            ) : (
               <>
                 <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 600, color: "#111827", display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
@@ -2037,7 +2289,7 @@ export default function MapCanvas() {
                 </p>
 
                 <div className="sidebar-scrollbar" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem", overflowY: "auto", paddingRight: "0.5rem" }}>
-                  {[...pins].sort((a, b) => new Date(a.start_date || 0) - new Date(b.start_date || 0)).map((pin, index) => (
+                  {[...pins].sort((a, b) => (a.start_date ? new Date(a.start_date).getTime() : Infinity) - (b.start_date ? new Date(b.start_date).getTime() : Infinity)).map((pin, index) => (
                     <div 
                       key={pin.id} 
                       style={{
@@ -2053,7 +2305,6 @@ export default function MapCanvas() {
                       onClick={() => {
                         flyToPinRef.current = pin;
                         setActivePin(pin);
-                        setSelectedJournalPin(pin);
                         setIsAddingLog(false);
                         setIsAddingEntry(false);
                         setIsConfirmingDelete(false);
@@ -2062,7 +2313,7 @@ export default function MapCanvas() {
                       onMouseOut={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.02)"; }}
                     >
                       <div style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        {new Date(pin.start_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                        {formatPinDate(pin.start_date) || "Undated"}
                       </div>
                       <div style={{ fontSize: "1.1rem", color: "#111827", fontWeight: 600, margin: "0.25rem 0" }}>
                         {pin.location_name}
@@ -2079,161 +2330,55 @@ export default function MapCanvas() {
                   )}
                 </div>
               </>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                <button 
-                  onClick={() => setSelectedJournalPin(null)}
-                  style={{ 
-                    background: "transparent", border: "none", color: "#4b5563", 
-                    display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0",
-                    cursor: "pointer", fontSize: "0.9rem", fontWeight: "600",
-                    marginBottom: "1rem", transition: "color 0.2s ease"
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.color = "#111827"}
-                  onMouseOut={(e) => e.currentTarget.style.color = "#4b5563"}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5"></path><polyline points="12 19 5 12 12 5"></polyline></svg>
-                  Back to Journals
-                </button>
-
-                <div className="sidebar-scrollbar" style={{ overflowY: "auto", paddingRight: "0.5rem", flexGrow: 1 }}>
-                  <div style={{ fontSize: "0.8rem", color: "#3b82f6", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "0.25rem" }}>
-                    {new Date(selectedJournalPin.start_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
-                  </div>
-                  <h2 style={{ fontSize: "1.5rem", margin: "0 0 0.5rem 0", fontWeight: 700, color: "#111827", lineHeight: 1.2 }}>
-                    {selectedJournalPin.location_name}
-                  </h2>
-                  <p style={{ fontSize: "0.95rem", color: "#374151", margin: "0 0 1.5rem 0", lineHeight: 1.4 }}>
-                    {selectedJournalPin.title}
-                  </p>
-
-                  <h3 style={{ fontSize: "0.85rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "1px", borderBottom: "1px solid rgba(0,0,0,0.1)", paddingBottom: "0.5rem", marginBottom: "1rem" }}>
-                    Log Entries
-                  </h3>
-
-                  {(selectedJournalPin.logs || []).map((log, idx) => (
-                    <div key={idx} style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.05)", padding: "1rem", borderRadius: "8px", marginBottom: "1rem" }}>
-                      <div style={{ fontWeight: 600, fontSize: "0.9rem", display: "flex", justifyContent: "space-between", color: "#111827", marginBottom: "0.5rem" }}>
-                        <span>{log.title}</span>
-                        <span style={{ fontSize: "0.65rem", background: "rgba(59, 130, 246, 0.1)", color: "#2563eb", padding: "0.2rem 0.5rem", borderRadius: "4px" }}>{log.category}</span>
-                      </div>
-                      <p style={{ fontSize: "0.85rem", margin: 0, whiteSpace: "pre-wrap", color: "#374151", lineHeight: 1.6 }}>{log.content}</p>
-                    </div>
-                  ))}
-                  
-                  {(selectedJournalPin.logs || []).length === 0 && (
-                    <div style={{ fontSize: "0.9rem", color: "#6b7280", fontStyle: "italic", textAlign: "center", padding: "2rem 0" }}>
-                      No logs recorded for this trip yet.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Center Right Card */}
-        {activePin && !isAddingEntry && activeTab !== "Travel Journals" && (
-          <div className="glass-base glass-panel right-center-card" style={{ right: "1.5rem", transition: "right 0.3s ease" }}>
-            <div className="card-image-placeholder"></div>
-            
-            {activePin ? (
-              isConfirmingDelete ? (
-                <>
-                  <h3 className="card-title">Are you sure?</h3>
-                  <div className="card-desc">
-                    <p style={{ lineHeight: 1.4 }}>This will permanently remove "{activePin.title}" from your memory log.</p>
-                  </div>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <button className="glass-pill icon-button" style={{ flex: 1, background: "rgba(255,255,255,0.5)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center" }} onClick={() => setIsConfirmingDelete(false)}>CANCEL</button>
-                    <button className="glass-pill btn-red" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={handleRemovePin}>CONFIRM</button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h3 className="card-title">{activePin.title} - {activePin.location_name}</h3>
-                  <div className="card-desc">
-                    <div style={{ fontSize: "0.7rem", color: "#475569", marginBottom: "0.5rem" }}>Dates: {activePin.start_date} to {activePin.end_date}</div>
-                    
-                    <div style={{ maxHeight: "200px", overflowY: "auto", paddingRight: "5px", marginBottom: "0.5rem" }}>
-                      {(activePin.logs || []).map((log, idx) => (
-                        <div key={idx} style={{ background: "rgba(0,0,0,0.03)", padding: "0.5rem", borderRadius: "4px", marginBottom: "0.5rem" }}>
-                          <div style={{ fontWeight: 600, fontSize: "0.8rem", display: "flex", justifyContent: "space-between" }}>
-                            <span>{log.title}</span>
-                            <span style={{ fontSize: "0.6rem", background: "#e2e8f0", padding: "0.1rem 0.3rem", borderRadius: "4px" }}>{log.category}</span>
-                          </div>
-                          <p style={{ fontSize: "0.7rem", marginTop: "0.25rem", whiteSpace: "pre-wrap" }}>{log.content}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {isAddingLog ? (
-                      <div style={{ background: "rgba(255,255,255,0.5)", padding: "0.5rem", borderRadius: "8px", marginTop: "0.5rem", border: "1px solid #ccc" }}>
-                        <input type="text" placeholder="Log Title (e.g., Best Dinner)" className="pin-input" style={{ marginBottom: "0.25rem" }} value={newLogTitle} onChange={(e) => setNewLogTitle(e.target.value)} />
-                        <textarea placeholder="Experience details..." className="pin-textarea" style={{ minHeight: "40px" }} value={newLogContent} onChange={(e) => setNewLogContent(e.target.value)} />
-                        <select value={newLogCategory} onChange={(e) => setNewLogCategory(e.target.value)} style={{ width: "100%", padding: "0.25rem", borderRadius: "4px", border: "1px solid #ccc", marginBottom: "0.5rem", fontSize: "0.7rem" }}>
-                          <option value="Experience">Experience</option>
-                          <option value="Restaurant">Restaurant</option>
-                          <option value="Lodging">Lodging</option>
-                          <option value="Transit">Transit</option>
-                        </select>
-                        <div style={{ display: "flex", gap: "0.25rem" }}>
-                          <button className="glass-pill btn-green" style={{ flex: 1, padding: "0.25rem", fontSize: "0.6rem" }} onClick={handleAddLog}>SAVE LOG</button>
-                          <button className="glass-pill icon-button" style={{ flex: 1, padding: "0.25rem", fontSize: "0.6rem", background: "#eee" }} onClick={() => setIsAddingLog(false)}>CANCEL</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button className="glass-pill" style={{ width: "100%", background: "rgba(0,0,0,0.05)", border: "1px dashed #ccc", fontSize: "0.7rem", marginTop: "0.5rem", padding: "0.4rem", cursor: "pointer" }} onClick={() => setIsAddingLog(true)}>+ ADD LOG ENTRY</button>
-                    )}
-
-                  </div>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <button className="glass-pill btn-green" style={{ flex: 1 }} onClick={() => { setActivePin(null); setIsConfirmingDelete(false); setIsAddingLog(false); }}>CLOSE</button>
-                    <button className="glass-pill btn-red" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={() => setIsConfirmingDelete(true)}>REMOVE PIN</button>
-                  </div>
-                </>
-              )
-            ) : (
-              <>
-                <h3 className="card-title">NEW MEMORY POINT</h3>
-                <div className="card-desc">
-                  <p style={{ marginBottom: "0.5rem" }}>Record a memory here?</p>
-                  <input type="text" placeholder="Title (e.g. Skiing)" className="pin-input" value={newPinName} onChange={(e) => setNewPinName(e.target.value)} />
-                  <input type="text" placeholder="Location (e.g. Alps)" className="pin-input" value={newPinCity} onChange={(e) => setNewPinCity(e.target.value)} />
-                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: "0.6rem", color: "#64748b" }}>Start Date</label>
-                      <input type="date" className="pin-input" style={{ marginBottom: 0 }} value={newPinStartDate} onChange={(e) => setNewPinStartDate(e.target.value)} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: "0.6rem", color: "#64748b" }}>End Date</label>
-                      <input type="date" className="pin-input" style={{ marginBottom: 0 }} value={newPinEndDate} onChange={(e) => setNewPinEndDate(e.target.value)} />
-                    </div>
-                  </div>
-                  <textarea placeholder="Initial log entry details..." className="pin-textarea" value={newPinDetails} onChange={(e) => setNewPinDetails(e.target.value)} />
-                  <div style={{ fontSize: "0.75rem", fontFamily: "monospace", color: "#475569", marginTop: "0.5rem" }}>
-                    Lat: {clickedCoords.lat.toFixed(4)}<br/>
-                    Lon: {clickedCoords.lon.toFixed(4)}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <button className="glass-pill btn-green" style={{ flex: 1 }} onClick={handleAddPin}>ADD</button>
-                  <button className="glass-pill icon-button" style={{ flex: 1, background: "rgba(255,255,255,0.5)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center" }} onClick={() => setIsAddingEntry(false)}>CANCEL</button>
-                </div>
-              </>
             )}
           </div>
         )}
 
         {/* Bottom Left */}
         <div className="bottom-left-group">
-
+          {pins.length === 0 && (
+            <button className="glass-pill btn-green" style={{ width: "200px" }} onClick={handleMigrateData}>
+              MIGRATE OLD DATA
+            </button>
+          )}
+          {showProfileMenu && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", width: "200px" }}>
+              <button
+                className="glass-pill"
+                style={{fontSize: "0.6rem", width: "100%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: showFlightPaths ? "#60a5fa" : "#94a3b8", cursor: "pointer", padding: "0.5rem", borderRadius: "8px"}}
+                onClick={() => setShowFlightPaths(!showFlightPaths)}
+              >
+                {showFlightPaths ? "HIDE FLIGHT PATHS" : "SHOW FLIGHT PATHS"}
+              </button>
+              <button
+                className="glass-pill"
+                style={{fontSize: "0.6rem", width: "100%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", cursor: "pointer", padding: "0.5rem", borderRadius: "8px"}}
+                onClick={() => supabase.auth.signOut()}
+              >
+                SIGN OUT
+              </button>
+            </div>
+          )}
+          <div
+            className="glass-base glass-pill profile-widget"
+            style={{ cursor: "pointer" }}
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+          >
+            <div className="profile-avatar">👨‍🚀</div>
+            <div className="profile-info">
+              <span className="name">{session?.user?.email?.split('@')[0].toUpperCase() || "WANDERER"}</span>
+              <span className="status">ONLINE</span>
+            </div>
+            <div className="status-dot"></div>
+          </div>
         </div>
 
         {/* Bottom Right */}
         <div className="bottom-right-group">
           <button className="glass-base glass-pill icon-button btn-icon-right" onClick={() => {
                 setClickedCoords({ lat: 40.7128, lon: -74.0060 });
+                setActivePin(null);
+                setActiveTab("Travel Journals");
                 setIsAddingEntry(true);
               }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
