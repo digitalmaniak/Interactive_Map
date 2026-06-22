@@ -470,6 +470,7 @@ export default function MapCanvas() {
 
   const activePinRef = useRef(activePin);
   const isAddingEntryRef = useRef(isAddingEntry);
+  const activeTabRef = useRef(activeTab);
 
   useEffect(() => {
     activePinRef.current = activePin;
@@ -478,6 +479,21 @@ export default function MapCanvas() {
   useEffect(() => {
     isAddingEntryRef.current = isAddingEntry;
   }, [isAddingEntry]);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  // Close the Travel Journals panel and reset the nav to Interactive Map
+  const closeJournalPanel = () => {
+    setActiveTab("Interactive Map");
+    setActivePin(null);
+    setIsAddingEntry(false);
+    setIsConfirmingDelete(false);
+    setIsAddingLog(false);
+    setIsEditingPin(false);
+    setEditingLogId(null);
+  };
 
   // Reset inline edit modes whenever the active pin changes
   useEffect(() => {
@@ -1217,15 +1233,12 @@ export default function MapCanvas() {
         // Raycast against the entire world (ocean or country landmasses)
         const countryIntersects = raycaster.intersectObjects(countriesGroup.children);
         if (countryIntersects.length > 0) {
-          if (activePinRef.current) {
-            setActivePin(null);
-            setIsConfirmingDelete(false);
+          // Clicking the map while the panel is open dismisses it
+          if (activeTabRef.current === "Travel Journals") {
+            closeJournalPanel();
             return;
           }
-          if (isAddingEntryRef.current) {
-            setIsAddingEntry(false);
-            return;
-          }
+          // Panel closed: clicking land starts a new memory at that spot
           const point = countryIntersects[0].point;
           const coords = vector3ToLatLon(point);
           setClickedCoords(coords);
@@ -1236,13 +1249,8 @@ export default function MapCanvas() {
 
         const oceanIntersects = raycaster.intersectObject(oceanMesh);
         if (oceanIntersects.length > 0) {
-          if (activePinRef.current) {
-            setActivePin(null);
-            setIsConfirmingDelete(false);
-            return;
-          }
-          if (isAddingEntryRef.current) {
-            setIsAddingEntry(false);
+          if (activeTabRef.current === "Travel Journals") {
+            closeJournalPanel();
             return;
           }
         }
@@ -2096,8 +2104,8 @@ export default function MapCanvas() {
         </div>
 
         {/* Travel Journals Sidebar */}
-        {activeTab === "Travel Journals" && session && (
-          <div className="glass-base slide-in-right" style={{
+        {session && (
+          <div className="glass-base" style={{
             position: "absolute",
             top: "0px",
             right: "0px",
@@ -2114,7 +2122,11 @@ export default function MapCanvas() {
             borderRight: "none",
             borderBottom: "none",
             borderTop: "none",
-            background: "rgba(255, 255, 255, 0.85)"
+            background: "rgba(255, 255, 255, 0.85)",
+            boxShadow: "-12px 0 40px rgba(0,0,0,0.18)",
+            transform: activeTab === "Travel Journals" ? "translateX(0)" : "translateX(100%)",
+            transition: "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+            pointerEvents: activeTab === "Travel Journals" ? "auto" : "none"
           }}>
             {isAddingEntry ? (
               <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
