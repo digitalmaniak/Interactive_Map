@@ -1,7 +1,36 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { geoNaturalEarth1, geoPath, geoContains } from "d3-geo";
+import { geoNaturalEarth1, geoPath, geoContains, geoArea } from "d3-geo";
+
+// d3-geo treats a polygon whose exterior ring is wound backwards as covering
+// (almost) the whole sphere — which paints over everything and breaks hit-
+// testing. Rewind any such polygon so its area is the smaller (correct) side.
+// (Raw GeoJSON like Natural Earth has a few of these, e.g. Bermuda.)
+const rewindPolygon = (rings) => {
+  if (!rings || !rings.length) return rings;
+  if (geoArea({ type: "Polygon", coordinates: [rings[0]] }) > 2 * Math.PI) {
+    return [rings[0].slice().reverse(), ...rings.slice(1)];
+  }
+  return rings;
+};
+const rewindGeo = (fc) => {
+  if (!fc) return fc;
+  return {
+    ...fc,
+    features: fc.features.map((f) => {
+      const g = f.geometry;
+      if (!g) return f;
+      if (g.type === "Polygon") {
+        return { ...f, geometry: { ...g, coordinates: rewindPolygon(g.coordinates) } };
+      }
+      if (g.type === "MultiPolygon") {
+        return { ...f, geometry: { ...g, coordinates: g.coordinates.map(rewindPolygon) } };
+      }
+      return f;
+    }),
+  };
+};
 
 // Flat, editorial 2D world map (replaces the Three.js renderer).
 // Renders GeoJSON with d3-geo, supports wheel zoom, drag pan, animated
@@ -57,31 +86,35 @@ export default function WorldMap({
     return { projection: proj, pathGen: geoPath(proj) };
   }, [geoJson, size.w, size.h]);
 
+  // Rewind any backwards-wound polygons before rendering / hit-testing.
+  const cleanGeo = useMemo(() => rewindGeo(geoJson), [geoJson]);
+  const cleanStates = useMemo(() => rewindGeo(statesGeoJson), [statesGeoJson]);
+
   // Precompute country path strings once per projection.
   const countryPaths = useMemo(() => {
-    if (!pathGen || !geoJson) return [];
+    if (!pathGen || !cleanGeo) return [];
     // Key by index — Natural Earth reuses id -99 for several territories.
-    return geoJson.features.map((f, i) => ({
+    return cleanGeo.features.map((f, i) => ({
       key: i,
       name: f.properties?.name || "Unknown",
       d: pathGen(f),
       feature: f,
     }));
-  }, [pathGen, geoJson]);
+  }, [pathGen, cleanGeo]);
 
   const statePaths = useMemo(() => {
-    if (!pathGen || !statesGeoJson) return [];
-    return statesGeoJson.features.map((f, i) => ({ id: f.id || i, d: pathGen(f) }));
-  }, [pathGen, statesGeoJson]);
+    if (!pathGen || !cleanStates) return [];
+    return cleanStates.features.map((f, i) => ({ id: f.id || i, d: pathGen(f) }));
+  }, [pathGen, cleanStates]);
 
   // Index of the country containing the active pin (for the selected tint).
   const selectedIdx = useMemo(() => {
-    if (!activePinId || !geoJson) return -1;
+    if (!activePinId || !cleanGeo) return -1;
     const pin = pins.find((p) => p.id === activePinId);
     if (!pin) return -1;
     const pt = [Number(pin.longitude), Number(pin.latitude)];
-    return geoJson.features.findIndex((feat) => geoContains(feat, pt));
-  }, [activePinId, pins, geoJson]);
+    return cleanGeo.features.findIndex((feat) => geoContains(feat, pt));
+  }, [activePinId, pins, cleanGeo]);
 
   // Project pins to base (k=1) pixel coords once per projection/pins.
   const projectedPins = useMemo(() => {
