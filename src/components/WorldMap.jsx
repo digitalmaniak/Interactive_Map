@@ -59,6 +59,7 @@ export default function WorldMap({
   const [hoveredPinId, setHoveredPinId] = useState(null);
 
   const dragRef = useRef(null);
+  const movedRef = useRef(false); // true if the last pointer gesture was a drag
   const rafRef = useRef(null);
   const transformRef = useRef(transform);
   transformRef.current = transform;
@@ -234,6 +235,7 @@ export default function WorldMap({
 
   const handlePointerDown = (e) => {
     dragRef.current = { startX: e.clientX, startY: e.clientY, orig: transformRef.current, moved: 0 };
+    movedRef.current = false;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
   };
   const handlePointerMove = (e) => {
@@ -242,13 +244,12 @@ export default function WorldMap({
     const dx = e.clientX - d.startX;
     const dy = e.clientY - d.startY;
     d.moved = Math.max(d.moved, Math.abs(dx) + Math.abs(dy));
+    if (d.moved > 4) movedRef.current = true;
     setTransform(clamp({ k: d.orig.k, x: d.orig.x + dx, y: d.orig.y + dy }));
   };
   const handlePointerUp = () => {
     dragRef.current = null;
   };
-
-  const wasDrag = () => dragRef.current && dragRef.current.moved > 4;
 
   const invertAt = (clientX, clientY) => {
     if (!projection) return null;
@@ -261,7 +262,7 @@ export default function WorldMap({
   };
 
   const handleBackgroundClick = (e, isLand, feature) => {
-    if (dragRef.current && dragRef.current.moved > 4) return;
+    if (movedRef.current) return; // ignore the click that ends a pan
     const coords = invertAt(e.clientX, e.clientY);
     if (!coords) return;
     onMapClick?.({ ...coords, isLand, country: feature?.properties?.name });
@@ -284,6 +285,7 @@ export default function WorldMap({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={() => { handlePointerUp(); setHoveredId(null); onHoverRegion?.(null); }}
+      onClick={(e) => handleBackgroundClick(e, false, null)}
     >
       {projection && (
         <svg width={size.w} height={size.h} style={{ display: "block" }}>
@@ -322,15 +324,12 @@ export default function WorldMap({
             )}
           </g>
 
-          {/* Transparent ocean catcher for background clicks */}
-          <rect x={0} y={0} width={size.w} height={size.h} fill="transparent" onClick={(e) => handleBackgroundClick(e, false, null)} style={{ pointerEvents: "none" }} />
-
           {/* Pins + clusters overlay (fixed pixel sizes) */}
           <g>
             {clusters.map((c, i) => {
               if (c.items.length > 1) {
                 return (
-                  <g key={`cl-${i}`} transform={`translate(${c.sx},${c.sy})`} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); handleClusterClick(c); }}>
+                  <g key={`cl-${i}`} transform={`translate(${c.sx},${c.sy})`} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); if (movedRef.current) return; handleClusterClick(c); }}>
                     <circle r={15} fill="var(--accent)" fillOpacity={0.18} />
                     <circle r={11} fill="var(--accent)" />
                     <text textAnchor="middle" dy="0.35em" fontSize="11" fontWeight="700" fill="#fff">{c.items.length}</text>
@@ -346,7 +345,7 @@ export default function WorldMap({
                   key={sp.pin.id}
                   transform={`translate(${sp.sx},${sp.sy})`}
                   style={{ cursor: "pointer" }}
-                  onClick={(e) => { e.stopPropagation(); onPinClick?.(sp.pin); }}
+                  onClick={(e) => { e.stopPropagation(); if (movedRef.current) return; onPinClick?.(sp.pin); }}
                   onMouseEnter={() => setHoveredPinId(sp.pin.id)}
                   onMouseLeave={() => setHoveredPinId(null)}
                 >
