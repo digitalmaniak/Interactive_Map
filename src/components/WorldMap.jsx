@@ -289,10 +289,9 @@ export default function WorldMap({
     >
       {projection && (
         <svg width={size.w} height={size.h} style={{ display: "block" }}>
-          {/* Sphere outline (subtle map edge) */}
-          <path d={pathGen({ type: "Sphere" })} fill="var(--ocean)" stroke="var(--hairline)" strokeWidth={1} />
-
           <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
+            {/* Sphere edge — scales/pans with the map so it never cuts across when zoomed */}
+            <path d={pathGen({ type: "Sphere" })} fill="var(--ocean)" stroke="var(--hairline)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
             {/* Countries */}
             {countryPaths.map((c) => {
               const isHover = c.key === hoveredId;
