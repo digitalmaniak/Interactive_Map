@@ -38,6 +38,11 @@ const rewindGeo = (fc) => {
 
 const MIN_K = 1;
 const MAX_K = 14;
+
+// Choropleth ramp: countries gain coral as their pin count rises (1 → faint,
+// 5+ → full accent). Index 0 = 1 pin.
+const PIN_FILLS = ["#F4CDC2", "#EDA992", "#E88E72", "#E4744F", "#E2603F"];
+const fillForCount = (n) => (n > 0 ? PIN_FILLS[Math.min(PIN_FILLS.length - 1, n - 1)] : "var(--land)");
 const CLUSTER_PX = 30; // proximity radius for clustering, in screen pixels
 const EASE = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
@@ -108,7 +113,19 @@ export default function WorldMap({
     return cleanStates.features.map((f, i) => ({ id: f.id || i, d: pathGen(f) }));
   }, [pathGen, cleanStates]);
 
-  // Index of the country containing the active pin (for the selected tint).
+  // Pin count per country (by feature index) → drives the choropleth.
+  const pinCountByCountry = useMemo(() => {
+    const counts = {};
+    if (!cleanGeo) return counts;
+    for (const p of pins) {
+      const pt = [Number(p.longitude), Number(p.latitude)];
+      const idx = cleanGeo.features.findIndex((feat) => geoContains(feat, pt));
+      if (idx >= 0) counts[idx] = (counts[idx] || 0) + 1;
+    }
+    return counts;
+  }, [pins, cleanGeo]);
+
+  // Index of the country containing the active pin (for the selected outline).
   const selectedIdx = useMemo(() => {
     if (!activePinId || !cleanGeo) return -1;
     const pin = pins.find((p) => p.id === activePinId);
@@ -296,17 +313,20 @@ export default function WorldMap({
             {countryPaths.map((c) => {
               const isHover = c.key === hoveredId;
               const isSelected = c.key === selectedIdx;
+              const count = pinCountByCountry[c.key] || 0;
+              const fill = count > 0 ? fillForCount(count) : isHover ? "var(--land-hover)" : "var(--land)";
               return (
                 <path
                   key={c.key}
                   d={c.d}
-                  fill={isSelected ? "var(--accent-tint)" : isHover ? "var(--land-hover)" : "var(--land)"}
+                  fill={fill}
+                  fillOpacity={count > 0 && isHover ? 0.85 : 1}
                   stroke={isSelected ? "var(--accent)" : "var(--hairline)"}
-                  strokeWidth={isSelected ? 1.25 : 1}
+                  strokeWidth={isSelected ? 1.5 : 1}
                   vectorEffect="non-scaling-stroke"
                   onClick={(e) => { e.stopPropagation(); handleBackgroundClick(e, true, c.feature); }}
                   onMouseEnter={() => { setHoveredId(c.key); onHoverRegion?.(c.name); }}
-                  style={{ transition: "fill 0.18s ease" }}
+                  style={{ transition: "fill 0.18s ease, fill-opacity 0.18s ease" }}
                 />
               );
             })}
