@@ -27,6 +27,13 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
+## Deployment
+
+Hosted on **Vercel**, auto-deploying from `main` (production: `interactive-map-indol.vercel.app`).
+
+- ⚠️ `.env.local` is gitignored, so the same `NEXT_PUBLIC_SUPABASE_*` vars **must be set in Vercel → Settings → Environment Variables** (Production/Preview/Development). Without them the build still succeeds but the app crashes at runtime (`createClient` throws "supabaseUrl is required"), leaving the page stuck on the loading screen. Env var changes require a redeploy.
+- In **Supabase → Authentication → URL Configuration**, add the production domain to the Site URL / redirect allowlist so auth/email redirects work in prod.
+
 ## Architecture / key files
 
 - **`src/components/MapCanvas.jsx`** — app shell. All React state, Supabase auth + pin loading, every handler, and the UI overlay: top-center nav, the full-height right-side **Travel Journals panel**, bottom-left profile bubble + menu, bottom-right ADD ENTRY. Renders `<WorldMap/>`.
