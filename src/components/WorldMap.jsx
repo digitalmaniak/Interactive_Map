@@ -362,8 +362,19 @@ export default function WorldMap({
           <g>
             {clusters.map((c, i) => {
               if (c.items.length > 1) {
+                // Show the first (earliest) location of the group in the badge.
+                const firstLoc = [...c.items].sort(
+                  (a, b) => (a.pin.start_date ? new Date(a.pin.start_date).getTime() : Infinity) - (b.pin.start_date ? new Date(b.pin.start_date).getTime() : Infinity)
+                )[0].pin.location_name;
                 return (
-                  <g key={`cl-${i}`} transform={`translate(${c.sx},${c.sy})`} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); if (movedRef.current) return; zoomToCluster(c); onClusterClick?.(c.items.map((it) => it.pin)); }}>
+                  <g
+                    key={`cl-${i}`}
+                    transform={`translate(${c.sx},${c.sy})`}
+                    style={{ cursor: "pointer" }}
+                    onClick={(e) => { e.stopPropagation(); if (movedRef.current) return; zoomToCluster(c); onClusterClick?.(c.items.map((it) => it.pin)); }}
+                    onMouseEnter={() => onHoverRegion?.(firstLoc)}
+                    onMouseLeave={() => onHoverRegion?.(null)}
+                  >
                     <circle r={15} fill="var(--accent)" fillOpacity={0.18} />
                     <circle r={11} fill="var(--accent)" />
                     <text textAnchor="middle" dy="0.35em" fontSize="11" fontWeight="700" fill="#fff">{c.items.length}</text>
@@ -380,8 +391,8 @@ export default function WorldMap({
                   transform={`translate(${sp.sx},${sp.sy})`}
                   style={{ cursor: "pointer" }}
                   onClick={(e) => { e.stopPropagation(); if (movedRef.current) return; onPinClick?.(sp.pin); }}
-                  onMouseEnter={() => setHoveredPinId(sp.pin.id)}
-                  onMouseLeave={() => setHoveredPinId(null)}
+                  onMouseEnter={() => { setHoveredPinId(sp.pin.id); onHoverRegion?.(sp.pin.location_name); }}
+                  onMouseLeave={() => { setHoveredPinId(null); onHoverRegion?.(null); }}
                 >
                   {active && <circle r={13} fill="var(--accent)" fillOpacity={0.16} />}
                   <circle r={r + 1.5} fill="#fff" />
