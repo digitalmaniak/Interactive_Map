@@ -306,6 +306,8 @@ export default function WorldMap({
   // Country borders: faint at world view, strengthen as you zoom in (same
   // idea as the US state lines) so continents show clear country outlines.
   const borderAlpha = 0.07 + Math.max(0, Math.min(1, (transform.k - 1.3) / 4)) * 0.26;
+  // Pin labels fade/scale in once zoomed in enough, and fade out zooming back.
+  const labelOpacity = Math.max(0, Math.min(1, (transform.k - 5) / 4));
 
   return (
     <div
@@ -403,6 +405,33 @@ export default function WorldMap({
             })}
           </g>
         </svg>
+      )}
+
+      {/* Zoom-revealed pin labels: leader line + soft white box (single pins only) */}
+      {projection && labelOpacity > 0.01 && (
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          {clusters.map((c) => {
+            if (c.items.length !== 1) return null;
+            const sp = c.items[0];
+            const short = (sp.pin.location_name || "").split(",")[0].trim() || sp.pin.title || "";
+            if (!short) return null;
+            return (
+              <div
+                key={`lbl-${sp.pin.id}`}
+                className="pin-label"
+                style={{
+                  left: sp.sx,
+                  top: sp.sy - (sp.pin.id === activePinId ? 9 : 7),
+                  opacity: labelOpacity,
+                  transform: `translate(-50%, -100%) scale(${0.85 + 0.15 * labelOpacity})`,
+                }}
+              >
+                <div className="pin-label-box">{short}</div>
+                <div className="pin-label-line" />
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
