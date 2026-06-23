@@ -229,13 +229,15 @@ export default function WorldMap({
 
   useEffect(() => () => rafRef.current && cancelAnimationFrame(rafRef.current), []);
 
-  // Fly to a target lat/lon when `flyTo` changes.
+  // Fly to a target lat/lon when `flyTo` changes — zoom all the way in and
+  // center the point in the area beside the (open) detail panel.
   useEffect(() => {
     if (!flyTo || !projection || size.w === 0) return;
     const xy = projection([Number(flyTo.lon), Number(flyTo.lat)]);
     if (!xy) return;
-    const k = Math.min(MAX_K, 5);
-    animateTo({ k, x: size.w / 2 - xy[0] * k, y: size.h / 2 - xy[1] * k });
+    const k = MAX_K;
+    const visW = Math.max(220, size.w - 360);
+    animateTo({ k, x: visW / 2 - xy[0] * k, y: size.h / 2 - xy[1] * k });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flyTo]);
 
