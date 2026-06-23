@@ -292,6 +292,9 @@ export default function WorldMap({
   };
 
   const stateOpacity = Math.max(0, Math.min(0.5, (transform.k - 2.5) / 4));
+  // Country borders: faint at world view, strengthen as you zoom in (same
+  // idea as the US state lines) so continents show clear country outlines.
+  const borderAlpha = 0.07 + Math.max(0, Math.min(1, (transform.k - 1.3) / 4)) * 0.26;
 
   return (
     <div
@@ -321,8 +324,8 @@ export default function WorldMap({
                   d={c.d}
                   fill={fill}
                   fillOpacity={count > 0 && isHover ? 0.85 : 1}
-                  stroke={isSelected ? "var(--accent)" : "var(--hairline)"}
-                  strokeWidth={isSelected ? 1.5 : 1}
+                  stroke={isSelected ? "var(--accent)" : `rgba(0,0,0,${borderAlpha})`}
+                  strokeWidth={isSelected ? 1.5 : 0.8}
                   vectorEffect="non-scaling-stroke"
                   onClick={(e) => { e.stopPropagation(); handleBackgroundClick(e, true, c.feature); }}
                   onMouseEnter={() => { setHoveredId(c.key); onHoverRegion?.(c.name); }}
