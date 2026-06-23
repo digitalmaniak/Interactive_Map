@@ -613,6 +613,12 @@ export default function MapCanvas() {
   // ----------------------------------------------------
   const handleAddPin = async () => {
     if (!newPinName || !newPinCity) return; // Basic validation
+    const lat = parseFloat(clickedCoords.lat);
+    const lon = parseFloat(clickedCoords.lon);
+    if (Number.isNaN(lat) || Number.isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      alert("Latitude must be between -90 and 90, and longitude between -180 and 180.");
+      return;
+    }
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
       alert("You must be logged in to add a pin.");
@@ -624,8 +630,8 @@ export default function MapCanvas() {
         user_id: userData.user.id,
         title: newPinName,
         location_name: newPinCity,
-        latitude: clickedCoords.lat,
-        longitude: clickedCoords.lon,
+        latitude: lat,
+        longitude: lon,
         start_date: newPinStartDate,
         end_date: newPinEndDate,
         trip_type: "Unknown",
@@ -1062,11 +1068,18 @@ export default function MapCanvas() {
                       <input type="date" className="panel-input" value={newPinEndDate} onChange={(e) => setNewPinEndDate(e.target.value)} />
                     </div>
                   </div>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <div style={{ flex: 1 }}>
+                      <label className="panel-label">Latitude</label>
+                      <input type="number" step="0.0001" className="panel-input" value={clickedCoords.lat} onChange={(e) => setClickedCoords({ ...clickedCoords, lat: e.target.value })} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className="panel-label">Longitude</label>
+                      <input type="number" step="0.0001" className="panel-input" value={clickedCoords.lon} onChange={(e) => setClickedCoords({ ...clickedCoords, lon: e.target.value })} />
+                    </div>
+                  </div>
                   <label className="panel-label">Initial Log</label>
                   <textarea placeholder="Initial log entry details..." className="panel-textarea" value={newPinDetails} onChange={(e) => setNewPinDetails(e.target.value)} />
-                  <div style={{ fontSize: "0.75rem", fontFamily: "monospace", color: "#64748b" }}>
-                    Lat: {clickedCoords.lat.toFixed(4)} · Lon: {clickedCoords.lon.toFixed(4)}
-                  </div>
                 </div>
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", flexShrink: 0 }}>
                   <button className="glass-pill btn-green" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={handleAddPin}>ADD MEMORY</button>

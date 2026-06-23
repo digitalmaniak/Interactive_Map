@@ -37,7 +37,7 @@ const rewindGeo = (fc) => {
 // fly-to, coral pins with proximity clustering, and hover highlighting.
 
 const MIN_K = 1;
-const MAX_K = 14;
+const MAX_K = 32; // allow deep zoom (city-level)
 
 // Choropleth ramp: countries gain coral as their pin count rises (1 → faint,
 // 5+ → full accent). Index 0 = 1 pin.
@@ -279,6 +279,20 @@ export default function WorldMap({
     return ll ? { lon: ll[0], lat: ll[1] } : null;
   };
 
+  // Zoom/fit the view to a cluster's pins, centered in the area left of the panel.
+  const zoomToCluster = (c) => {
+    const xs = c.items.map((it) => it.bx);
+    const ys = c.items.map((it) => it.by);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const bw = Math.max(Math.max(...xs) - Math.min(...xs), 1);
+    const bh = Math.max(Math.max(...ys) - Math.min(...ys), 1);
+    const pad = 130;
+    const visW = Math.max(220, size.w - 360); // panel covers the right
+    const k = Math.max(2.5, Math.min(MAX_K, Math.min((visW - 2 * pad) / bw, (size.h - 2 * pad) / bh)));
+    animateTo({ k, x: visW / 2 - cx * k, y: size.h / 2 - cy * k }, 600);
+  };
+
   const handleBackgroundClick = (e, isLand, feature) => {
     if (movedRef.current) return; // ignore the click that ends a pan
     const coords = invertAt(e.clientX, e.clientY);
@@ -347,7 +361,7 @@ export default function WorldMap({
             {clusters.map((c, i) => {
               if (c.items.length > 1) {
                 return (
-                  <g key={`cl-${i}`} transform={`translate(${c.sx},${c.sy})`} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); if (movedRef.current) return; onClusterClick?.(c.items.map((it) => it.pin)); }}>
+                  <g key={`cl-${i}`} transform={`translate(${c.sx},${c.sy})`} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); if (movedRef.current) return; zoomToCluster(c); onClusterClick?.(c.items.map((it) => it.pin)); }}>
                     <circle r={15} fill="var(--accent)" fillOpacity={0.18} />
                     <circle r={11} fill="var(--accent)" />
                     <text textAnchor="middle" dy="0.35em" fontSize="11" fontWeight="700" fill="#fff">{c.items.length}</text>
