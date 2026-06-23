@@ -329,6 +329,7 @@ export default function WorldMap({
                   vectorEffect="non-scaling-stroke"
                   onClick={(e) => { e.stopPropagation(); handleBackgroundClick(e, true, c.feature); }}
                   onMouseEnter={() => { setHoveredId(c.key); onHoverRegion?.(c.name); }}
+                  onMouseLeave={() => { setHoveredId((prev) => (prev === c.key ? null : prev)); onHoverRegion?.(null); }}
                   style={{ transition: "fill 0.18s ease, fill-opacity 0.18s ease" }}
                 />
               );
