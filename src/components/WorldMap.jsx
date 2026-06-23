@@ -309,6 +309,35 @@ export default function WorldMap({
   // Pin labels fade/scale in once zoomed in enough, and fade out zooming back.
   const labelOpacity = Math.max(0, Math.min(1, (transform.k - 5) / 4));
 
+  // Lay out single-pin labels with vertical collision avoidance: each label
+  // sits just above its pin; if its box would overlap one already placed,
+  // lengthen its leader line (push it up) until it clears.
+  const labels = (() => {
+    if (labelOpacity <= 0.01) return [];
+    const BOX_H = 23, GAP = 5, BASE = 16, STEP = 7, MAX = 220;
+    const items = clusters
+      .filter((c) => c.items.length === 1)
+      .map((c) => {
+        const sp = c.items[0];
+        const text = (sp.pin.location_name || "").split(",")[0].trim() || sp.pin.title || "";
+        return { id: sp.pin.id, sx: sp.sx, sy: sp.sy, text, w: text.length * 6.9 + 22 };
+      })
+      .filter((it) => it.text && it.sx > -200 && it.sx < size.w + 200 && it.sy > -100 && it.sy < size.h + 200);
+    items.sort((a, b) => a.sy - b.sy || a.sx - b.sx);
+    const placed = [];
+    for (const it of items) {
+      let line = BASE;
+      const box = () => ({ x1: it.sx - it.w / 2, x2: it.sx + it.w / 2, y1: it.sy - line - BOX_H, y2: it.sy - line });
+      let r = box(), guard = 0;
+      while (guard < 60 && line < MAX && placed.some((p) => !(r.x2 < p.x1 - GAP || r.x1 > p.x2 + GAP || r.y2 < p.y1 - GAP || r.y1 > p.y2 + GAP))) {
+        line += STEP; r = box(); guard++;
+      }
+      it.line = line;
+      placed.push(r);
+    }
+    return items;
+  })();
+
   return (
     <div
       ref={containerRef}
@@ -408,29 +437,23 @@ export default function WorldMap({
       )}
 
       {/* Zoom-revealed pin labels: leader line + soft white box (single pins only) */}
-      {projection && labelOpacity > 0.01 && (
+      {projection && labels.length > 0 && (
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-          {clusters.map((c) => {
-            if (c.items.length !== 1) return null;
-            const sp = c.items[0];
-            const short = (sp.pin.location_name || "").split(",")[0].trim() || sp.pin.title || "";
-            if (!short) return null;
-            return (
-              <div
-                key={`lbl-${sp.pin.id}`}
-                className="pin-label"
-                style={{
-                  left: sp.sx,
-                  top: sp.sy - (sp.pin.id === activePinId ? 9 : 7),
-                  opacity: labelOpacity,
-                  transform: `translate(-50%, -100%) scale(${0.85 + 0.15 * labelOpacity})`,
-                }}
-              >
-                <div className="pin-label-box">{short}</div>
-                <div className="pin-label-line" />
-              </div>
-            );
-          })}
+          {labels.map((it) => (
+            <div
+              key={`lbl-${it.id}`}
+              className="pin-label"
+              style={{
+                left: it.sx,
+                top: it.sy - 6,
+                opacity: labelOpacity,
+                transform: `translate(-50%, -100%) scale(${0.85 + 0.15 * labelOpacity})`,
+              }}
+            >
+              <div className="pin-label-box">{it.text}</div>
+              <div className="pin-label-line" style={{ height: it.line }} />
+            </div>
+          ))}
         </div>
       )}
     </div>
