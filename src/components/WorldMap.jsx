@@ -56,6 +56,7 @@ export default function WorldMap({
   onPinClick,
   onMapClick,
   onHoverRegion,
+  onClusterClick,
 }) {
   const containerRef = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -285,12 +286,6 @@ export default function WorldMap({
     onMapClick?.({ ...coords, isLand, country: feature?.properties?.name });
   };
 
-  const handleClusterClick = (c) => {
-    const t = transformRef.current;
-    const k = Math.min(MAX_K, t.k * 2.2);
-    animateTo({ k, x: size.w / 2 - ((c.sx - t.x) / t.k) * k, y: size.h / 2 - ((c.sy - t.y) / t.k) * k }, 500);
-  };
-
   const stateOpacity = Math.max(0, Math.min(0.5, (transform.k - 2.5) / 4));
   // Country borders: faint at world view, strengthen as you zoom in (same
   // idea as the US state lines) so continents show clear country outlines.
@@ -352,7 +347,7 @@ export default function WorldMap({
             {clusters.map((c, i) => {
               if (c.items.length > 1) {
                 return (
-                  <g key={`cl-${i}`} transform={`translate(${c.sx},${c.sy})`} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); if (movedRef.current) return; handleClusterClick(c); }}>
+                  <g key={`cl-${i}`} transform={`translate(${c.sx},${c.sy})`} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); if (movedRef.current) return; onClusterClick?.(c.items.map((it) => it.pin)); }}>
                     <circle r={15} fill="var(--accent)" fillOpacity={0.18} />
                     <circle r={11} fill="var(--accent)" />
                     <text textAnchor="middle" dy="0.35em" fontSize="11" fontWeight="700" fill="#fff">{c.items.length}</text>

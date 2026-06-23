@@ -442,6 +442,7 @@ export default function MapCanvas() {
   const [activePin, setActivePin] = useState(null);
   const [isAddingEntry, setIsAddingEntry] = useState(false);
   const [flyTo, setFlyTo] = useState(null);
+  const [clusterPins, setClusterPins] = useState(null); // pins of a clicked cluster (filtered panel list)
 
   // Three.js Element Refs
 
@@ -465,6 +466,7 @@ export default function MapCanvas() {
   const closeJournalPanel = () => {
     setActiveTab("Interactive Map");
     setActivePin(null);
+    setClusterPins(null);
     setIsAddingEntry(false);
     setIsConfirmingDelete(false);
     setIsAddingLog(false);
@@ -476,10 +478,21 @@ export default function MapCanvas() {
   const handlePinClick = (pin) => {
     setFlyTo({ lat: pin.latitude, lon: pin.longitude });
     setActivePin(pin);
+    setClusterPins(null);
     setActiveTab("Travel Journals");
     setIsAddingLog(false);
     setIsAddingEntry(false);
     setIsConfirmingDelete(false);
+  };
+
+  // Clicking a grouped pin opens the panel listing that group's locations.
+  const handleClusterClick = (pinsArr) => {
+    setClusterPins(pinsArr);
+    setActivePin(null);
+    setIsAddingEntry(false);
+    setIsAddingLog(false);
+    setIsConfirmingDelete(false);
+    setActiveTab("Travel Journals");
   };
 
   // Clicking the map closes the panel when open; clicking land (when closed)
@@ -938,6 +951,7 @@ export default function MapCanvas() {
             onPinClick={handlePinClick}
             onMapClick={handleMapClick}
             onHoverRegion={handleHoverRegion}
+            onClusterClick={handleClusterClick}
           />
         )}
       </div>
@@ -983,7 +997,7 @@ export default function MapCanvas() {
             </div>
             <div 
               className={`nav-item ${activeTab === "Travel Journals" ? "active" : ""}`}
-              onClick={() => setActiveTab("Travel Journals")}
+              onClick={() => { setClusterPins(null); setActivePin(null); setActiveTab("Travel Journals"); }}
               style={{ cursor: "pointer", position: "relative", zIndex: 1, background: "transparent" }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
@@ -1192,6 +1206,51 @@ export default function MapCanvas() {
                   </div>
                 )}
               </div>
+            ) : clusterPins ? (
+              <>
+                <button
+                  onClick={() => setClusterPins(null)}
+                  style={{ background: "transparent", border: "none", color: "#4b5563", display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0", cursor: "pointer", fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.25rem", flexShrink: 0 }}
+                  onMouseOver={(e) => (e.currentTarget.style.color = "#111827")}
+                  onMouseOut={(e) => (e.currentTarget.style.color = "#4b5563")}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5"></path><polyline points="12 19 5 12 12 5"></polyline></svg>
+                  All journals
+                </button>
+                <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 700, color: "#111827", flexShrink: 0 }}>
+                  {clusterPins.length} Locations
+                </h2>
+                <p style={{ fontSize: "0.85rem", color: "#4b5563", margin: "0.25rem 0 0", flexShrink: 0 }}>
+                  Grouped at this spot on the map.
+                </p>
+                <div className="sidebar-scrollbar" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem", overflowY: "auto", paddingRight: "0.5rem" }}>
+                  {[...clusterPins].sort((a, b) => (a.start_date ? new Date(a.start_date).getTime() : Infinity) - (b.start_date ? new Date(b.start_date).getTime() : Infinity)).map((pin) => (
+                    <div
+                      key={pin.id}
+                      style={{ display: "flex", flexDirection: "column", padding: "1rem", cursor: "pointer", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.05)", background: "rgba(0,0,0,0.02)", transition: "all 0.2s ease" }}
+                      onClick={() => {
+                        setFlyTo({ lat: pin.latitude, lon: pin.longitude });
+                        setActivePin(pin);
+                        setIsAddingLog(false);
+                        setIsAddingEntry(false);
+                        setIsConfirmingDelete(false);
+                      }}
+                      onMouseOver={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.05)"; }}
+                      onMouseOut={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.02)"; }}
+                    >
+                      <div style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {formatPinDate(pin.start_date) || "Undated"}
+                      </div>
+                      <div style={{ fontSize: "1.1rem", color: "#111827", fontWeight: 600, margin: "0.25rem 0" }}>
+                        {pin.location_name}
+                      </div>
+                      <div style={{ fontSize: "0.85rem", color: "#4b5563", lineHeight: 1.4 }}>
+                        {pin.title}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <>
                 <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 600, color: "#111827", display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
@@ -1259,14 +1318,14 @@ export default function MapCanvas() {
             <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", width: "200px" }}>
               <button
                 className="glass-pill"
-                style={{fontSize: "0.6rem", width: "100%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: showFlightPaths ? "var(--accent)" : "#94a3b8", cursor: "pointer", padding: "0.5rem", borderRadius: "8px"}}
+                style={{fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.04em", width: "100%", background: showFlightPaths ? "rgba(226,96,63,0.12)" : "rgba(0,0,0,0.06)", border: showFlightPaths ? "1px solid rgba(226,96,63,0.35)" : "1px solid rgba(0,0,0,0.1)", color: showFlightPaths ? "var(--accent)" : "var(--ink)", cursor: "pointer", padding: "0.55rem", borderRadius: "8px"}}
                 onClick={() => setShowFlightPaths(!showFlightPaths)}
               >
                 {showFlightPaths ? "HIDE FLIGHT PATHS" : "SHOW FLIGHT PATHS"}
               </button>
               <button
                 className="glass-pill"
-                style={{fontSize: "0.6rem", width: "100%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", cursor: "pointer", padding: "0.5rem", borderRadius: "8px"}}
+                style={{fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.04em", width: "100%", background: "rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.1)", color: "var(--ink)", cursor: "pointer", padding: "0.55rem", borderRadius: "8px"}}
                 onClick={() => supabase.auth.signOut()}
               >
                 SIGN OUT
