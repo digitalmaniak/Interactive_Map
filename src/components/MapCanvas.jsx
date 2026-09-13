@@ -15,7 +15,8 @@ import {
   createJourney as createJourneyRow,
   updateJourney as updateJourneyRow,
   softDeleteJourney as softDeleteJourneyRow,
-  setJourneyVisibility as setJourneyVisibilityRow,
+  shareJourney as shareJourneyRow,
+  stopSharingJourney as stopSharingJourneyRow,
   movePinToJourney,
 } from "../lib/journeys/api";
 import { useAuthSession } from "../hooks/useAuthSession";
@@ -446,15 +447,6 @@ export default function MapCanvas() {
       if (form.date_start !== undefined) fields.date_start = form.date_start || null;
       if (form.date_end !== undefined) fields.date_end = form.date_end || null;
       if (form.tags !== undefined) fields.tags = form.tags;
-      if (form.visibility !== undefined) fields.visibility = form.visibility;
-      if (form.share_token !== undefined) fields.share_token = form.share_token;
-      // Ensure share_token when saving as unlisted without one (DB default usually already set).
-      if (fields.visibility === "unlisted" && !fields.share_token) {
-        const current = journeys.find((j) => j.id === id);
-        if (!current?.share_token && typeof crypto !== "undefined" && crypto.randomUUID) {
-          fields.share_token = crypto.randomUUID();
-        }
-      }
       const { error } = await updateJourneyRow(id, fields);
       if (error) throw error;
       await reloadTravelData();
@@ -466,20 +458,33 @@ export default function MapCanvas() {
     }
   };
 
-  const handleSetVisibility = async (journey, visibility) => {
-    if (!journey?.id) return false;
+  const handleShareJourney = async (journey) => {
+    if (!journey?.id) return null;
     try {
-      const { error } = await setJourneyVisibilityRow(
+      const { data, error } = await shareJourneyRow(
         journey.id,
-        visibility,
         journey.share_token || null
       );
+      if (error) throw error;
+      await reloadTravelData();
+      return data;
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Error sharing journey.");
+      return null;
+    }
+  };
+
+  const handleStopSharingJourney = async (journey) => {
+    if (!journey?.id) return false;
+    try {
+      const { error } = await stopSharingJourneyRow(journey.id);
       if (error) throw error;
       await reloadTravelData();
       return true;
     } catch (err) {
       console.error(err);
-      alert(err.message || "Error updating visibility.");
+      alert(err.message || "Error stopping share.");
       return false;
     }
   };
@@ -687,7 +692,8 @@ export default function MapCanvas() {
             onCreateJourney={handleCreateJourney}
             onUpdateJourney={handleUpdateJourney}
             onSoftDeleteJourney={handleSoftDeleteJourney}
-            onSetVisibility={handleSetVisibility}
+            onShareJourney={handleShareJourney}
+            onStopSharingJourney={handleStopSharingJourney}
             onMovePlace={handleMovePlace}
           />
         )}

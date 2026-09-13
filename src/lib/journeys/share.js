@@ -24,6 +24,32 @@ export function journeyShareUrl(token) {
   return path;
 }
 
+/** True when the journey is live-shared (DB visibility unlisted + token). */
+export function isJourneyShared(journey) {
+  return Boolean(journey && journey.visibility === "unlisted" && journey.share_token);
+}
+
+/**
+ * Copy the live `/share/[token]` URL.
+ * Falls back to a prompt if the clipboard API is blocked.
+ */
+export async function copyJourneyShareUrl(token) {
+  if (!token) return { ok: false, url: null };
+  const url = journeyShareUrl(token);
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      return { ok: true, url };
+    }
+  } catch (err) {
+    console.error(err);
+  }
+  if (typeof window !== "undefined") {
+    window.prompt("Copy share link:", url);
+  }
+  return { ok: false, url };
+}
+
 /**
  * Load one unlisted journey + its places for anonymous viewers.
  * Client must send x-share-token matching journeys.share_token (Harbor RLS).

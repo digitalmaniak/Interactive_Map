@@ -88,6 +88,7 @@ export async function updateJourney(id, fields) {
  * Flip journey visibility. When becoming unlisted, ensure share_token exists
  * (Harbor column is usually already set via default gen_random_uuid()).
  * Flipping to private stops public access; token may remain unused.
+ * Prefer shareJourney / stopSharingJourney from UI — those are the one-action names.
  */
 export async function setJourneyVisibility(id, visibility, existingShareToken) {
   if (!id) return { data: null, error: { message: "Journey id is required." } };
@@ -105,6 +106,22 @@ export async function setJourneyVisibility(id, visibility, existingShareToken) {
     }
   }
   return updateJourney(id, fields);
+}
+
+/**
+ * Share a journey (N1 one-action): ensure share_token exists + set visibility unlisted.
+ * Caller copies the live `/share/[token]` URL from the returned row.
+ */
+export async function shareJourney(id, existingShareToken) {
+  return setJourneyVisibility(id, "unlisted", existingShareToken);
+}
+
+/**
+ * Stop sharing (N1 one-action): flip visibility to private.
+ * Old `/share/[token]` dies via RLS; token may remain unused (rotate is later).
+ */
+export async function stopSharingJourney(id) {
+  return setJourneyVisibility(id, "private");
 }
 
 /**

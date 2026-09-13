@@ -68,7 +68,8 @@ export default function JournalsPanel({
   onCreateJourney,
   onUpdateJourney,
   onSoftDeleteJourney,
-  onSetVisibility,
+  onShareJourney,
+  onStopSharingJourney,
   onMovePlace,
 }) {
   return (
@@ -84,13 +85,15 @@ export default function JournalsPanel({
       zIndex: 100,
       overflow: "hidden",
       gap: "1rem",
-      backdropFilter: "blur(20px)",
+      backdropFilter: "none",
+      WebkitBackdropFilter: "none",
       borderRadius: "0px",
       borderRight: "none",
       borderBottom: "none",
       borderTop: "none",
-      background: "rgba(255, 255, 255, 0.85)",
-      boxShadow: "-12px 0 40px rgba(0,0,0,0.18)",
+      borderLeft: "1px solid #E7E5E4",
+      background: "#FAFAF8",
+      boxShadow: "-8px 0 28px rgba(28,25,23,0.08)",
       transform: activeTab === "Travel Journals" ? "translateX(0)" : "translateX(100%)",
       transition: "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
       pointerEvents: activeTab === "Travel Journals" ? "auto" : "none"
@@ -155,7 +158,8 @@ export default function JournalsPanel({
           onSelectPin={onSelectPin}
           onBack={onBackFromJourney}
           onMovePlace={onMovePlace}
-          onSetVisibility={onSetVisibility}
+          onShareJourney={onShareJourney}
+          onStopSharingJourney={onStopSharingJourney}
         />
       ) : (
         <JourneyList
@@ -164,7 +168,8 @@ export default function JournalsPanel({
           onCreateJourney={onCreateJourney}
           onUpdateJourney={onUpdateJourney}
           onSoftDeleteJourney={onSoftDeleteJourney}
-          onSetVisibility={onSetVisibility}
+          onShareJourney={onShareJourney}
+          onStopSharingJourney={onStopSharingJourney}
         />
       )}
     </div>
