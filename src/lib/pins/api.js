@@ -5,9 +5,12 @@
  */
 import { supabase } from "../supabase/client";
 
-/** Select all pins with nested pin_logs; maps pin_logs → logs. */
+/** Select all non-deleted pins with nested pin_logs; maps pin_logs → logs. */
 export async function loadPins() {
-  const { data, error } = await supabase.from("pins").select("*, pin_logs(*)");
+  const { data, error } = await supabase
+    .from("pins")
+    .select("*, pin_logs(*)")
+    .is("deleted_at", null);
   if (error) return { data: null, error };
   if (!data) return { data: null, error: null };
   const mapped = data.map((pin) => ({

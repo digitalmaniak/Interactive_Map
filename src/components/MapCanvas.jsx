@@ -10,10 +10,9 @@ import {
   addLogs as insertPinLogs,
   updateLog as updatePinLogRow,
   removeLog as deletePinLogRow,
-  loadPins as fetchPinsFromApi,
 } from "../lib/pins/api";
 import { useAuthSession } from "../hooks/useAuthSession";
-import { usePins } from "../hooks/usePins";
+import { useTravelData } from "../hooks/useTravelData";
 import AuthGate from "./shell/AuthGate";
 import AppShell from "./shell/AppShell";
 import JournalsPanel from "./journals/JournalsPanel";
@@ -59,8 +58,8 @@ export default function MapCanvas() {
     handleAuth,
   } = useAuthSession();
 
-  // Pins list + load-on-session — extracted to usePins
-  const { pins, setPins } = usePins(session);
+  // Journeys + flat pins (WorldMap) — useTravelData
+  const { journeys, pins, setPins, reload: reloadTravelData } = useTravelData(session);
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showFlightPaths, setShowFlightPaths] = useState(false);
@@ -73,6 +72,18 @@ export default function MapCanvas() {
   const [isAddingEntry, setIsAddingEntry] = useState(false);
   const [flyTo, setFlyTo] = useState(null);
   const [clusterPins, setClusterPins] = useState(null); // pins of a clicked cluster (filtered panel list)
+  const [activeJourneyId, setActiveJourneyId] = useState(null); // journey drill-in for JournalsPanel
+
+  const activeJourney =
+    activeJourneyId != null
+      ? journeys.find((j) => j.id === activeJourneyId) || null
+      : null;
+
+  const resolveJourneyIdForPin = (pin) => {
+    if (pin?.journey_id) return pin.journey_id;
+    const imported = journeys.find((j) => j.title === "Imported");
+    return imported?.id ?? "__client_imported__";
+  };
 
   // React refs
 
@@ -97,6 +108,7 @@ export default function MapCanvas() {
     setActiveTab("Interactive Map");
     setActivePin(null);
     setClusterPins(null);
+    setActiveJourneyId(null);
     setIsAddingEntry(false);
     setIsConfirmingDelete(false);
     setIsAddingLog(false);
@@ -127,6 +139,7 @@ export default function MapCanvas() {
     setFlyTo({ lat: pin.latitude, lon: pin.longitude });
     setActivePin(pin);
     setClusterPins(null);
+    setActiveJourneyId(resolveJourneyIdForPin(pin));
     setActiveTab("Travel Journals");
     setIsAddingLog(false);
     setIsAddingEntry(false);
@@ -137,6 +150,7 @@ export default function MapCanvas() {
   const handleClusterClick = (pinsArr) => {
     setClusterPins(pinsArr);
     setActivePin(null);
+    setActiveJourneyId(null);
     setIsAddingEntry(false);
     setIsAddingLog(false);
     setIsConfirmingDelete(false);
@@ -420,10 +434,7 @@ export default function MapCanvas() {
         }
       }
       alert("Migration complete! Refreshing map data...");
-      const { data, error } = await fetchPinsFromApi();
-      if (!error && data) {
-        setPins(data);
-      }
+      await reloadTravelData();
     } catch (e) {
       console.error(e);
       alert("Migration failed.");
@@ -482,15 +493,16 @@ export default function MapCanvas() {
           setActiveTab("Travel Journals");
           setIsAddingEntry(true);
         }}
-        onOpenJournalsTab={() => { setClusterPins(null); setActivePin(null); setActiveTab("Travel Journals"); }}
+        onOpenJournalsTab={() => { setClusterPins(null); setActivePin(null); setActiveJourneyId(null); setActiveTab("Travel Journals"); }}
       >
         {session && (
           <JournalsPanel
             activeTab={activeTab}
             isAddingEntry={isAddingEntry}
             activePin={activePin}
+            activeJourney={activeJourney}
             clusterPins={clusterPins}
-            pins={pins}
+            journeys={journeys}
             newPinName={newPinName}
             setNewPinName={setNewPinName}
             newPinCity={newPinCity}
@@ -532,6 +544,12 @@ export default function MapCanvas() {
             handleRemovePin={handleRemovePin}
             onBackFromPin={handleBackFromPin}
             onSelectPin={handleSelectPinFromList}
+            onSelectJourney={(journey) => {
+              setActiveJourneyId(journey.id);
+              setClusterPins(null);
+              setActivePin(null);
+            }}
+            onBackFromJourney={() => setActiveJourneyId(null)}
             onBackFromCluster={() => setClusterPins(null)}
           />
         )}

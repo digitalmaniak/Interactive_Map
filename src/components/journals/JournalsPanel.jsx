@@ -1,21 +1,23 @@
 "use client";
 
 import AddMemoryForm from "./AddMemoryForm";
-import JournalList from "./JournalList";
+import JourneyList from "./JourneyList";
+import JourneyPlacesList from "./JourneyPlacesList";
 import ClusterList from "./ClusterList";
 import PinDetail from "./PinDetail";
 
 /**
  * Right-side Travel Journals panel: shell chrome + mode router.
- * Modes: add entry | pin detail | cluster list | chronological list.
+ * Modes: add entry | pin detail | cluster list | journey places | journey list.
  * State and callbacks owned by MapCanvas; this component only switches views.
  */
 export default function JournalsPanel({
   activeTab,
   isAddingEntry,
   activePin,
+  activeJourney,
   clusterPins,
-  pins,
+  journeys,
   // Add memory
   newPinName,
   setNewPinName,
@@ -60,6 +62,8 @@ export default function JournalsPanel({
   onBackFromPin,
   // Lists
   onSelectPin,
+  onSelectJourney,
+  onBackFromJourney,
   onBackFromCluster,
 }) {
   return (
@@ -139,10 +143,16 @@ export default function JournalsPanel({
           onSelectPin={onSelectPin}
           onBack={onBackFromCluster}
         />
-      ) : (
-        <JournalList
-          pins={pins}
+      ) : activeJourney ? (
+        <JourneyPlacesList
+          journey={activeJourney}
           onSelectPin={onSelectPin}
+          onBack={onBackFromJourney}
+        />
+      ) : (
+        <JourneyList
+          journeys={journeys}
+          onSelectJourney={onSelectJourney}
         />
       )}
     </div>

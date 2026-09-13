@@ -1,12 +1,16 @@
 "use client";
 
 import { formatPinDate, sortPinsByStartDate } from "../../lib/pins/format";
+import { formatJourneyDates } from "../../lib/journeys/format";
 
 /**
- * Cluster → locations list shown when a map cluster is clicked.
- * Presentational — selection/back handlers from MapCanvas via JournalsPanel.
+ * Places (pins) inside a selected journey.
+ * Selecting a place opens PinDetail; back returns to the journey list.
  */
-export default function ClusterList({ clusterPins, onSelectPin, onBack }) {
+export default function JourneyPlacesList({ journey, onSelectPin, onBack }) {
+  const places = sortPinsByStartDate(journey?.places || []);
+  const dates = formatJourneyDates(journey);
+
   return (
     <>
       <button
@@ -19,13 +23,14 @@ export default function ClusterList({ clusterPins, onSelectPin, onBack }) {
         All journeys
       </button>
       <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 700, color: "#111827", flexShrink: 0 }}>
-        {clusterPins.length} Locations
+        {journey?.title || "Journey"}
       </h2>
       <p style={{ fontSize: "0.85rem", color: "#4b5563", margin: "0.25rem 0 0", flexShrink: 0 }}>
-        Grouped at this spot on the map.
+        {dates ? `${dates} · ` : ""}
+        {places.length} {places.length === 1 ? "place" : "places"}
       </p>
       <div className="sidebar-scrollbar" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem", overflowY: "auto", paddingRight: "0.5rem" }}>
-        {sortPinsByStartDate(clusterPins).map((pin) => (
+        {places.map((pin) => (
           <div
             key={pin.id}
             style={{ display: "flex", flexDirection: "column", padding: "1rem", cursor: "pointer", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.05)", background: "rgba(0,0,0,0.02)", transition: "all 0.2s ease" }}
@@ -44,6 +49,11 @@ export default function ClusterList({ clusterPins, onSelectPin, onBack }) {
             </div>
           </div>
         ))}
+        {places.length === 0 && (
+          <div style={{ textAlign: "center", color: "#4b5563", fontSize: "0.9rem", padding: "2rem 0" }}>
+            No places in this journey yet.
+          </div>
+        )}
       </div>
     </>
   );
