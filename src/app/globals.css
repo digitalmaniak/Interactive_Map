@@ -23,11 +23,11 @@
   --shadow-soft: 0 12px 36px rgba(28, 25, 23, 0.06);
   --shadow-panel: -8px 0 28px rgba(28, 25, 23, 0.08);
 
-  /* Map (clearer pale blue ocean + warmer land for continent separation) */
+  /* Map — locked palette B Cool stone */
   --canvas: var(--paper);
-  --ocean: #D4E6F5;
-  --land: #E2D9CB;
-  --land-hover: #D6CDBE;
+  --ocean: #E4E9EE;
+  --land: #D5D8DC;
+  --land-hover: #C8CCD1;
 
   /* Back-compat aliases */
   --bg-primary: var(--paper);
