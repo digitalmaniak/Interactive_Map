@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase/client";
+import { formatPinDate, sortPinsByStartDate } from "../lib/pins/format";
 import WorldMap from "./WorldMap";
 
 export default function MapCanvas() {
@@ -123,15 +124,6 @@ export default function MapCanvas() {
     setEditingLogId(null);
   }, [activePin?.id]);
 
-
-  // Safely format a stored date string as "MMM YYYY"; returns null for missing/invalid
-  // values so callers can fall back instead of rendering the Unix epoch ("Dec 1969").
-  const formatPinDate = (dateStr) => {
-    if (!dateStr) return null;
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return null;
-    return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
-  };
 
   // 1. Fetch GeoJSON Data on Mount
   useEffect(() => {
@@ -841,7 +833,7 @@ export default function MapCanvas() {
                   Grouped at this spot on the map.
                 </p>
                 <div className="sidebar-scrollbar" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem", overflowY: "auto", paddingRight: "0.5rem" }}>
-                  {[...clusterPins].sort((a, b) => (a.start_date ? new Date(a.start_date).getTime() : Infinity) - (b.start_date ? new Date(b.start_date).getTime() : Infinity)).map((pin) => (
+                  {sortPinsByStartDate(clusterPins).map((pin) => (
                     <div
                       key={pin.id}
                       style={{ display: "flex", flexDirection: "column", padding: "1rem", cursor: "pointer", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.05)", background: "rgba(0,0,0,0.02)", transition: "all 0.2s ease" }}
@@ -879,7 +871,7 @@ export default function MapCanvas() {
                 </p>
 
                 <div className="sidebar-scrollbar" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem", overflowY: "auto", paddingRight: "0.5rem" }}>
-                  {[...pins].sort((a, b) => (a.start_date ? new Date(a.start_date).getTime() : Infinity) - (b.start_date ? new Date(b.start_date).getTime() : Infinity)).map((pin, index) => (
+                  {sortPinsByStartDate(pins).map((pin, index) => (
                     <div 
                       key={pin.id} 
                       style={{
