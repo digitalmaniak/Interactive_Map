@@ -13,6 +13,8 @@ import {
   updateLog as updatePinLogRow,
   removeLog as deletePinLogRow,
 } from "../lib/pins/api";
+import { useAuthSession } from "../hooks/useAuthSession";
+import AuthGate from "./shell/AuthGate";
 import WorldMap from "./WorldMap";
 
 export default function MapCanvas() {
@@ -41,12 +43,18 @@ export default function MapCanvas() {
   const [editingLogId, setEditingLogId] = useState(null);
   const [editLog, setEditLog] = useState({ title: "", content: "", category: "Experience", log_date: "" });
   
-  // Auth States
-  const [session, setSession] = useState(null);
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
+  // Auth (session + login/signup) — extracted to useAuthSession + AuthGate
+  const {
+    session,
+    authEmail,
+    setAuthEmail,
+    authPassword,
+    setAuthPassword,
+    isSignUp,
+    setIsSignUp,
+    authLoading,
+    handleAuth,
+  } = useAuthSession();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showFlightPaths, setShowFlightPaths] = useState(false);
   const [activeTab, setActiveTab] = useState("Interactive Map");
@@ -473,59 +481,19 @@ export default function MapCanvas() {
     }
   };
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setAuthLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    setAuthLoading(true);
-    if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
-      if (error) alert(error.message);
-      else alert("Check your email for the login link!");
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
-      if (error) alert(error.message);
-    }
-    setAuthLoading(false);
-  };
-
   return (
     <div className="app-container">
-      {/* Auth Overlay */}
-      {authLoading ? (
-        <div style={{ position: "absolute", zIndex: 9999, width: "100vw", height: "100vh", background: "#0f172a" }} />
-      ) : !session ? (
-        <div style={{ position: "absolute", zIndex: 9999, width: "100vw", height: "100vh", background: "rgba(15, 23, 42, 0.8)", display: "flex", justifyContent: "center", alignItems: "center", color: "#fff", fontFamily: "sans-serif", backdropFilter: "blur(5px)" }}>
-          <div style={{ background: "rgba(255,255,255,0.1)", padding: "2rem", borderRadius: "12px", width: "300px", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.2)", boxShadow: "0 4px 30px rgba(0,0,0,0.1)" }}>
-            <h2 style={{ textAlign: "center", marginBottom: "1.5rem" }}>{isSignUp ? "Create Account" : "Login"}</h2>
-            <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <input type="email" placeholder="Email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} style={{ padding: "0.75rem", borderRadius: "6px", border: "none", background: "rgba(255,255,255,0.8)", color: "#000" }} />
-              <input type="password" placeholder="Password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} style={{ padding: "0.75rem", borderRadius: "6px", border: "none", background: "rgba(255,255,255,0.8)", color: "#000" }} />
-              <button type="submit" disabled={authLoading} style={{ background: "var(--accent)", color: "white", padding: "0.75rem", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: "bold" }}>
-                {authLoading ? "Loading..." : (isSignUp ? "Sign Up" : "Login")}
-              </button>
-            </form>
-            <div style={{ textAlign: "center", marginTop: "1rem", fontSize: "0.8rem" }}>
-              <button onClick={() => setIsSignUp(!isSignUp)} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", textDecoration: "underline" }}>
-                {isSignUp ? "Already have an account? Login" : "Need an account? Sign Up"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <AuthGate
+        authLoading={authLoading}
+        session={session}
+        isSignUp={isSignUp}
+        setIsSignUp={setIsSignUp}
+        authEmail={authEmail}
+        setAuthEmail={setAuthEmail}
+        authPassword={authPassword}
+        setAuthPassword={setAuthPassword}
+        handleAuth={handleAuth}
+      />
       {/* 1. Animated Pastel Gradient Loader Overlay */}
       <div className={`loader-overlay ${isLoaded ? "hidden" : ""}`}>
         <div className="loader-container">
