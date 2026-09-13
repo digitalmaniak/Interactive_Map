@@ -62,7 +62,12 @@ export default function MapCanvas() {
     isSignUp,
     setIsSignUp,
     authLoading,
+    authBusy,
+    authError,
+    magicLinkSent,
     handleAuth,
+    handleMagicLink,
+    handleGoogle,
   } = useAuthSession();
 
   // Journeys + flat pins (WorldMap) — useTravelData
@@ -568,6 +573,7 @@ export default function MapCanvas() {
     <div className="app-container">
       <AuthGate
         authLoading={authLoading}
+        authBusy={authBusy}
         session={session}
         isSignUp={isSignUp}
         setIsSignUp={setIsSignUp}
@@ -575,7 +581,11 @@ export default function MapCanvas() {
         setAuthEmail={setAuthEmail}
         authPassword={authPassword}
         setAuthPassword={setAuthPassword}
+        authError={authError}
+        magicLinkSent={magicLinkSent}
         handleAuth={handleAuth}
+        handleMagicLink={handleMagicLink}
+        handleGoogle={handleGoogle}
       />
       <MapLoader>
         {({ isLoaded, geoJsonData, statesData }) => (
