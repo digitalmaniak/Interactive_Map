@@ -51,9 +51,9 @@ export default function SharedJourneyPage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)",
+        background: "#F5F2EC",
         fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
-        color: "#111827",
+        color: "#1C1917",
         padding: "2rem 1rem 3rem",
       }}
     >
@@ -61,14 +61,14 @@ export default function SharedJourneyPage() {
         style={{
           maxWidth: "640px",
           margin: "0 auto",
-          background: "rgba(255,255,255,0.92)",
-          border: "1px solid rgba(15,23,42,0.08)",
+          background: "#FFFFFF",
+          border: "1px solid #E7E5E4",
           borderRadius: "16px",
-          boxShadow: "0 18px 50px rgba(15,23,42,0.08)",
+          boxShadow: "0 12px 36px rgba(28,25,23,0.06)",
           padding: "1.5rem",
         }}
       >
-        <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#64748b", marginBottom: "0.75rem" }}>
+        <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#78716C", marginBottom: "0.75rem" }}>
           Shared journey · Read only
         </div>
 
@@ -107,9 +107,9 @@ export default function SharedJourneyPage() {
                       fontWeight: 700,
                       letterSpacing: "0.04em",
                       textTransform: "uppercase",
-                      color: "#1d4ed8",
-                      background: "rgba(37,99,235,0.08)",
-                      border: "1px solid rgba(37,99,235,0.2)",
+                      color: "#C2410C",
+                      background: "rgba(226,96,63,0.08)",
+                      border: "1px solid rgba(226,96,63,0.22)",
                       borderRadius: "999px",
                       padding: "0.25rem 0.6rem",
                     }}
@@ -128,8 +128,8 @@ export default function SharedJourneyPage() {
                   style={{
                     padding: "0.9rem 1rem",
                     borderRadius: "10px",
-                    border: "1px solid rgba(15,23,42,0.08)",
-                    background: "rgba(248,250,252,0.9)",
+                    border: "1px solid #E7E5E4",
+                    background: "#FAFAF8",
                   }}
                 >
                   <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "#64748b" }}>
