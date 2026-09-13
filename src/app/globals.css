@@ -23,11 +23,11 @@
   --shadow-soft: 0 12px 36px rgba(28, 25, 23, 0.06);
   --shadow-panel: -8px 0 28px rgba(28, 25, 23, 0.08);
 
-  /* Map (pale blue ocean + warm land that still reads against it) */
+  /* Map (clearer pale blue ocean + warmer land for continent separation) */
   --canvas: var(--paper);
-  --ocean: #E8F1F8;
-  --land: #E4DFD4;
-  --land-hover: #D8D2C6;
+  --ocean: #D4E6F5;
+  --land: #E2D9CB;
+  --land-hover: #D6CDBE;
 
   /* Back-compat aliases */
   --bg-primary: var(--paper);
