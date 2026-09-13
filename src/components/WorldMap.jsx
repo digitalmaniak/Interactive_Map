@@ -51,6 +51,7 @@ export default function WorldMap({
   statesGeoJson,
   pins = [],
   activePinId = null,
+  focusJourneyId = null, // when set: emphasize that journey's pins, dim others, fit bounds
   showPaths = false,
   flyTo = null,
   onPinClick,
@@ -146,13 +147,33 @@ export default function WorldMap({
       .filter(Boolean);
   }, [projection, pins]);
 
-  // Screen-space positions under the current transform.
+  // Journey focus: emphasize matching pins; dim the rest (not clustered into journey).
+  const focusing = focusJourneyId != null && !String(focusJourneyId).startsWith("__");
+  const { projectedFocus, projectedDimmed } = useMemo(() => {
+    if (!focusing) {
+      return { projectedFocus: projectedPins, projectedDimmed: [] };
+    }
+    const focus = [];
+    const dimmed = [];
+    for (const pp of projectedPins) {
+      if (pp.pin.journey_id === focusJourneyId) focus.push(pp);
+      else dimmed.push(pp);
+    }
+    return { projectedFocus: focus, projectedDimmed: dimmed };
+  }, [projectedPins, focusing, focusJourneyId]);
+
+  // Screen-space positions under the current transform (journey / interactive set).
   const screenPins = useMemo(() => {
     const { k, x, y } = transform;
-    return projectedPins.map((pp) => ({ ...pp, sx: pp.bx * k + x, sy: pp.by * k + y }));
-  }, [projectedPins, transform]);
+    return projectedFocus.map((pp) => ({ ...pp, sx: pp.bx * k + x, sy: pp.by * k + y }));
+  }, [projectedFocus, transform]);
 
-  // Greedy proximity clustering in screen space.
+  const screenDimmed = useMemo(() => {
+    const { k, x, y } = transform;
+    return projectedDimmed.map((pp) => ({ ...pp, sx: pp.bx * k + x, sy: pp.by * k + y }));
+  }, [projectedDimmed, transform]);
+
+  // Greedy proximity clustering in screen space (focused pins only while drilling).
   const clusters = useMemo(() => {
     const out = [];
     for (const sp of screenPins) {
@@ -171,9 +192,10 @@ export default function WorldMap({
   }, [screenPins]);
 
   // Connecting path between pins, chronological, drawn in base coords.
+  // While drilled, path only among journey pins.
   const pathString = useMemo(() => {
-    if (!showPaths || projectedPins.length < 2) return null;
-    const sorted = [...projectedPins].sort(
+    if (!showPaths || projectedFocus.length < 2) return null;
+    const sorted = [...projectedFocus].sort(
       (a, b) =>
         (a.pin.start_date ? new Date(a.pin.start_date).getTime() : Infinity) -
         (b.pin.start_date ? new Date(b.pin.start_date).getTime() : Infinity)
@@ -187,7 +209,7 @@ export default function WorldMap({
       d += ` Q ${mx} ${my} ${b.bx} ${b.by}`;
     }
     return d;
-  }, [showPaths, projectedPins]);
+  }, [showPaths, projectedFocus]);
 
   // --- Zoom / pan helpers -------------------------------------------------
   const clamp = useCallback(
@@ -281,19 +303,54 @@ export default function WorldMap({
     return ll ? { lon: ll[0], lat: ll[1] } : null;
   };
 
-  // Zoom/fit the view to a cluster's pins, centered in the area left of the panel.
+  // Fit projected (base) pin coords into the visible map area left of the journals panel.
+  const fitToProjected = useCallback(
+    (items, duration = 700) => {
+      if (!items || items.length === 0 || size.w === 0) return;
+      const xs = items.map((it) => it.bx);
+      const ys = items.map((it) => it.by);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+      const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      const bw = Math.max(Math.max(...xs) - Math.min(...xs), 1);
+      const bh = Math.max(Math.max(...ys) - Math.min(...ys), 1);
+      const pad = 130;
+      const visW = Math.max(220, size.w - 360); // panel covers the right
+      const minK = items.length === 1 ? 4 : 2.5;
+      const k = Math.max(minK, Math.min(MAX_K, Math.min((visW - 2 * pad) / bw, (size.h - 2 * pad) / bh)));
+      animateTo({ k, x: visW / 2 - cx * k, y: size.h / 2 - cy * k }, duration);
+    },
+    [animateTo, size.w, size.h]
+  );
+
+  // Zoom/fit the view to a cluster's pins, centered in the area left of the journals panel.
   const zoomToCluster = (c) => {
-    const xs = c.items.map((it) => it.bx);
-    const ys = c.items.map((it) => it.by);
-    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    const bw = Math.max(Math.max(...xs) - Math.min(...xs), 1);
-    const bh = Math.max(Math.max(...ys) - Math.min(...ys), 1);
-    const pad = 130;
-    const visW = Math.max(220, size.w - 360); // panel covers the right
-    const k = Math.max(2.5, Math.min(MAX_K, Math.min((visW - 2 * pad) / bw, (size.h - 2 * pad) / bh)));
-    animateTo({ k, x: visW / 2 - cx * k, y: size.h / 2 - cy * k }, 600);
+    fitToProjected(c.items, 600);
   };
+
+  // Journey drill-in: fit to journey pins; back / clear → gentle world overview.
+  // Track last fitted focus key so we still fit if pins arrive after drill-in.
+  const focusFitRef = useRef({ key: null, fitted: false });
+  useEffect(() => {
+    if (!projection || size.w === 0) return;
+    const key = focusing ? String(focusJourneyId) : null;
+    const prev = focusFitRef.current;
+
+    if (key !== prev.key) {
+      focusFitRef.current = { key, fitted: false };
+      if (key == null && prev.key != null) {
+        // Leaving drill → gentle overview (all pins visible at world scale).
+        animateTo({ k: 1, x: 0, y: 0 }, 650);
+        focusFitRef.current = { key: null, fitted: true };
+        return;
+      }
+    }
+
+    if (key != null && !focusFitRef.current.fitted && projectedFocus.length > 0) {
+      fitToProjected(projectedFocus, 700);
+      focusFitRef.current = { key, fitted: true };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusJourneyId, focusing, projection, size.w, size.h, projectedFocus.length, fitToProjected, animateTo]);
 
   const handleBackgroundClick = (e, isLand, feature) => {
     if (movedRef.current) return; // ignore the click that ends a pan
@@ -415,6 +472,18 @@ export default function WorldMap({
 
           {/* Pins + clusters overlay (fixed pixel sizes) */}
           <g>
+            {/* Dimmed non-journey pins (v1: not interactive, no labels, not clustered into journey) */}
+            {screenDimmed.map((sp) => (
+              <g
+                key={`dim-${sp.pin.id}`}
+                transform={`translate(${sp.sx},${sp.sy})`}
+                opacity={0.3}
+                pointerEvents="none"
+              >
+                <circle r={6.5} fill="#fff" />
+                <circle r={5} fill="var(--accent)" />
+              </g>
+            ))}
             {clusters.map((c, i) => {
               if (c.items.length > 1) {
                 // Show the first (earliest) location of the group in the badge.

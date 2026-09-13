@@ -603,6 +603,7 @@ export default function MapCanvas() {
             statesGeoJson={statesData}
             pins={pins}
             activePinId={activePin?.id || null}
+            focusJourneyId={activeJourneyId}
             showPaths={showFlightPaths && !activePin}
             flyTo={flyTo}
             onPinClick={handlePinClick}
