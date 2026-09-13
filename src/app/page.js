@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 
-// Dynamically import the MapCanvas with SSR disabled to prevent WebGL/document references from breaking SSR.
+// Dynamically import MapCanvas with SSR disabled — client-only map DOM (no SSR document access).
 const MapCanvas = dynamic(() => import("../components/MapCanvas"), {
   ssr: false,
   loading: () => (

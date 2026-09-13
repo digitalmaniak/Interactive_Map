@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: "Spatial Location Ledger - Interactive Spatial Journal",
-  description: "A cyberpunk-styled interactive low-poly spatial mapping canvas and location ledger, powered by Next.js and Three.js.",
+  description: "An interactive spatial journal map for recording and exploring the places you've been.",
 };
 
 export default function RootLayout({ children }) {
