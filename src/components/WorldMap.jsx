@@ -359,11 +359,11 @@ export default function WorldMap({
               height={32}
               patternUnits="userSpaceOnUse"
             >
-              {/* Disconnected pluses (not continuous grid lines); bluish ink on pale blue ocean */}
+              {/* Disconnected pluses (not continuous grid lines); cool-stone ink on cool gray ocean */}
               <path
                 d="M16 13.25v5.5M13.25 16h5.5"
                 fill="none"
-                stroke="rgba(36,54,72,0.16)"
+                stroke="rgba(40,48,58,0.16)"
                 strokeWidth={0.85}
                 strokeLinecap="round"
               />
