@@ -65,6 +65,10 @@ export default function JournalsPanel({
   onSelectJourney,
   onBackFromJourney,
   onBackFromCluster,
+  onCreateJourney,
+  onUpdateJourney,
+  onSoftDeleteJourney,
+  onMovePlace,
 }) {
   return (
     <div className="glass-base" style={{
@@ -146,13 +150,18 @@ export default function JournalsPanel({
       ) : activeJourney ? (
         <JourneyPlacesList
           journey={activeJourney}
+          journeys={journeys}
           onSelectPin={onSelectPin}
           onBack={onBackFromJourney}
+          onMovePlace={onMovePlace}
         />
       ) : (
         <JourneyList
           journeys={journeys}
           onSelectJourney={onSelectJourney}
+          onCreateJourney={onCreateJourney}
+          onUpdateJourney={onUpdateJourney}
+          onSoftDeleteJourney={onSoftDeleteJourney}
         />
       )}
     </div>
