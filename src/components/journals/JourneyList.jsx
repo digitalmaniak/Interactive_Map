@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatJourneyDates } from "../../lib/journeys/format";
+import { journeyShareUrl } from "../../lib/journeys/share";
 
 const emptyForm = () => ({
   title: "",
@@ -9,6 +10,7 @@ const emptyForm = () => ({
   date_start: "",
   date_end: "",
   tags: "",
+  visibility: "private",
 });
 
 /**
@@ -22,6 +24,7 @@ export default function JourneyList({
   onCreateJourney,
   onUpdateJourney,
   onSoftDeleteJourney,
+  onSetVisibility,
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState(emptyForm());
@@ -29,6 +32,32 @@ export default function JourneyList({
   const [editForm, setEditForm] = useState(emptyForm());
   const [busy, setBusy] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+
+  const copyShareLink = async (journey, e) => {
+    e?.stopPropagation();
+    if (!journey?.share_token) return;
+    const url = journeyShareUrl(journey.share_token);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(journey.id);
+      setTimeout(() => setCopiedId((id) => (id === journey.id ? null : id)), 2000);
+    } catch (err) {
+      console.error(err);
+      window.prompt("Copy share link:", url);
+    }
+  };
+
+  const toggleVisibility = async (journey, nextVisibility, e) => {
+    e?.stopPropagation();
+    if (busy || !onSetVisibility) return;
+    setBusy(true);
+    try {
+      await onSetVisibility(journey, nextVisibility);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const startEdit = (journey, e) => {
     e.stopPropagation();
@@ -41,6 +70,7 @@ export default function JourneyList({
       date_start: journey.date_start || "",
       date_end: journey.date_end || "",
       tags: Array.isArray(journey.tags) ? journey.tags.join(", ") : "",
+      visibility: journey.visibility === "unlisted" ? "unlisted" : "private",
     });
   };
 
@@ -214,6 +244,26 @@ export default function JourneyList({
                 </div>
                 <label className="panel-label">Tags</label>
                 <input type="text" className="panel-input" placeholder="comma, separated" value={editForm.tags} onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })} />
+                <label className="panel-label">Visibility</label>
+                <select
+                  className="panel-input"
+                  value={editForm.visibility}
+                  onChange={(e) => setEditForm({ ...editForm, visibility: e.target.value })}
+                >
+                  <option value="private">Private</option>
+                  <option value="unlisted">Unlisted (share link)</option>
+                </select>
+                {editForm.visibility === "unlisted" && journey.share_token && (
+                  <button
+                    type="button"
+                    className="glass-pill icon-button"
+                    style={{ marginTop: "0.5rem", width: "100%", background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.25)", padding: "0.45rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "#1d4ed8" }}
+                    onClick={(e) => copyShareLink(journey, e)}
+                    disabled={busy}
+                  >
+                    {copiedId === journey.id ? "COPIED" : "COPY SHARE LINK"}
+                  </button>
+                )}
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
                   <button type="submit" className="glass-pill btn-green" style={{ flex: 1, display: "flex", justifyContent: "center" }} disabled={busy || !editForm.title.trim()}>SAVE</button>
                   <button type="button" className="glass-pill icon-button" style={{ flex: 1, background: "rgba(0,0,0,0.05)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "#374151" }} onClick={cancelEdit} disabled={busy}>CANCEL</button>
@@ -249,10 +299,11 @@ export default function JourneyList({
                   </div>
                   <div style={{ fontSize: "0.85rem", color: "#4b5563", lineHeight: 1.4 }}>
                     {placeCount} {placeCount === 1 ? "place" : "places"}
+                    {journey.visibility === "unlisted" ? " · Unlisted" : ""}
                   </div>
                 </div>
-                {!protectedJourney && (onUpdateJourney || onSoftDeleteJourney) && (
-                  <div style={{ display: "flex", gap: "0.25rem", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                {!protectedJourney && (onUpdateJourney || onSoftDeleteJourney || onSetVisibility) && (
+                  <div style={{ display: "flex", gap: "0.25rem", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }} onClick={(e) => e.stopPropagation()}>
                     {onUpdateJourney && (
                       <button
                         type="button"
@@ -262,6 +313,34 @@ export default function JourneyList({
                         disabled={busy}
                       >
                         Edit
+                      </button>
+                    )}
+                    {onSetVisibility && journey.visibility === "unlisted" && journey.share_token && (
+                      <button
+                        type="button"
+                        title="Copy unlisted share link"
+                        onClick={(e) => copyShareLink(journey, e)}
+                        style={{ background: "transparent", border: "1px solid rgba(37,99,235,0.3)", borderRadius: "6px", padding: "0.25rem 0.4rem", cursor: "pointer", color: "#1d4ed8", fontSize: "0.7rem", fontWeight: 700 }}
+                        disabled={busy}
+                      >
+                        {copiedId === journey.id ? "Copied" : "Copy link"}
+                      </button>
+                    )}
+                    {onSetVisibility && (
+                      <button
+                        type="button"
+                        title={journey.visibility === "unlisted" ? "Make private" : "Make unlisted and share"}
+                        onClick={(e) =>
+                          toggleVisibility(
+                            journey,
+                            journey.visibility === "unlisted" ? "private" : "unlisted",
+                            e
+                          )
+                        }
+                        style={{ background: "transparent", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "6px", padding: "0.25rem 0.4rem", cursor: "pointer", color: "#4b5563", fontSize: "0.7rem", fontWeight: 700 }}
+                        disabled={busy}
+                      >
+                        {journey.visibility === "unlisted" ? "Private" : "Share"}
                       </button>
                     )}
                     {onSoftDeleteJourney && (

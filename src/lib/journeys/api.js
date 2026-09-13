@@ -1,13 +1,13 @@
 /**
  * Journey read/write helpers for Harbor `journeys` table.
  * Owner-scoped via RLS; soft-deleted rows excluded on load.
- * No share-token / unlisted UI in this slice.
+ * Owner can flip visibility private↔unlisted; public read uses share.js + x-share-token.
  */
 import { supabase } from "../supabase/client";
 import { updatePin } from "../pins/api";
 
 const JOURNEY_SELECT =
-  "id, user_id, title, summary, date_start, date_end, visibility, tags, created_at, updated_at";
+  "id, user_id, title, summary, date_start, date_end, visibility, share_token, tags, created_at, updated_at";
 
 /** Select non-deleted journeys for the signed-in user (RLS). */
 export async function loadJourneys() {
@@ -49,7 +49,7 @@ export async function createJourney({ userId, title, summary, date_start, date_e
   return { data, error };
 }
 
-/** Update journey metadata (title, summary, dates, tags). */
+/** Update journey metadata (title, summary, dates, tags, visibility, share_token). */
 export async function updateJourney(id, fields) {
   if (!id) return { data: null, error: { message: "Journey id is required." } };
   const patch = {};
@@ -62,6 +62,17 @@ export async function updateJourney(id, fields) {
   if (fields.date_start !== undefined) patch.date_start = fields.date_start || null;
   if (fields.date_end !== undefined) patch.date_end = fields.date_end || null;
   if (fields.tags !== undefined) patch.tags = normalizeTags(fields.tags);
+  if (fields.visibility !== undefined) {
+    if (fields.visibility !== "private" && fields.visibility !== "unlisted") {
+      return { data: null, error: { message: "visibility must be private or unlisted." } };
+    }
+    patch.visibility = fields.visibility;
+  }
+  if (fields.share_token !== undefined) patch.share_token = fields.share_token;
+
+  if (Object.keys(patch).length === 0) {
+    return { data: null, error: { message: "No fields to update." } };
+  }
 
   const { data, error } = await supabase
     .from("journeys")
@@ -71,6 +82,29 @@ export async function updateJourney(id, fields) {
     .select(JOURNEY_SELECT)
     .single();
   return { data, error };
+}
+
+/**
+ * Flip journey visibility. When becoming unlisted, ensure share_token exists
+ * (Harbor column is usually already set via default gen_random_uuid()).
+ * Flipping to private stops public access; token may remain unused.
+ */
+export async function setJourneyVisibility(id, visibility, existingShareToken) {
+  if (!id) return { data: null, error: { message: "Journey id is required." } };
+  if (visibility !== "private" && visibility !== "unlisted") {
+    return { data: null, error: { message: "visibility must be private or unlisted." } };
+  }
+  const fields = { visibility };
+  if (visibility === "unlisted" && !existingShareToken) {
+    fields.share_token =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : null;
+    if (!fields.share_token) {
+      return { data: null, error: { message: "Could not generate share_token." } };
+    }
+  }
+  return updateJourney(id, fields);
 }
 
 /**

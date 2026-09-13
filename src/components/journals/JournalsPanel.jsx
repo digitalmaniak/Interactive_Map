@@ -68,6 +68,7 @@ export default function JournalsPanel({
   onCreateJourney,
   onUpdateJourney,
   onSoftDeleteJourney,
+  onSetVisibility,
   onMovePlace,
 }) {
   return (
@@ -154,6 +155,7 @@ export default function JournalsPanel({
           onSelectPin={onSelectPin}
           onBack={onBackFromJourney}
           onMovePlace={onMovePlace}
+          onSetVisibility={onSetVisibility}
         />
       ) : (
         <JourneyList
@@ -162,6 +164,7 @@ export default function JournalsPanel({
           onCreateJourney={onCreateJourney}
           onUpdateJourney={onUpdateJourney}
           onSoftDeleteJourney={onSoftDeleteJourney}
+          onSetVisibility={onSetVisibility}
         />
       )}
     </div>

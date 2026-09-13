@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { formatPinDate, sortPinsByStartDate } from "../../lib/pins/format";
 import { formatJourneyDates } from "../../lib/journeys/format";
+import { journeyShareUrl } from "../../lib/journeys/share";
 
 /**
  * Places (pins) inside a selected journey.
  * Selecting a place opens PinDetail; back returns to the journey list.
  * Supports moving a place to another journey.
+ * Owner can toggle unlisted visibility and copy the share URL.
  */
 export default function JourneyPlacesList({
   journey,
@@ -15,11 +17,15 @@ export default function JourneyPlacesList({
   onSelectPin,
   onBack,
   onMovePlace,
+  onSetVisibility,
 }) {
   const places = sortPinsByStartDate(journey?.places || []);
   const dates = formatJourneyDates(journey);
   const [movingPinId, setMovingPinId] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const isUnlisted = journey?.visibility === "unlisted";
+  const canShare = Boolean(onSetVisibility) && journey && !String(journey.id).startsWith("__") && journey.title !== "Imported";
 
   const moveTargets = (journeys || []).filter(
     (j) =>
@@ -55,7 +61,50 @@ export default function JourneyPlacesList({
       <p style={{ fontSize: "0.85rem", color: "#4b5563", margin: "0.25rem 0 0", flexShrink: 0 }}>
         {dates ? `${dates} · ` : ""}
         {places.length} {places.length === 1 ? "place" : "places"}
+        {isUnlisted ? " · Unlisted" : " · Private"}
       </p>
+      {canShare && (
+        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexShrink: 0, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="glass-pill icon-button"
+            style={{ background: isUnlisted ? "rgba(0,0,0,0.05)" : "rgba(37,99,235,0.08)", border: isUnlisted ? "1px solid #ccc" : "1px solid rgba(37,99,235,0.25)", padding: "0.4rem 0.75rem", fontSize: "0.7rem", fontWeight: 700, color: isUnlisted ? "#374151" : "#1d4ed8" }}
+            disabled={busy}
+            onClick={async () => {
+              if (busy) return;
+              setBusy(true);
+              try {
+                await onSetVisibility(journey, isUnlisted ? "private" : "unlisted");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {isUnlisted ? "MAKE PRIVATE" : "MAKE UNLISTED"}
+          </button>
+          {isUnlisted && journey.share_token && (
+            <button
+              type="button"
+              className="glass-pill icon-button"
+              style={{ background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.25)", padding: "0.4rem 0.75rem", fontSize: "0.7rem", fontWeight: 700, color: "#1d4ed8" }}
+              disabled={busy}
+              onClick={async () => {
+                const url = journeyShareUrl(journey.share_token);
+                try {
+                  await navigator.clipboard.writeText(url);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                } catch (err) {
+                  console.error(err);
+                  window.prompt("Copy share link:", url);
+                }
+              }}
+            >
+              {copied ? "COPIED" : "COPY LINK"}
+            </button>
+          )}
+        </div>
+      )}
       <div className="sidebar-scrollbar" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem", overflowY: "auto", paddingRight: "0.5rem" }}>
         {places.map((pin) => (
           <div
