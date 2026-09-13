@@ -41,7 +41,7 @@ const MAX_K = 32; // allow deep zoom (city-level)
 
 // Choropleth ramp: countries gain coral as their pin count rises (1 → faint,
 // 5+ → full accent). Index 0 = 1 pin.
-const PIN_FILLS = ["#F4CDC2", "#EDA992", "#E88E72", "#E4744F", "#E2603F"];
+const PIN_FILLS = ["#F5D0C8", "#EBB09F", "#E3917A", "#DB7A63", "#D87060"];
 const fillForCount = (n) => (n > 0 ? PIN_FILLS[Math.min(PIN_FILLS.length - 1, n - 1)] : "var(--land)");
 const CLUSTER_PX = 30; // proximity radius for clustering, in screen pixels
 const EASE = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -351,9 +351,33 @@ export default function WorldMap({
     >
       {projection && (
         <svg width={size.w} height={size.h} style={{ display: "block" }}>
+          {/* Ocean plus lattice — pans/zooms with Sphere (userSpaceOnUse + filled path in transform g) */}
+          <defs>
+            <pattern
+              id="ocean-plus-lattice"
+              width={32}
+              height={32}
+              patternUnits="userSpaceOnUse"
+            >
+              {/* Disconnected pluses (not continuous grid lines); hair-darker on warm paper ocean */}
+              <path
+                d="M16 13.75v4.5M13.75 16h4.5"
+                fill="none"
+                stroke="rgba(28,25,23,0.075)"
+                strokeWidth={0.6}
+                strokeLinecap="round"
+              />
+            </pattern>
+          </defs>
           <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
             {/* Sphere edge — scales/pans with the map so it never cuts across when zoomed */}
             <path d={pathGen({ type: "Sphere" })} fill="var(--ocean)" stroke="var(--hairline)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+            <path
+              d={pathGen({ type: "Sphere" })}
+              fill="url(#ocean-plus-lattice)"
+              stroke="none"
+              pointerEvents="none"
+            />
             {/* Countries */}
             {countryPaths.map((c) => {
               const isHover = c.key === hoveredId;

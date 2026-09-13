@@ -3,6 +3,7 @@
 /**
  * Session loading overlay + auth UI:
  * magic link, Google OAuth, and email/password (kept during transition).
+ * Atlas Editorial light surfaces — visual only; auth behavior unchanged.
  */
 export default function AuthGate({
   authLoading,
@@ -23,12 +24,12 @@ export default function AuthGate({
   if (authLoading) {
     return (
       <div
+        className="auth-gate"
         style={{
           position: "absolute",
           zIndex: 9999,
           width: "100vw",
           height: "100vh",
-          background: "#0f172a",
         }}
       />
     );
@@ -36,94 +37,122 @@ export default function AuthGate({
 
   if (!session) {
     const inputStyle = {
-      padding: "0.75rem",
-      borderRadius: "6px",
-      border: "none",
-      background: "rgba(255,255,255,0.8)",
-      color: "#000",
+      padding: "0.75rem 0.85rem",
+      borderRadius: "10px",
+      border: "1px solid var(--stone)",
+      background: "var(--paper-soft)",
+      color: "var(--ink)",
       width: "100%",
       boxSizing: "border-box",
+      fontFamily: "inherit",
+      fontSize: "0.9rem",
+      outline: "none",
     };
     const primaryBtn = {
       background: "var(--accent)",
-      color: "white",
-      padding: "0.75rem",
-      borderRadius: "6px",
-      border: "none",
-      cursor: authBusy ? "wait" : "pointer",
-      fontWeight: "bold",
-      width: "100%",
-      opacity: authBusy ? 0.7 : 1,
-    };
-    const secondaryBtn = {
-      background: "rgba(255,255,255,0.12)",
       color: "#fff",
       padding: "0.75rem",
-      borderRadius: "6px",
-      border: "1px solid rgba(255,255,255,0.25)",
+      borderRadius: "12px",
+      border: "none",
+      cursor: authBusy ? "wait" : "pointer",
+      fontWeight: 700,
+      fontSize: "0.875rem",
+      letterSpacing: "0.01em",
+      width: "100%",
+      opacity: authBusy ? 0.7 : 1,
+      boxShadow: "0 4px 14px rgba(216, 112, 96, 0.28)",
+      fontFamily: "inherit",
+    };
+    const secondaryBtn = {
+      background: "var(--surface)",
+      color: "var(--ink)",
+      padding: "0.75rem",
+      borderRadius: "12px",
+      border: "1px solid var(--stone)",
       cursor: authBusy ? "wait" : "pointer",
       fontWeight: 600,
+      fontSize: "0.875rem",
       width: "100%",
       opacity: authBusy ? 0.7 : 1,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       gap: "0.5rem",
+      fontFamily: "inherit",
     };
     const divider = {
       display: "flex",
       alignItems: "center",
       gap: "0.75rem",
-      margin: "0.25rem 0",
-      color: "rgba(255,255,255,0.55)",
+      margin: "0.15rem 0",
+      color: "var(--muted)",
       fontSize: "0.75rem",
     };
     const dividerLine = {
       flex: 1,
       height: 1,
-      background: "rgba(255,255,255,0.2)",
+      background: "var(--stone)",
     };
 
     return (
       <div
+        className="auth-gate"
         style={{
           position: "absolute",
           zIndex: 9999,
           width: "100vw",
           height: "100vh",
-          background: "rgba(15, 23, 42, 0.8)",
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          color: "#fff",
-          fontFamily: "sans-serif",
-          backdropFilter: "blur(5px)",
+          padding: "1rem",
         }}
       >
         <div
+          className="auth-card"
           style={{
-            background: "rgba(255,255,255,0.1)",
-            padding: "2rem",
-            borderRadius: "12px",
-            width: "340px",
+            padding: "2rem 1.75rem",
+            width: "360px",
             maxWidth: "92vw",
-            backdropFilter: "blur(10px)",
-            border: "1px solid rgba(255,255,255,0.2)",
-            boxShadow: "0 4px 30px rgba(0,0,0,0.1)",
             display: "flex",
             flexDirection: "column",
             gap: "0.85rem",
           }}
         >
-          <h2 style={{ textAlign: "center", marginBottom: "0.25rem" }}>
-            {isSignUp ? "Create Account" : "Sign in"}
-          </h2>
+          <div style={{ textAlign: "center", marginBottom: "0.15rem" }}>
+            <div
+              style={{
+                fontSize: "0.7rem",
+                fontWeight: 700,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                color: "var(--muted)",
+                marginBottom: "0.45rem",
+              }}
+            >
+              Atlas Editorial
+            </div>
+            <h2
+              style={{
+                textAlign: "center",
+                margin: 0,
+                fontSize: "1.5rem",
+                fontWeight: 700,
+                color: "var(--ink)",
+                letterSpacing: "-0.02em",
+                lineHeight: 1.25,
+              }}
+            >
+              {isSignUp ? "Create Account" : "Sign in"}
+            </h2>
+          </div>
           <p
             style={{
               textAlign: "center",
-              fontSize: "0.8rem",
-              color: "rgba(255,255,255,0.65)",
-              marginBottom: "0.25rem",
+              fontSize: "0.85rem",
+              color: "var(--muted)",
+              margin: "0 0 0.35rem",
+              lineHeight: 1.45,
             }}
           >
             Magic link, Google, or email &amp; password
@@ -197,10 +226,11 @@ export default function AuthGate({
             <p
               role="alert"
               style={{
-                color: "#fecaca",
+                color: "#B23A24",
                 fontSize: "0.8rem",
                 textAlign: "center",
                 margin: 0,
+                lineHeight: 1.4,
               }}
             >
               {authError}
@@ -210,10 +240,11 @@ export default function AuthGate({
           {magicLinkSent && !authError ? (
             <p
               style={{
-                color: "#bbf7d0",
+                color: "#3F6212",
                 fontSize: "0.8rem",
                 textAlign: "center",
                 margin: 0,
+                lineHeight: 1.4,
               }}
             >
               Check your email for the link to continue.
@@ -228,9 +259,11 @@ export default function AuthGate({
               style={{
                 background: "none",
                 border: "none",
-                color: "var(--accent)",
+                color: "var(--accent-deep)",
                 cursor: "pointer",
                 textDecoration: "underline",
+                fontFamily: "inherit",
+                fontSize: "0.8rem",
               }}
             >
               {isSignUp

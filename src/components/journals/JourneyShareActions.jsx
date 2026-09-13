@@ -54,41 +54,41 @@ export default function JourneyShareActions({
   const shareStyle = compact
     ? {
         background: "transparent",
-        border: "1px solid rgba(226,96,63,0.35)",
+        border: "1px solid var(--accent-border)",
         borderRadius: "6px",
         padding: "0.25rem 0.45rem",
         cursor: "pointer",
-        color: "#C2410C",
+        color: "var(--accent-deep)",
         fontSize: "0.7rem",
         fontWeight: 700,
       }
     : {
-        background: "rgba(226,96,63,0.08)",
-        border: "1px solid rgba(226,96,63,0.28)",
+        background: "var(--accent-tint)",
+        border: "1px solid var(--accent-border)",
         padding: "0.4rem 0.75rem",
         fontSize: "0.7rem",
         fontWeight: 700,
-        color: "#C2410C",
+        color: "var(--accent-deep)",
       };
 
   const stopStyle = compact
     ? {
         background: "transparent",
-        border: "1px solid rgba(0,0,0,0.1)",
+        border: "1px solid var(--stone)",
         borderRadius: "6px",
         padding: "0.25rem 0.45rem",
         cursor: "pointer",
-        color: "#57534E",
+        color: "var(--muted)",
         fontSize: "0.7rem",
         fontWeight: 700,
       }
     : {
-        background: "rgba(28,25,23,0.04)",
-        border: "1px solid #E7E5E4",
+        background: "var(--paper-soft)",
+        border: "1px solid var(--stone)",
         padding: "0.4rem 0.75rem",
         fontSize: "0.7rem",
         fontWeight: 700,
-        color: "#57534E",
+        color: "var(--muted)",
       };
 
   return (

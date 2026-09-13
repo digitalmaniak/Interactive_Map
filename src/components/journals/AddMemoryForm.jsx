@@ -22,7 +22,7 @@ export default function AddMemoryForm({
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <h2 style={{ fontSize: "1.25rem", margin: "0 0 1rem 0", fontWeight: 700, color: "#111827", flexShrink: 0 }}>New Memory Point</h2>
+      <h2 style={{ fontSize: "1.25rem", margin: "0 0 1rem 0", fontWeight: 700, color: "var(--ink)", flexShrink: 0 }}>New Memory Point</h2>
       <div className="sidebar-scrollbar" style={{ overflowY: "auto", paddingRight: "0.5rem", flexGrow: 1 }}>
         <label className="panel-label">Title</label>
         <input type="text" placeholder="Title (e.g. Skiing)" className="panel-input" value={newPinName} onChange={(e) => setNewPinName(e.target.value)} />
@@ -53,7 +53,7 @@ export default function AddMemoryForm({
       </div>
       <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", flexShrink: 0 }}>
         <button className="glass-pill btn-green" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={onAddPin}>ADD MEMORY</button>
-        <button className="glass-pill icon-button" style={{ flex: 1, background: "rgba(0,0,0,0.05)", border: "1px solid #ccc", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "#374151" }} onClick={onCancel}>CANCEL</button>
+        <button className="glass-pill icon-button" style={{ flex: 1, background: "var(--paper-soft)", border: "1px solid var(--stone)", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "var(--muted)" }} onClick={onCancel}>CANCEL</button>
       </div>
     </div>
   );

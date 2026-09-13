@@ -1,32 +1,47 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  /* Neutral grayscale palette — color = meaning; coral is the only accent */
-  --canvas: #F2F2F3;
-  --surface: #FCFCFD;
-  --ink: #1C1D20;
-  --muted: #8B8C90;
-  --hairline: #E2E2E5;
+  /* Atlas Editorial — light-first paper surfaces */
+  --paper: #F5F2EC;
+  --paper-soft: #FAFAF8;
+  --surface: #FFFFFF;
+  --ink: #1C1917;
+  --muted: #78716C;
+  --stone: #E7E5E4;
+  --stone-strong: #D6D3D1;
+  --hairline: #E7E5E4;
 
-  /* Map */
-  --ocean: #F2F2F3;
-  --land: #E4E4E7;
-  --land-hover: #D7D7DB;
-  --accent: #E2603F;
-  --accent-tint: #F7E0D9;
+  /* Accent — coral/terracotta (refined, not neon) */
+  --accent: #D87060;
+  --accent-deep: #C2410C;
+  --accent-tint: rgba(216, 112, 96, 0.10);
+  --accent-border: rgba(216, 112, 96, 0.28);
+
+  /* Radius + quiet elevation */
+  --radius-card: 12px;
+  --radius-panel: 16px;
+  --shadow-soft: 0 12px 36px rgba(28, 25, 23, 0.06);
+  --shadow-panel: -8px 0 28px rgba(28, 25, 23, 0.08);
+
+  /* Map (soft land fills) */
+  --canvas: var(--paper);
+  --ocean: #F5F2EC;
+  --land: #E8E4DC;
+  --land-hover: #DDD8CE;
 
   /* Back-compat aliases */
-  --bg-primary: #F2F2F3;
-  --bg-secondary: #E9E9EC;
-  --text-main: #1C1D20;
-  --text-muted: #8B8C90;
-  --accent-primary: #E2603F;
-  --accent-sky: #E2603F;
-  --accent-rose: #E2603F;
+  --bg-primary: var(--paper);
+  --bg-secondary: var(--paper-soft);
+  --text-main: var(--ink);
+  --text-muted: var(--muted);
+  --accent-primary: var(--accent);
+  --accent-sky: var(--accent);
+  --accent-rose: var(--accent);
 
-  --panel-bg: rgba(252, 252, 253, 0.72);
-  --panel-border: rgba(0, 0, 0, 0.07);
-  --panel-border-hover: rgba(226, 96, 63, 0.30);
+  /* Panels: solid/soft opaque — not heavy glass */
+  --panel-bg: var(--paper-soft);
+  --panel-border: var(--stone);
+  --panel-border-hover: var(--accent-border);
 
   --font-google-sans: 'Inter', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
@@ -82,13 +97,13 @@ html, body {
   z-index: 0;
 }
 
-/* Glassmorphism base utilities */
+/* Quiet chrome — soft paper surface (glass only when explicitly needed) */
 .glass-base {
-  background: rgba(252, 252, 253, 0.72);
-  backdrop-filter: blur(16px) saturate(110%);
-  -webkit-backdrop-filter: blur(16px) saturate(110%);
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  box-shadow: 0 10px 34px rgba(20, 20, 22, 0.08);
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--stone);
+  box-shadow: var(--shadow-soft);
   color: var(--ink);
 }
 
@@ -149,7 +164,7 @@ html, body {
 .hamburger-icon span {
   display: block;
   height: 3px;
-  background: #0f172a;
+  background: var(--ink);
   border-radius: 3px;
 }
 
@@ -374,7 +389,7 @@ html, body {
   background: var(--accent);
   color: #fff;
   border: none;
-  box-shadow: 0 4px 14px rgba(226, 96, 63, 0.28);
+  box-shadow: 0 4px 14px rgba(216, 112, 96, 0.28);
   cursor: pointer;
   width: 100%;
   justify-content: center;
@@ -386,7 +401,7 @@ html, body {
 .btn-green:hover {
   filter: brightness(1.04);
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(226, 96, 63, 0.36);
+  box-shadow: 0 6px 18px rgba(216, 112, 96, 0.36);
 }
 .btn-green:active {
   transform: translateY(1px);
@@ -526,18 +541,18 @@ html, body {
   margin-top: 1.25rem;
   width: 100%;
   text-align: center;
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.15);
+  box-shadow: 0 4px 14px rgba(216, 112, 96, 0.22);
 }
 
 .cyber-btn:hover {
-  background: #4338ca; /* darker indigo */
-  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.25);
+  background: var(--accent-deep);
+  box-shadow: 0 6px 18px rgba(216, 112, 96, 0.3);
   transform: translateY(-1px);
 }
 
 .cyber-btn:active {
   transform: translateY(1px);
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+  box-shadow: 0 2px 8px rgba(216, 112, 96, 0.18);
 }
 
 .pin-input, .pin-textarea {
@@ -568,26 +583,27 @@ html, body {
   min-height: 60px;
 }
 
-/* Light-theme inputs for the unified Travel Journals side panel */
+/* Editorial inputs for Travel Journals / Auth / Share */
 .panel-input, .panel-textarea {
   width: 100%;
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  border-radius: 6px;
-  padding: 0.5rem 0.6rem;
-  color: #111827;
+  background: var(--paper-soft);
+  border: 1px solid var(--stone);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  color: var(--ink);
   font-family: inherit;
   font-size: 0.85rem;
   margin-bottom: 0.75rem;
   outline: none;
-  transition: all 0.2s;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
 }
 .panel-input::placeholder, .panel-textarea::placeholder {
-  color: #9ca3af;
+  color: #A8A29E;
 }
 .panel-input:focus, .panel-textarea:focus {
-  background: #fff;
-  border-color: #3b82f6;
+  background: var(--surface);
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-tint);
 }
 .panel-textarea {
   resize: vertical;
@@ -597,10 +613,57 @@ html, body {
   display: block;
   font-size: 0.7rem;
   font-weight: 600;
-  color: #64748b;
-  margin-bottom: 0.2rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.04em;
+}
+
+/* Atlas Editorial shared surfaces */
+.journals-panel {
+  background: var(--paper-soft);
+  border-left: 1px solid var(--stone);
+  box-shadow: var(--shadow-panel);
+  color: var(--ink);
+}
+.editorial-card {
+  background: var(--surface);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-card);
+  box-shadow: none;
+}
+.editorial-chip {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+}
+.auth-gate {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-google-sans);
+}
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-soft);
+}
+.share-page {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-google-sans);
+}
+.share-card {
+  background: var(--surface);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-soft);
 }
 
 /* Zoom-revealed pin labels (leader line + soft white box) */
