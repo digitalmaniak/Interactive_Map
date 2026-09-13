@@ -73,7 +73,7 @@ export default function JournalsPanel({
   onMovePlace,
 }) {
   return (
-    <div className="glass-base" style={{
+    <div className="journals-panel" style={{
       position: "absolute",
       top: "0px",
       right: "0px",
@@ -81,19 +81,11 @@ export default function JournalsPanel({
       bottom: "0px",
       display: "flex",
       flexDirection: "column",
-      padding: "1rem",
+      padding: "1.15rem 1rem",
       zIndex: 100,
       overflow: "hidden",
       gap: "1rem",
-      backdropFilter: "none",
-      WebkitBackdropFilter: "none",
       borderRadius: "0px",
-      borderRight: "none",
-      borderBottom: "none",
-      borderTop: "none",
-      borderLeft: "1px solid #E7E5E4",
-      background: "#FAFAF8",
-      boxShadow: "-8px 0 28px rgba(28,25,23,0.08)",
       transform: activeTab === "Travel Journals" ? "translateX(0)" : "translateX(100%)",
       transition: "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
       pointerEvents: activeTab === "Travel Journals" ? "auto" : "none"
