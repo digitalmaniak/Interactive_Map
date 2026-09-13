@@ -3,6 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase/client";
 import { formatPinDate, sortPinsByStartDate } from "../lib/pins/format";
+import {
+  loadPins as fetchPinsFromApi,
+  addPin as insertPin,
+  updatePin as updatePinRow,
+  removePin as deletePinRow,
+  addLog as insertPinLog,
+  addLogs as insertPinLogs,
+  updateLog as updatePinLogRow,
+  removeLog as deletePinLogRow,
+} from "../lib/pins/api";
 import WorldMap from "./WorldMap";
 
 export default function MapCanvas() {
@@ -189,15 +199,11 @@ export default function MapCanvas() {
   useEffect(() => {
     if (!session) return;
     const loadPins = async () => {
-      const { data, error } = await supabase.from('pins').select('*, pin_logs(*)');
+      const { data, error } = await fetchPinsFromApi();
       if (error) {
         console.error("Failed to load pins from Supabase", error);
       } else if (data) {
-        const mappedPins = data.map(pin => ({
-          ...pin,
-          logs: pin.pin_logs || []
-        }));
-        setPins(mappedPins);
+        setPins(data);
       }
     };
     loadPins();
@@ -222,7 +228,7 @@ export default function MapCanvas() {
     }
 
     try {
-      const { data: insertedPin, error: pinError } = await supabase.from('pins').insert({
+      const { data: insertedPin, error: pinError } = await insertPin({
         user_id: userData.user.id,
         title: newPinName,
         location_name: newPinCity,
@@ -233,11 +239,11 @@ export default function MapCanvas() {
         trip_type: "Unknown",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }).select().single();
+      });
 
       if (pinError) throw pinError;
 
-      const { data: insertedLog, error: logError } = await supabase.from('pin_logs').insert({
+      const { data: insertedLog, error: logError } = await insertPinLog({
         pin_id: insertedPin.id,
         log_date: newPinStartDate,
         title: "Initial Entry",
@@ -245,7 +251,7 @@ export default function MapCanvas() {
         category: "Experience",
         media_urls: [],
         created_at: new Date().toISOString()
-      }).select().single();
+      });
 
       if (logError) throw logError;
 
@@ -269,7 +275,7 @@ export default function MapCanvas() {
   const handleAddLog = async () => {
     if (!activePin || !newLogTitle || !newLogContent) return;
     try {
-      const { data: insertedLog, error } = await supabase.from('pin_logs').insert({
+      const { data: insertedLog, error } = await insertPinLog({
         pin_id: activePin.id,
         log_date: new Date().toISOString().split("T")[0],
         title: newLogTitle,
@@ -277,7 +283,7 @@ export default function MapCanvas() {
         category: newLogCategory,
         media_urls: [],
         created_at: new Date().toISOString()
-      }).select().single();
+      });
 
       if (error) throw error;
       
@@ -299,7 +305,7 @@ export default function MapCanvas() {
     if (!activePin) return;
 
     try {
-      const { error } = await supabase.from('pins').delete().eq('id', activePin.id);
+      const { error } = await deletePinRow(activePin.id);
       if (error) throw error;
 
       // Remove from state
@@ -344,7 +350,7 @@ export default function MapCanvas() {
       return;
     }
     try {
-      const { data: updatedPin, error } = await supabase.from('pins').update({
+      const { data: updatedPin, error } = await updatePinRow(activePin.id, {
         title: editPin.title,
         location_name: editPin.location_name,
         start_date: editPin.start_date || null,
@@ -352,7 +358,7 @@ export default function MapCanvas() {
         latitude: lat,
         longitude: lon,
         updated_at: new Date().toISOString(),
-      }).eq('id', activePin.id).select().single();
+      });
 
       if (error) throw error;
 
@@ -382,12 +388,12 @@ export default function MapCanvas() {
       return;
     }
     try {
-      const { data: updatedLog, error } = await supabase.from('pin_logs').update({
+      const { data: updatedLog, error } = await updatePinLogRow(editingLogId, {
         title: editLog.title,
         content: editLog.content,
         category: editLog.category,
         log_date: editLog.log_date || null,
-      }).eq('id', editingLogId).select().single();
+      });
 
       if (error) throw error;
 
@@ -403,7 +409,7 @@ export default function MapCanvas() {
   const handleDeleteLog = async (logId) => {
     if (!activePin) return;
     try {
-      const { error } = await supabase.from('pin_logs').delete().eq('id', logId);
+      const { error } = await deletePinLogRow(logId);
       if (error) throw error;
 
       const updatedLogs = (activePin.logs || []).filter((l) => l.id !== logId);
@@ -428,7 +434,7 @@ export default function MapCanvas() {
       if (!userData.user) return;
 
       for (const pin of localPins) {
-        const { data: insertedPin, error: pinError } = await supabase.from('pins').insert({
+        const { data: insertedPin, error: pinError } = await insertPin({
           user_id: userData.user.id,
           title: pin.title,
           location_name: pin.location_name,
@@ -439,7 +445,7 @@ export default function MapCanvas() {
           trip_type: pin.trip_type,
           created_at: pin.created_at || new Date().toISOString(),
           updated_at: pin.updated_at || new Date().toISOString()
-        }).select().single();
+        });
 
         if (pinError) { console.error(pinError); continue; }
 
@@ -453,13 +459,13 @@ export default function MapCanvas() {
             media_urls: log.media_urls || [],
             created_at: log.created_at || new Date().toISOString()
           }));
-          await supabase.from('pin_logs').insert(logsToInsert);
+          await insertPinLogs(logsToInsert);
         }
       }
       alert("Migration complete! Refreshing map data...");
-      const { data, error } = await supabase.from('pins').select('*, pin_logs(*)');
+      const { data, error } = await fetchPinsFromApi();
       if (!error && data) {
-        setPins(data.map(p => ({ ...p, logs: p.pin_logs || [] })));
+        setPins(data);
       }
     } catch (e) {
       console.error(e);
