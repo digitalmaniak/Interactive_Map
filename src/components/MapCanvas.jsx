@@ -7,7 +7,6 @@ import {
   updatePin as updatePinRow,
   removePin as deletePinRow,
   addLog as insertPinLog,
-  addLogs as insertPinLogs,
   updateLog as updatePinLogRow,
   removeLog as deletePinLogRow,
 } from "../lib/pins/api";
@@ -76,10 +75,10 @@ export default function MapCanvas() {
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showFlightPaths, setShowFlightPaths] = useState(false);
-  const [activeTab, setActiveTab] = useState("Interactive Map");
+  const [activeTab, setActiveTab] = useState("Map");
 
   // Interactive HUD States
-  const [hoveredCountry, setHoveredCountry] = useState("Hover over map");
+  const [hoveredCountry, setHoveredCountry] = useState(null);
   const [clickedCoords, setClickedCoords] = useState({ lat: 0, lon: 0 });
   const [activePin, setActivePin] = useState(null);
   const [isAddingEntry, setIsAddingEntry] = useState(false);
@@ -116,9 +115,9 @@ export default function MapCanvas() {
     activeTabRef.current = activeTab;
   }, [activeTab]);
 
-  // Close the Travel Journals panel and reset the nav to Interactive Map
+  // Close the Journals panel and reset the nav to Map
   const closeJournalPanel = () => {
-    setActiveTab("Interactive Map");
+    setActiveTab("Map");
     setActivePin(null);
     setClusterPins(null);
     setActiveJourneyId(null);
@@ -153,7 +152,7 @@ export default function MapCanvas() {
     setActivePin(pin);
     setClusterPins(null);
     setActiveJourneyId(resolveJourneyIdForPin(pin));
-    setActiveTab("Travel Journals");
+    setActiveTab("Journals");
     setIsAddingLog(false);
     setIsAddingEntry(false);
     setIsConfirmingDelete(false);
@@ -167,25 +166,25 @@ export default function MapCanvas() {
     setIsAddingEntry(false);
     setIsAddingLog(false);
     setIsConfirmingDelete(false);
-    setActiveTab("Travel Journals");
+    setActiveTab("Journals");
   };
 
   // Clicking the map closes the panel when open; clicking land (when closed)
   // starts a new memory at that spot; clicking open ocean does nothing.
   const handleMapClick = ({ lat, lon, isLand }) => {
-    if (activeTab === "Travel Journals") {
+    if (activeTab === "Journals") {
       closeJournalPanel();
       return;
     }
     if (isLand) {
       setClickedCoords({ lat: parseFloat(lat.toFixed(4)), lon: parseFloat(lon.toFixed(4)) });
-      setActiveTab("Travel Journals");
+      setActiveTab("Journals");
       setIsAddingEntry(true);
     }
   };
 
   const handleHoverRegion = (name) => {
-    setHoveredCountry(name || "Hover over map");
+    setHoveredCountry(name || null);
   };
 
   // Reset inline edit modes whenever the active pin changes
@@ -524,56 +523,6 @@ export default function MapCanvas() {
     }
   };
 
-  const handleMigrateData = async () => {
-
-    try {
-      const res = await fetch('/api/pins');
-      const localPins = await res.json();
-      if (!localPins || localPins.length === 0) {
-        alert("No local pins found to migrate!");
-        return;
-      }
-      
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
-
-      for (const pin of localPins) {
-        const { data: insertedPin, error: pinError } = await insertPin({
-          user_id: userData.user.id,
-          title: pin.title,
-          location_name: pin.location_name,
-          latitude: pin.latitude,
-          longitude: pin.longitude,
-          start_date: pin.start_date,
-          end_date: pin.end_date,
-          trip_type: pin.trip_type,
-          created_at: pin.created_at || new Date().toISOString(),
-          updated_at: pin.updated_at || new Date().toISOString()
-        });
-
-        if (pinError) { console.error(pinError); continue; }
-
-        if (pin.logs && pin.logs.length > 0) {
-          const logsToInsert = pin.logs.map(log => ({
-            pin_id: insertedPin.id,
-            log_date: log.log_date,
-            title: log.title,
-            content: log.content,
-            category: log.category,
-            media_urls: log.media_urls || [],
-            created_at: log.created_at || new Date().toISOString()
-          }));
-          await insertPinLogs(logsToInsert);
-        }
-      }
-      alert("Migration complete! Refreshing map data...");
-      await reloadTravelData();
-    } catch (e) {
-      console.error(e);
-      alert("Migration failed.");
-    }
-  };
-
   return (
     <div className="app-container">
       <AuthGate
@@ -618,21 +567,19 @@ export default function MapCanvas() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         hoveredCountry={hoveredCountry}
-        pinsLength={pins.length}
         showProfileMenu={showProfileMenu}
         setShowProfileMenu={setShowProfileMenu}
         showFlightPaths={showFlightPaths}
         setShowFlightPaths={setShowFlightPaths}
         sessionEmail={session?.user?.email}
         onSignOut={() => supabase.auth.signOut()}
-        onMigrateData={handleMigrateData}
         onAddEntry={() => {
           setClickedCoords({ lat: 40.7128, lon: -74.0060 });
           setActivePin(null);
-          setActiveTab("Travel Journals");
+          setActiveTab("Journals");
           setIsAddingEntry(true);
         }}
-        onOpenJournalsTab={() => { setClusterPins(null); setActivePin(null); setActiveJourneyId(null); setActiveTab("Travel Journals"); }}
+        onOpenJournalsTab={() => { setClusterPins(null); setActivePin(null); setActiveJourneyId(null); setActiveTab("Journals"); }}
       >
         {session && (
           <JournalsPanel

@@ -86,9 +86,9 @@ export default function JournalsPanel({
       overflow: "hidden",
       gap: "1rem",
       borderRadius: "0px",
-      transform: activeTab === "Travel Journals" ? "translateX(0)" : "translateX(100%)",
+      transform: activeTab === "Journals" ? "translateX(0)" : "translateX(100%)",
       transition: "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-      pointerEvents: activeTab === "Travel Journals" ? "auto" : "none"
+      pointerEvents: activeTab === "Journals" ? "auto" : "none"
     }}>
       {isAddingEntry ? (
         <AddMemoryForm
