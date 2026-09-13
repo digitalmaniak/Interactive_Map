@@ -412,16 +412,16 @@ export default function WorldMap({
           <defs>
             <pattern
               id="ocean-plus-lattice"
-              width={32}
-              height={32}
+              width={52}
+              height={52}
               patternUnits="userSpaceOnUse"
             >
               {/* Disconnected pluses (not continuous grid lines); cool-stone ink on cool gray ocean */}
               <path
-                d="M16 13.25v5.5M13.25 16h5.5"
+                d="M26 23.875v4.25M23.875 26h4.25"
                 fill="none"
-                stroke="rgba(40,48,58,0.16)"
-                strokeWidth={0.85}
+                stroke="rgba(40,48,58,0.14)"
+                strokeWidth={0.55}
                 strokeLinecap="round"
               />
             </pattern>
