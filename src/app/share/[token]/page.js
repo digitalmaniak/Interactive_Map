@@ -53,8 +53,10 @@ export default function SharedJourneyPage() {
       className="share-page"
       style={{
         minHeight: "100vh",
+        height: "auto",
         padding: "2rem 1rem 3rem",
-        overflow: "auto",
+        overflowX: "hidden",
+        overflowY: "auto",
       }}
     >
       <div

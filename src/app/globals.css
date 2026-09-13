@@ -23,11 +23,11 @@
   --shadow-soft: 0 12px 36px rgba(28, 25, 23, 0.06);
   --shadow-panel: -8px 0 28px rgba(28, 25, 23, 0.08);
 
-  /* Map (soft land fills) */
+  /* Map (pale blue ocean + warm land that still reads against it) */
   --canvas: var(--paper);
-  --ocean: #F5F2EC;
-  --land: #E8E4DC;
-  --land-hover: #DDD8CE;
+  --ocean: #E8F1F8;
+  --land: #E4DFD4;
+  --land-hover: #D8D2C6;
 
   /* Back-compat aliases */
   --bg-primary: var(--paper);
@@ -58,9 +58,27 @@ html, body {
   background-color: var(--bg-primary);
   color: var(--text-main);
   font-family: var(--font-google-sans);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Interactive map stays viewport-locked so the globe does not document-scroll */
+html:has(.app-container),
+body:has(.app-container) {
+  overflow: hidden;
+  height: 100%;
+}
+
+/* Share page: document/page scrolls so a long places list is reachable */
+html:has(.share-page),
+body:has(.share-page) {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: var(--ocean);
 }
 
 /* Background grid overlay - extremely faint, organic layout grid */
@@ -655,9 +673,13 @@ html, body {
   box-shadow: var(--shadow-soft);
 }
 .share-page {
-  background: var(--paper);
+  background: var(--ocean);
   color: var(--ink);
   font-family: var(--font-google-sans);
+  min-height: 100vh;
+  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .share-card {
   background: var(--surface);
