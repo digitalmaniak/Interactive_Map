@@ -11,6 +11,12 @@ import {
   updateLog as updatePinLogRow,
   removeLog as deletePinLogRow,
 } from "../lib/pins/api";
+import {
+  createJourney as createJourneyRow,
+  updateJourney as updateJourneyRow,
+  softDeleteJourney as softDeleteJourneyRow,
+  movePinToJourney,
+} from "../lib/journeys/api";
 import { useAuthSession } from "../hooks/useAuthSession";
 import { useTravelData } from "../hooks/useTravelData";
 import AuthGate from "./shell/AuthGate";
@@ -199,7 +205,9 @@ export default function MapCanvas() {
     }
 
     try {
-      const { data: insertedPin, error: pinError } = await insertPin({
+      // If drilled into a real journey, attach the new pin; otherwise omit
+      // journey_id and let the Harbor Imported default trigger assign it.
+      const pinFields = {
         user_id: userData.user.id,
         title: newPinName,
         location_name: newPinCity,
@@ -209,8 +217,13 @@ export default function MapCanvas() {
         end_date: newPinEndDate,
         trip_type: "Unknown",
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
+        updated_at: new Date().toISOString(),
+      };
+      if (activeJourneyId && !String(activeJourneyId).startsWith("__")) {
+        pinFields.journey_id = activeJourneyId;
+      }
+
+      const { data: insertedPin, error: pinError } = await insertPin(pinFields);
 
       if (pinError) throw pinError;
 
@@ -392,7 +405,89 @@ export default function MapCanvas() {
     }
   };
 
+  // --- Journey write path ---
+  const handleCreateJourney = async (form) => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
+      alert("You must be logged in to create a journey.");
+      return false;
+    }
+    try {
+      const { data, error } = await createJourneyRow({
+        userId: userData.user.id,
+        title: form.title,
+        summary: form.summary,
+        date_start: form.date_start || null,
+        date_end: form.date_end || null,
+        tags: form.tags,
+      });
+      if (error) throw error;
+      await reloadTravelData();
+      if (data?.id) setActiveJourneyId(data.id);
+      return true;
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Error creating journey.");
+      return false;
+    }
+  };
+
+  const handleUpdateJourney = async (id, form) => {
+    try {
+      const { error } = await updateJourneyRow(id, {
+        title: form.title,
+        summary: form.summary,
+        date_start: form.date_start || null,
+        date_end: form.date_end || null,
+        tags: form.tags,
+      });
+      if (error) throw error;
+      await reloadTravelData();
+      return true;
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Error updating journey.");
+      return false;
+    }
+  };
+
+  const handleSoftDeleteJourney = async (journey) => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
+      alert("You must be logged in to delete a journey.");
+      return false;
+    }
+    try {
+      const { error } = await softDeleteJourneyRow(journey, userData.user.id);
+      if (error) throw error;
+      if (activeJourneyId === journey.id) setActiveJourneyId(null);
+      await reloadTravelData();
+      return true;
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Error deleting journey.");
+      return false;
+    }
+  };
+
+  const handleMovePlace = async (pin, targetJourneyId) => {
+    try {
+      const { data, error } = await movePinToJourney(pin.id, targetJourneyId);
+      if (error) throw error;
+      const saved = { ...pin, ...data, logs: pin.logs || [] };
+      setPins((prev) => prev.map((p) => (p.id === pin.id ? saved : p)));
+      if (activePin?.id === pin.id) setActivePin(saved);
+      await reloadTravelData();
+      return true;
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Error moving place.");
+      return false;
+    }
+  };
+
   const handleMigrateData = async () => {
+
     try {
       const res = await fetch('/api/pins');
       const localPins = await res.json();
@@ -551,6 +646,10 @@ export default function MapCanvas() {
             }}
             onBackFromJourney={() => setActiveJourneyId(null)}
             onBackFromCluster={() => setClusterPins(null)}
+            onCreateJourney={handleCreateJourney}
+            onUpdateJourney={handleUpdateJourney}
+            onSoftDeleteJourney={handleSoftDeleteJourney}
+            onMovePlace={handleMovePlace}
           />
         )}
       </AppShell>

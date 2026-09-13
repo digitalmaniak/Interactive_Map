@@ -1,15 +1,42 @@
 "use client";
 
+import { useState } from "react";
 import { formatPinDate, sortPinsByStartDate } from "../../lib/pins/format";
 import { formatJourneyDates } from "../../lib/journeys/format";
 
 /**
  * Places (pins) inside a selected journey.
  * Selecting a place opens PinDetail; back returns to the journey list.
+ * Supports moving a place to another journey.
  */
-export default function JourneyPlacesList({ journey, onSelectPin, onBack }) {
+export default function JourneyPlacesList({
+  journey,
+  journeys,
+  onSelectPin,
+  onBack,
+  onMovePlace,
+}) {
   const places = sortPinsByStartDate(journey?.places || []);
   const dates = formatJourneyDates(journey);
+  const [movingPinId, setMovingPinId] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const moveTargets = (journeys || []).filter(
+    (j) =>
+      j.id !== journey?.id &&
+      !String(j.id).startsWith("__")
+  );
+
+  const handleMove = async (pin, targetJourneyId) => {
+    if (!onMovePlace || !targetJourneyId || busy) return;
+    setBusy(true);
+    try {
+      const ok = await onMovePlace(pin, targetJourneyId);
+      if (ok !== false) setMovingPinId(null);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <>
@@ -38,15 +65,59 @@ export default function JourneyPlacesList({ journey, onSelectPin, onBack }) {
             onMouseOver={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.05)"; }}
             onMouseOut={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.02)"; }}
           >
-            <div style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              {formatPinDate(pin.start_date) || "Undated"}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  {formatPinDate(pin.start_date) || "Undated"}
+                </div>
+                <div style={{ fontSize: "1.1rem", color: "#111827", fontWeight: 600, margin: "0.25rem 0" }}>
+                  {pin.location_name}
+                </div>
+                <div style={{ fontSize: "0.85rem", color: "#4b5563", lineHeight: 1.4 }}>
+                  {pin.title}
+                </div>
+              </div>
+              {onMovePlace && moveTargets.length > 0 && (
+                <button
+                  type="button"
+                  title="Move to another journey"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMovingPinId(movingPinId === pin.id ? null : pin.id);
+                  }}
+                  style={{ background: "transparent", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "6px", padding: "0.25rem 0.4rem", cursor: "pointer", color: "#4b5563", fontSize: "0.7rem", fontWeight: 700, flexShrink: 0 }}
+                  disabled={busy}
+                >
+                  Move
+                </button>
+              )}
             </div>
-            <div style={{ fontSize: "1.1rem", color: "#111827", fontWeight: 600, margin: "0.25rem 0" }}>
-              {pin.location_name}
-            </div>
-            <div style={{ fontSize: "0.85rem", color: "#4b5563", lineHeight: 1.4 }}>
-              {pin.title}
-            </div>
+            {movingPinId === pin.id && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{ marginTop: "0.65rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}
+              >
+                <label className="panel-label" style={{ marginBottom: 0 }}>Move to journey</label>
+                <select
+                  className="panel-input"
+                  defaultValue=""
+                  disabled={busy}
+                  onChange={(e) => {
+                    const targetId = e.target.value;
+                    if (targetId) handleMove(pin, targetId);
+                  }}
+                >
+                  <option value="" disabled>
+                    Select journey…
+                  </option>
+                  {moveTargets.map((j) => (
+                    <option key={j.id} value={j.id}>
+                      {j.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         ))}
         {places.length === 0 && (
