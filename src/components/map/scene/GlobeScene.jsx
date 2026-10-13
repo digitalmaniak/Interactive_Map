@@ -10,6 +10,9 @@ import { geoContains } from "d3-geo";
 import { GLOBE_R, rewindGeo, lonLatToVec3, vec3ToLonLat, buildLandTexture, buildCoastGeometry } from "./geometry";
 import { createGlobeMaterial, createAtmosphereMaterial, createBeamMaterial } from "./GlobeMaterial";
 import { tokens, tiers, bezier } from "./tokens";
+import { detectRenderTier } from "./renderTier";
+import FpsGuard from "./FpsGuard";
+import StaticGlobe from "./StaticGlobe";
 
 // v2 main view (DESIGN.md v2: mock A globe, mock C trip framing).
 // One perspective camera orbiting a sphere. Draw calls stay tiny for phones:
@@ -329,9 +332,46 @@ function BackdropSpin({ children, reducedMotion }) {
   const ref = useRef();
   useFrame((_, delta) => {
     if (!ref.current || reducedMotion) return;
-    ref.current.rotation.y += THREE.MathUtils.degToRad(3) * delta;
+    ref.current.rotation.y += THREE.MathUtils.degToRad(3) * Math.min(delta, 0.1);
   });
   return <group ref={ref} rotation={[0.35, -1.2, 0]}>{children}</group>;
+}
+
+const isTyping = () => {
+  const el = document.activeElement;
+  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+};
+
+// Drives a frameloop="demand" Canvas at a capped rate with manual invalidate.
+// Stops scheduling entirely while the tab is hidden or any input has focus.
+function BackdropDriver({ fps = 30, reducedMotion }) {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    if (reducedMotion) { invalidate(); return undefined; }
+    const step = 1000 / fps;
+    let raf = 0;
+    let last = 0;
+    const paused = () => document.hidden || isTyping();
+    const tick = (now) => {
+      raf = 0;
+      if (paused()) return;
+      if (now - last >= step - 2) { last = now; invalidate(); }
+      raf = requestAnimationFrame(tick);
+    };
+    const kick = () => { if (!raf && !paused()) raf = requestAnimationFrame(tick); };
+    const kickLater = () => setTimeout(kick, 0); // activeElement updates after focusout
+    document.addEventListener("visibilitychange", kick);
+    document.addEventListener("focusin", kick);
+    document.addEventListener("focusout", kickLater);
+    kick();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      document.removeEventListener("visibilitychange", kick);
+      document.removeEventListener("focusin", kick);
+      document.removeEventListener("focusout", kickLater);
+    };
+  }, [fps, reducedMotion, invalidate]);
+  return null;
 }
 
 const fmtCoord = (lat, lon) =>
@@ -440,27 +480,31 @@ export default function GlobeScene({
 
   const dropTier = useCallback(() => setTier((cur) => (cur === "desktop" ? "phoneHigh" : "phoneLow")), []);
 
+  // Lowest tier: no WebGL, software rendering, or sustained fps under ~20 shows a static image.
+  const [renderTier] = useState(() => detectRenderTier());
+  const [lowFps, setLowFps] = useState(false);
+  const onLowFps = useCallback(() => setLowFps(true), []);
+  if (renderTier === "static" || lowFps) return <StaticGlobe className={backdrop ? "v2-map-backdrop" : ""} />;
+
   if (backdrop) {
-    const bt = tier === "desktop" ? tiers.phoneHigh : t; // lighter than the main view
+    // Login backdrop: smallest tier, no bloom, demand frameloop driven at ~30fps by
+    // BackdropDriver, paused while an input has focus or the tab is hidden.
     return (
       <div className="v2-map v2-map-backdrop" aria-hidden="true">
         <Canvas
-          dpr={[1, Math.min(1.5, bt.dpr[1])]}
-          frameloop={reducedMotion ? "demand" : "always"}
+          dpr={[1, 1.25]}
+          frameloop="demand"
           gl={{ antialias: false, powerPreference: "low-power", toneMapping: THREE.ACESFilmicToneMapping }}
           camera={{ fov: 35, near: 0.01, far: 100, position: [0, 0, 3.0] }}
           style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
           events={() => ({ enabled: false, priority: 0 })}
         >
           <color attach="background" args={[C.bg]} />
+          <BackdropDriver fps={30} reducedMotion={reducedMotion} />
+          <FpsGuard minFps={20} onLow={onLowFps} />
           <BackdropSpin reducedMotion={reducedMotion}>
-            {geo && <Globe geo={geo} tier={tier === "desktop" ? "phoneHigh" : tier} tripView={tripView} onGlobeClick={() => {}} onGlobeHover={() => {}} />}
+            {geo && <Globe geo={geo} tier="phoneLow" tripView={tripView} onGlobeClick={() => {}} onGlobeHover={() => {}} />}
           </BackdropSpin>
-          {bt.bloom && tier !== "phoneLow" && (
-            <EffectComposer multisampling={0} resolutionScale={0.5}>
-              <Bloom mipmapBlur intensity={bt.bloom.intensity * 0.6} radius={bt.bloom.radius} luminanceThreshold={bt.bloom.threshold} luminanceSmoothing={bt.bloom.smoothing} />
-            </EffectComposer>
-          )}
         </Canvas>
       </div>
     );
@@ -476,6 +520,7 @@ export default function GlobeScene({
         aria-hidden="true"
       >
         <PerformanceMonitor onDecline={dropTier} />
+        <FpsGuard minFps={20} onLow={onLowFps} />
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} tripView={tripView} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
         <Stops
