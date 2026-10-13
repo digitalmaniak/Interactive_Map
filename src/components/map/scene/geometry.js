@@ -101,8 +101,12 @@ export function buildLandTexture(fc, width) {
 const polygonsOf = (g) => (g?.type === "Polygon" ? [g.coordinates] : g?.type === "MultiPolygon" ? g.coordinates : []);
 
 // All coastlines as one merged line segment buffer slightly above the surface (one draw call).
+// Border lines sit on the sphere (the land mesh has no relief displacement; relief is
+// shading only), split into great circle pieces no longer than 0.5 degrees.
+const MAX_SEG_RAD = THREE.MathUtils.degToRad(0.5);
 export function buildCoastGeometry(fc, r = GLOBE_R * 1.00004) {
   const segs = [];
+  let srcSegs = 0;
   const a = new THREE.Vector3(), b = new THREE.Vector3();
   for (const f of fc.features) {
     for (const poly of polygonsOf(f.geometry)) {
@@ -110,13 +114,28 @@ export function buildCoastGeometry(fc, r = GLOBE_R * 1.00004) {
         for (let i = 0; i < ring.length - 1; i++) {
           const [lon0, lat0] = ring[i], [lon1, lat1] = ring[i + 1];
           if (Math.abs(lon1 - lon0) > 180) continue; // skip antimeridian jumps
-          lonLatToVec3(lon0, lat0, r, a); lonLatToVec3(lon1, lat1, r, b);
-          segs.push(a.x, a.y, a.z, b.x, b.y, b.z);
+          lonLatToVec3(lon0, lat0, 1, a); lonLatToVec3(lon1, lat1, 1, b);
+          srcSegs++;
+          // Great circle subdivision so no chord is longer than MAX_SEG_RAD (long chords dip
+          // under the curved surface). Points are slerped on the unit sphere, then scaled to r.
+          const ang = a.angleTo(b);
+          const n = Math.max(1, Math.ceil(ang / MAX_SEG_RAD));
+          const sinA = Math.sin(ang);
+          let px = a.x * r, py = a.y * r, pz = a.z * r;
+          for (let k = 1; k <= n; k++) {
+            const t = k / n;
+            let wa = 1 - t, wb = t;
+            if (sinA > 1e-9) { wa = Math.sin((1 - t) * ang) / sinA; wb = Math.sin(t * ang) / sinA; }
+            const qx = (a.x * wa + b.x * wb) * r, qy = (a.y * wa + b.y * wb) * r, qz = (a.z * wa + b.z * wb) * r;
+            segs.push(px, py, pz, qx, qy, qz);
+            px = qx; py = qy; pz = qz;
+          }
         }
       }
     }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(segs, 3));
+  g.userData.segments = { source: srcSegs, subdivided: segs.length / 6 };
   return g;
 }
