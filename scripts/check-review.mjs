@@ -8,6 +8,8 @@ const items = [
   { kind: "undated_stop", journey_id: "j1", item_id: "p2", label: "Verbier", detail: null },
 ];
 const g = groupReviewItems(items, [{ id: "j1", title: "Euro Enduro" }, { id: "j2", title: "Imported" }]);
+const g2 = groupReviewItems([{ kind: "draft_leg", journey_id: "s1", item_id: "a" }, { kind: "draft_leg", journey_id: "s2", item_id: "b" }], [{ id: "s1", title: "Snowboarding", places: [{ start_date: "2019-02-14" }, { start_date: "2019-03-01" }] }, { id: "s2", title: "Snowboarding", places: [{ start_date: "2024-12-30" }] }]);
+ok(g2.map((x) => x.title).join("|") === "Snowboarding \u00b7 Feb 2019|Snowboarding \u00b7 Dec 2024", `same named trips get month and year: ${g2.map((x) => x.title)}`);
 ok(g.length === 2 && g[0].title === "Euro Enduro" && g[1].title === "Imported", "grouped by journey, sorted by title");
 ok(g[0].stops.length === 1 && g[0].legs.length === 1, "stops and legs split per journey");
 ok(validStopDates("", "") === "Pick a start date.", "start date required");
