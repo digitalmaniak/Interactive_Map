@@ -1,10 +1,12 @@
 "use client";
 
+import Crosshairs from "./Crosshairs";
+
 /**
  * Layout chrome extracted from MapCanvas: nav tabs (Map | Journals),
  * exploring badge (hover only), profile bubble (flight-path toggle + sign out),
  * ADD ENTRY button, and a children slot for JournalsPanel.
- * Presentational — no map/auth logic.
+ * Presentational. No map or auth logic.
  */
 export default function AppShell({
   activeTab,
@@ -20,91 +22,83 @@ export default function AppShell({
   onOpenJournalsTab,
   children,
 }) {
+  const handle = sessionEmail?.split("@")[0] || "wanderer";
   return (
     <div className="ui-layer">
-      {/* Top Center */}
+      <Crosshairs />
+
+      {/* Top left: wordmark */}
+      <div className="top-left-group">
+        <div className="v2-wordmark">Odyssey</div>
+      </div>
+
+      {/* Top center: nav */}
       <div className="top-center-group">
-        <div className="glass-base glass-pill nav-bar" style={{ position: "relative" }}>
-          <div
-            className="nav-active-pill"
-            style={{
-              position: "absolute",
-              top: "4px",
-              bottom: "4px",
-              width: "145px",
-              left: activeTab === "Map" ? "4px" : "152px",
-              background: "rgba(255, 255, 255, 0.15)",
-              borderRadius: "20px",
-              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-              zIndex: 0
-            }}
-          />
-          <div
-            className={`nav-item ${activeTab === "Map" ? "active" : ""}`}
+        <nav className="v2-nav" aria-label="Primary">
+          <button
+            type="button"
+            className={`v2-nav-item${activeTab === "Map" ? " active" : ""}`}
+            aria-current={activeTab === "Map" ? "page" : undefined}
             onClick={() => setActiveTab("Map")}
-            style={{ cursor: "pointer", position: "relative", zIndex: 1, background: "transparent" }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
             Map
-          </div>
-          <div
-            className={`nav-item ${activeTab === "Journals" ? "active" : ""}`}
+          </button>
+          <button
+            type="button"
+            className={`v2-nav-item${activeTab === "Journals" ? " active" : ""}`}
+            aria-current={activeTab === "Journals" ? "page" : undefined}
             onClick={onOpenJournalsTab}
-            style={{ cursor: "pointer", position: "relative", zIndex: 1, background: "transparent" }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
             Journals
-          </div>
-        </div>
+          </button>
+        </nav>
 
         {hoveredCountry ? (
-          <div className="glass-base glass-pill exploring-badge-pill">
-            <span className="label">EXPLORING REGION</span>
-            <span className="value">{hoveredCountry}</span>
+          <div className="v2-region" aria-live="polite">
+            <span className="v2-eyebrow">Region</span>
+            <span className="v2-region-name">{hoveredCountry}</span>
           </div>
         ) : null}
       </div>
 
-      {/* Journals Sidebar — composed by MapCanvas via children */}
+      {/* Journals sidebar, composed by MapCanvas via children */}
       {children}
 
-      {/* Bottom Left */}
+      {/* Bottom left: profile */}
       <div className="bottom-left-group">
         {showProfileMenu && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", width: "200px" }}>
+          <div className="v2-menu" role="menu">
             <button
-              className="glass-pill"
-              style={{fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.04em", width: "100%", background: showFlightPaths ? "rgba(226,96,63,0.12)" : "rgba(0,0,0,0.06)", border: showFlightPaths ? "1px solid rgba(226,96,63,0.35)" : "1px solid rgba(0,0,0,0.1)", color: showFlightPaths ? "var(--accent)" : "var(--ink)", cursor: "pointer", padding: "0.55rem", borderRadius: "8px"}}
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={showFlightPaths}
+              className={`v2-btn v2-btn-ghost v2-btn-sm${showFlightPaths ? " is-on" : ""}`}
               onClick={() => setShowFlightPaths(!showFlightPaths)}
             >
-              {showFlightPaths ? "HIDE FLIGHT PATHS" : "SHOW FLIGHT PATHS"}
+              {showFlightPaths ? "Hide flight paths" : "Show flight paths"}
             </button>
-            <button
-              className="glass-pill"
-              style={{fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.04em", width: "100%", background: "rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.1)", color: "var(--ink)", cursor: "pointer", padding: "0.55rem", borderRadius: "8px"}}
-              onClick={onSignOut}
-            >
-              SIGN OUT
+            <button type="button" role="menuitem" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={onSignOut}>
+              Sign out
             </button>
           </div>
         )}
-        <div
-          className="glass-base glass-pill profile-widget"
-          style={{ cursor: "pointer" }}
+        <button
+          type="button"
+          className="v2-profile"
+          aria-expanded={showProfileMenu}
+          aria-haspopup="menu"
           onClick={() => setShowProfileMenu(!showProfileMenu)}
         >
-          <div className="profile-avatar">👨‍🚀</div>
-          <div className="profile-info">
-            <span className="name">{sessionEmail?.split('@')[0].toUpperCase() || "WANDERER"}</span>
-          </div>
-        </div>
+          <span className="v2-profile-dot" aria-hidden="true" />
+          <span className="v2-mono-label">{handle}</span>
+        </button>
       </div>
 
-      {/* Bottom Right */}
+      {/* Bottom right: primary action */}
       <div className="bottom-right-group">
-        <button className="glass-base glass-pill icon-button btn-icon-right" onClick={onAddEntry}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-          <span style={{fontSize: "0.8rem", fontWeight: "700", color: "#0f172a"}}>ADD ENTRY</span>
+        <button type="button" className="v2-btn v2-btn-primary v2-add" onClick={onAddEntry}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+          Add entry
         </button>
       </div>
     </div>

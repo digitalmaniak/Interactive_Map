@@ -79,7 +79,7 @@ export default function MapLoader({ children }) {
       <div className={`loader-overlay ${isLoaded ? "hidden" : ""}`}>
         <div className="loader-container">
           <div>
-            <h2 className="loader-status-title">MY TRAVEL JOURNAL</h2>
+            <h2 className="loader-status-title">ODYSSEY</h2>
           </div>
 
           <div className="horizontal-loader-bar">

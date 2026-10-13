@@ -324,6 +324,16 @@ function LabelProjector({ items, labelEls, focusing, maxLabels }) {
   return null;
 }
 
+// Lightweight backdrop mode (login): slow, dim, non interactive spin. Still under reduced motion.
+function BackdropSpin({ children, reducedMotion }) {
+  const ref = useRef();
+  useFrame((_, delta) => {
+    if (!ref.current || reducedMotion) return;
+    ref.current.rotation.y += THREE.MathUtils.degToRad(3) * delta;
+  });
+  return <group ref={ref} rotation={[0.35, -1.2, 0]}>{children}</group>;
+}
+
 const fmtCoord = (lat, lon) =>
   `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? "E" : "W"}`;
 
@@ -336,6 +346,7 @@ export default function GlobeScene({
   onPinClick,
   onMapClick,
   onHoverRegion,
+  backdrop = false,
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const [tier, setTier] = useState(() => pickTier());
@@ -428,6 +439,32 @@ export default function GlobeScene({
   useEffect(() => () => hoverRafRef.current && cancelAnimationFrame(hoverRafRef.current), []);
 
   const dropTier = useCallback(() => setTier((cur) => (cur === "desktop" ? "phoneHigh" : "phoneLow")), []);
+
+  if (backdrop) {
+    const bt = tier === "desktop" ? tiers.phoneHigh : t; // lighter than the main view
+    return (
+      <div className="v2-map v2-map-backdrop" aria-hidden="true">
+        <Canvas
+          dpr={[1, Math.min(1.5, bt.dpr[1])]}
+          frameloop={reducedMotion ? "demand" : "always"}
+          gl={{ antialias: false, powerPreference: "low-power", toneMapping: THREE.ACESFilmicToneMapping }}
+          camera={{ fov: 35, near: 0.01, far: 100, position: [0, 0, 3.0] }}
+          style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+          events={() => ({ enabled: false, priority: 0 })}
+        >
+          <color attach="background" args={[C.bg]} />
+          <BackdropSpin reducedMotion={reducedMotion}>
+            {geo && <Globe geo={geo} tier={tier === "desktop" ? "phoneHigh" : tier} tripView={tripView} onGlobeClick={() => {}} onGlobeHover={() => {}} />}
+          </BackdropSpin>
+          {bt.bloom && tier !== "phoneLow" && (
+            <EffectComposer multisampling={0} resolutionScale={0.5}>
+              <Bloom mipmapBlur intensity={bt.bloom.intensity * 0.6} radius={bt.bloom.radius} luminanceThreshold={bt.bloom.threshold} luminanceSmoothing={bt.bloom.smoothing} />
+            </EffectComposer>
+          )}
+        </Canvas>
+      </div>
+    );
+  }
 
   return (
     <div className="v2-map">

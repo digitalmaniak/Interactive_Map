@@ -19,21 +19,21 @@ export default function LogEditor({
   onCancel,
 }) {
   return (
-    <div className="editorial-card" style={{ background: "var(--paper-soft)", padding: "0.75rem", marginBottom: "1rem" }}>
+    <div className="editorial-card" style={{ background: "var(--v2-surface-2)", padding: "0.75rem", marginBottom: "1rem" }}>
       <input type="text" placeholder={titlePlaceholder} className="panel-input" value={title} onChange={(e) => onTitleChange(e.target.value)} />
       <textarea placeholder="Experience details..." className="panel-textarea" value={content} onChange={(e) => onContentChange(e.target.value)} />
       {showDate ? (
         <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-          <select value={category} onChange={(e) => onCategoryChange(e.target.value)} style={{ flex: 1, padding: "0.4rem", borderRadius: "6px", border: "1px solid var(--stone)", fontSize: "0.8rem", color: "var(--ink)", background: "var(--surface)", borderRadius: "10px" }}>
+          <select value={category} onChange={(e) => onCategoryChange(e.target.value)} style={{ flex: 1, padding: "0.4rem", borderRadius: "2px", border: "1px solid var(--v2-hairline)", fontSize: "0.8rem", color: "var(--v2-text)", background: "var(--v2-surface)", borderRadius: "2px" }}>
             <option value="Experience">Experience</option>
             <option value="Restaurant">Restaurant</option>
             <option value="Lodging">Lodging</option>
             <option value="Transit">Transit</option>
           </select>
-          <input type="date" value={logDate || ""} onChange={(e) => onLogDateChange(e.target.value)} style={{ flex: 1, padding: "0.4rem", borderRadius: "6px", border: "1px solid var(--stone)", fontSize: "0.8rem", color: "var(--ink)", background: "var(--surface)", borderRadius: "10px" }} />
+          <input type="date" value={logDate || ""} onChange={(e) => onLogDateChange(e.target.value)} style={{ flex: 1, padding: "0.4rem", borderRadius: "2px", border: "1px solid var(--v2-hairline)", fontSize: "0.8rem", color: "var(--v2-text)", background: "var(--v2-surface)", borderRadius: "2px" }} />
         </div>
       ) : (
-        <select value={category} onChange={(e) => onCategoryChange(e.target.value)} style={{ width: "100%", padding: "0.4rem", borderRadius: "6px", border: "1px solid var(--stone)", marginBottom: "0.5rem", fontSize: "0.8rem", color: "var(--ink)", background: "var(--surface)", borderRadius: "10px" }}>
+        <select value={category} onChange={(e) => onCategoryChange(e.target.value)} style={{ width: "100%", padding: "0.4rem", borderRadius: "2px", border: "1px solid var(--v2-hairline)", marginBottom: "0.5rem", fontSize: "0.8rem", color: "var(--v2-text)", background: "var(--v2-surface)", borderRadius: "2px" }}>
           <option value="Experience">Experience</option>
           <option value="Restaurant">Restaurant</option>
           <option value="Lodging">Lodging</option>
@@ -42,7 +42,7 @@ export default function LogEditor({
       )}
       <div style={{ display: "flex", gap: "0.5rem" }}>
         <button className="glass-pill btn-green" style={{ flex: 1, padding: "0.4rem", fontSize: "0.7rem", display: "flex", justifyContent: "center" }} onClick={onSave}>SAVE LOG</button>
-        <button className="glass-pill icon-button" style={{ flex: 1, padding: "0.4rem", fontSize: "0.7rem", background: "var(--paper-soft)", color: "var(--muted)", border: "1px solid var(--stone)", display: "flex", justifyContent: "center" }} onClick={onCancel}>CANCEL</button>
+        <button className="glass-pill icon-button" style={{ flex: 1, padding: "0.4rem", fontSize: "0.7rem", background: "var(--v2-surface-2)", color: "var(--v2-text-dim)", border: "1px solid var(--v2-hairline)", display: "flex", justifyContent: "center" }} onClick={onCancel}>CANCEL</button>
       </div>
     </div>
   );

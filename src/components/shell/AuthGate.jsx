@@ -3,8 +3,11 @@
 /**
  * Session loading overlay + auth UI:
  * magic link, Google OAuth, and email/password (kept during transition).
- * Atlas Editorial light surfaces — visual only; auth behavior unchanged.
+ * v2 look (DESIGN.md v2 tokens). Visual only, auth behaviour unchanged.
  */
+import BackdropGlobe from "../map/scene/BackdropGlobe";
+import Crosshairs from "./Crosshairs";
+
 export default function AuthGate({
   authLoading,
   authBusy,
@@ -23,255 +26,94 @@ export default function AuthGate({
 }) {
   if (authLoading) {
     return (
-      <div
-        className="auth-gate"
-        style={{
-          position: "absolute",
-          zIndex: 9999,
-          width: "100vw",
-          height: "100vh",
-        }}
-      />
+      <div className="auth-gate v2-screen" aria-busy="true">
+        <div className="v2-loading-line" role="status">Loading</div>
+      </div>
     );
   }
 
   if (!session) {
-    const inputStyle = {
-      padding: "0.75rem 0.85rem",
-      borderRadius: "10px",
-      border: "1px solid var(--stone)",
-      background: "var(--paper-soft)",
-      color: "var(--ink)",
-      width: "100%",
-      boxSizing: "border-box",
-      fontFamily: "inherit",
-      fontSize: "0.9rem",
-      outline: "none",
-    };
-    const primaryBtn = {
-      background: "var(--accent)",
-      color: "#fff",
-      padding: "0.75rem",
-      borderRadius: "12px",
-      border: "none",
-      cursor: authBusy ? "wait" : "pointer",
-      fontWeight: 700,
-      fontSize: "0.875rem",
-      letterSpacing: "0.01em",
-      width: "100%",
-      opacity: authBusy ? 0.7 : 1,
-      boxShadow: "0 4px 14px rgba(216, 112, 96, 0.28)",
-      fontFamily: "inherit",
-    };
-    const secondaryBtn = {
-      background: "var(--surface)",
-      color: "var(--ink)",
-      padding: "0.75rem",
-      borderRadius: "12px",
-      border: "1px solid var(--stone)",
-      cursor: authBusy ? "wait" : "pointer",
-      fontWeight: 600,
-      fontSize: "0.875rem",
-      width: "100%",
-      opacity: authBusy ? 0.7 : 1,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: "0.5rem",
-      fontFamily: "inherit",
-    };
-    const divider = {
-      display: "flex",
-      alignItems: "center",
-      gap: "0.75rem",
-      margin: "0.15rem 0",
-      color: "var(--muted)",
-      fontSize: "0.75rem",
-    };
-    const dividerLine = {
-      flex: 1,
-      height: 1,
-      background: "var(--stone)",
-    };
-
     return (
-      <div
-        className="auth-gate"
-        style={{
-          position: "absolute",
-          zIndex: 9999,
-          width: "100vw",
-          height: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          padding: "1rem",
-        }}
-      >
-        <div
-          className="auth-card"
-          style={{
-            padding: "2rem 1.75rem",
-            width: "360px",
-            maxWidth: "92vw",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.85rem",
-          }}
-        >
-          <div style={{ textAlign: "center", marginBottom: "0.15rem" }}>
-            <div
-              style={{
-                fontSize: "0.7rem",
-                fontWeight: 700,
-                letterSpacing: "0.14em",
-                textTransform: "uppercase",
-                color: "var(--muted)",
-                marginBottom: "0.45rem",
-              }}
-            >
-              Atlas Editorial
-            </div>
-            <h2
-              style={{
-                textAlign: "center",
-                margin: 0,
-                fontSize: "1.5rem",
-                fontWeight: 700,
-                color: "var(--ink)",
-                letterSpacing: "-0.02em",
-                lineHeight: 1.25,
-              }}
-            >
-              {isSignUp ? "Create Account" : "Sign in"}
-            </h2>
-          </div>
-          <p
-            style={{
-              textAlign: "center",
-              fontSize: "0.85rem",
-              color: "var(--muted)",
-              margin: "0 0 0.35rem",
-              lineHeight: 1.45,
-            }}
-          >
-            Magic link, Google, or email &amp; password
-          </p>
+      <div className="auth-gate v2-screen">
+        <BackdropGlobe />
+        <div className="v2-backdrop-dim" aria-hidden="true" />
+        <Crosshairs />
+        <div className="v2-wordmark auth-wordmark">Odyssey</div>
 
+        <main className="auth-card v2-panel" aria-labelledby="auth-title">
+          <div className="v2-eyebrow">{isSignUp ? "New account" : "Welcome back"}</div>
+          <h1 id="auth-title" className="v2-title-md">
+            {isSignUp ? "Create account" : "Sign in"}
+          </h1>
+          <p className="v2-muted auth-sub">Magic link, Google, or email and password</p>
+
+          <label className="v2-label" htmlFor="auth-email">Email</label>
           <input
+            id="auth-email"
+            className="v2-input"
             type="email"
-            placeholder="Email"
+            placeholder="you@example.com"
             autoComplete="email"
             value={authEmail}
             onChange={(e) => setAuthEmail(e.target.value)}
             disabled={authBusy}
-            style={inputStyle}
           />
 
-          <button
-            type="button"
-            onClick={handleMagicLink}
-            disabled={authBusy}
-            style={primaryBtn}
-          >
+          <button type="button" className="v2-btn v2-btn-primary" onClick={handleMagicLink} disabled={authBusy}>
             {authBusy ? "Working…" : "Email me a magic link"}
           </button>
 
-          <div style={divider}>
-            <span style={dividerLine} />
-            <span>or</span>
-            <span style={dividerLine} />
-          </div>
+          <div className="v2-divider"><span>or</span></div>
 
           <button
             type="button"
+            className="v2-btn v2-btn-ghost"
             onClick={handleGoogle}
             disabled={authBusy}
-            style={secondaryBtn}
             aria-label="Continue with Google"
           >
             <GoogleIcon />
             Continue with Google
           </button>
 
-          <div style={divider}>
-            <span style={dividerLine} />
-            <span>or password</span>
-            <span style={dividerLine} />
-          </div>
+          <div className="v2-divider"><span>or password</span></div>
 
-          <form
-            onSubmit={handleAuth}
-            style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
-          >
+          <form onSubmit={handleAuth} className="auth-form">
+            <label className="v2-label" htmlFor="auth-password">Password</label>
             <input
+              id="auth-password"
+              className="v2-input"
               type="password"
               placeholder="Password"
               autoComplete={isSignUp ? "new-password" : "current-password"}
               value={authPassword}
               onChange={(e) => setAuthPassword(e.target.value)}
               disabled={authBusy}
-              style={inputStyle}
             />
-            <button type="submit" disabled={authBusy} style={primaryBtn}>
-              {authBusy
-                ? "Working…"
-                : isSignUp
-                  ? "Sign up with password"
-                  : "Sign in with password"}
+            <button type="submit" className="v2-btn v2-btn-primary" disabled={authBusy}>
+              {authBusy ? "Working…" : isSignUp ? "Sign up with password" : "Sign in with password"}
             </button>
           </form>
 
           {authError ? (
-            <p
-              role="alert"
-              style={{
-                color: "#B23A24",
-                fontSize: "0.8rem",
-                textAlign: "center",
-                margin: 0,
-                lineHeight: 1.4,
-              }}
-            >
-              {authError}
-            </p>
+            <p role="alert" className="v2-notice v2-notice-error">{authError}</p>
           ) : null}
 
           {magicLinkSent && !authError ? (
-            <p
-              style={{
-                color: "#3F6212",
-                fontSize: "0.8rem",
-                textAlign: "center",
-                margin: 0,
-                lineHeight: 1.4,
-              }}
-            >
-              Check your email for the link to continue.
+            <p role="status" className="v2-notice v2-notice-ok">
+              Link sent. Check your email to continue.
             </p>
           ) : null}
 
-          <div style={{ textAlign: "center", fontSize: "0.8rem" }}>
-            <button
-              type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
-              disabled={authBusy}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--accent-deep)",
-                cursor: "pointer",
-                textDecoration: "underline",
-                fontFamily: "inherit",
-                fontSize: "0.8rem",
-              }}
-            >
-              {isSignUp
-                ? "Already have an account? Sign in"
-                : "Need an account? Sign up"}
-            </button>
-          </div>
-        </div>
+          <button
+            type="button"
+            className="v2-btn v2-btn-link"
+            onClick={() => setIsSignUp(!isSignUp)}
+            disabled={authBusy}
+          >
+            {isSignUp ? "Already have an account? Sign in" : "Need an account? Sign up"}
+          </button>
+        </main>
       </div>
     );
   }
