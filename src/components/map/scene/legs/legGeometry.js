@@ -31,10 +31,12 @@ export const flyScaleFor = (alt) => FLY_TRIP_SCALE + (1 - FLY_TRIP_SCALE) * trip
 //   H(d) = clamp(0.08 + 0.35 d, 0.04, 0.55) * (1 - exp(-(d / 0.3)^2))
 // The base is the DESIGN.md formula; the factor fades short hops down so they peak inside
 // the trip frame, and is about 1 for long flights (0.98 at 0.6 rad, 1.0 at EWR distances).
-// Examples before the trip view 0.5x: 300 km (0.047 rad) 0.0023R, Tokyo to Niseko 800 km
+// H(d) is then floored at FLY_MIN_H = 0.04R. Examples before the floor and trip view 0.5x: 300 km (0.047 rad) 0.0023R, Tokyo to Niseko 800 km
 // (0.125 rad) 0.0204R, 2000 km (0.31 rad) 0.12R, EWR to Geneva (0.98 rad) 0.42R.
 export const FLY_SHORT_RAD = 0.3;
-export const flyHeight = (d) => THREE.MathUtils.clamp(0.08 + 0.35 * d, 0.04, 0.55) * (1 - Math.exp(-((d / FLY_SHORT_RAD) ** 2)));
+// Floor: every flight keeps a small visible hump (FLY_MIN_H before the zoom blend).
+export const FLY_MIN_H = 0.04;
+export const flyHeight = (d) => Math.max(FLY_MIN_H, THREE.MathUtils.clamp(0.08 + 0.35 * d, 0.04, 0.55) * (1 - Math.exp(-((d / FLY_SHORT_RAD) ** 2))));
 
 function slerpUnit(a, b, ang, t, out) {
   const s = Math.sin(ang);
