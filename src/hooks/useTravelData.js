@@ -6,7 +6,7 @@ import { loadJourneys, groupPinsByJourney } from "../lib/journeys/api";
 
 /**
  * Load journeys + pins for the signed-in user.
- * Exposes flat `pins` for MapScene and `journeys` (with places) for JournalsPanel.
+ * Exposes flat `pins` for GlobeScene and `journeys` (with places) for JournalsPanel.
  */
 export function useTravelData(session) {
   const [pins, setPins] = useState([]);

@@ -23,11 +23,11 @@ import { useTravelData } from "../hooks/useTravelData";
 import AuthGate from "./shell/AuthGate";
 import AppShell from "./shell/AppShell";
 import JournalsPanel from "./journals/JournalsPanel";
-import MapScene from "./map/scene";
+import GlobeScene from "./map/scene";
 import MapLoader from "./map/MapLoader";
 
 /**
- * Thin composer: hooks + AuthGate + MapLoader + MapScene (R3F) + AppShell + JournalsPanel.
+ * Thin composer: hooks + AuthGate + MapLoader + GlobeScene (R3F) + AppShell + JournalsPanel.
  * PR7 final MapCanvas split step — shell chrome and pin load extracted; pin CRUD
  * and journal interaction state remain here (tightly coupled; leave for Journey props later).
  */
@@ -70,7 +70,7 @@ export default function MapCanvas() {
     handleGoogle,
   } = useAuthSession();
 
-  // Journeys + flat pins (MapScene) — useTravelData
+  // Journeys + flat pins (GlobeScene) — useTravelData
   const { journeys, pins, setPins, reload: reloadTravelData } = useTravelData(session);
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -545,10 +545,10 @@ export default function MapCanvas() {
       <MapLoader>
         {({ isLoaded, geoJsonData, statesData }) => (
           <>
-      {/* v2 map: React Three Fiber scene, orthographic top down camera. Data from MapLoader */}
+      {/* v2 globe: React Three Fiber scene, perspective camera orbiting a sphere. Data from MapLoader */}
       <div className="canvas-container">
         {isLoaded && geoJsonData && (
-          <MapScene
+          <GlobeScene
             geoJson={geoJsonData}
             pins={pins}
             activePinId={activePin?.id || null}
@@ -557,7 +557,6 @@ export default function MapCanvas() {
             onPinClick={handlePinClick}
             onMapClick={handleMapClick}
             onHoverRegion={handleHoverRegion}
-            onClusterClick={handleClusterClick}
           />
         )}
       </div>
