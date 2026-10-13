@@ -349,6 +349,11 @@ export default function MapCanvas() {
     }
   };
 
+  // Hand edits to location or coordinates after a quick add pick: the geocoder's country
+  // code no longer describes the place, so clear it (the DB fills it on insert if needed).
+  const editNewPinCity = (v) => { setNewPinCity(v); setNewPinCountryCode(""); };
+  const editClickedCoords = (v) => { setClickedCoords(v); setNewPinCountryCode(""); };
+
   // REMOVE: one call at a time, aborted after 10 s. The dialog stays closable throughout;
   // CANCEL aborts the call. Errors and timeouts show inline in the dialog.
   const [removeBusy, setRemoveBusy] = useState(false);
@@ -686,13 +691,13 @@ export default function MapCanvas() {
             newPinName={newPinName}
             setNewPinName={setNewPinName}
             newPinCity={newPinCity}
-            setNewPinCity={setNewPinCity}
+            setNewPinCity={editNewPinCity}
             newPinStartDate={newPinStartDate}
             setNewPinStartDate={setNewPinStartDate}
             newPinEndDate={newPinEndDate}
             setNewPinEndDate={setNewPinEndDate}
             clickedCoords={clickedCoords}
-            setClickedCoords={setClickedCoords}
+            setClickedCoords={editClickedCoords}
             newPinDetails={newPinDetails}
             setNewPinDetails={setNewPinDetails}
             handleAddPin={handleAddPin}
