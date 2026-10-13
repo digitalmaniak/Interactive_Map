@@ -96,5 +96,26 @@ export function solveTripFit(points, { W, H, offset = 0, fov, tilt, heading = 0,
     // Re-scale altitude toward the target fill (damped).
     alt = THREE.MathUtils.clamp(alt * Math.pow(ratio, 0.8), minAlt, maxAlt);
   }
+  // Final guard through the exact returned pose: every pin must sit inside the padded
+  // usable area. Re-centre and lift a little until it does (perspective at the trip tilt
+  // pushes near pins down and outward, so the bbox estimate alone can miss by a few px).
+  const inside = (b) => b.x0 >= pad && b.x1 <= visW - pad && b.y0 >= pad && b.y1 <= H - pad;
+  const measure = () => {
+    placeCamera(cam, n, 1 + alt, tilt, heading);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const p of points) {
+      const s = projectPx(cam, p, W, H);
+      x0 = Math.min(x0, s.x); x1 = Math.max(x1, s.x); y0 = Math.min(y0, s.y); y1 = Math.max(y1, s.y);
+    }
+    return { x0, x1, y0, y1 };
+  };
+  box = measure();
+  for (let k = 0; k < 60 && !inside(box) && alt < maxAlt; k++) {
+    const pb = pickGround(cam, (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, W, H);
+    const pv = pickGround(cam, cx, cy, W, H);
+    if (pb && pv) n.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(pv.normalize(), pb.normalize())).normalize();
+    alt = Math.min(maxAlt, alt * 1.02);
+    box = measure();
+  }
   return { n, D: 1 + alt, box };
 }

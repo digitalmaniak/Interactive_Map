@@ -11,6 +11,10 @@ export function createGlobeMaterial(landTex, opts = {}) {
   const a = THREE.MathUtils.degToRad(tokens.hatch.angleDeg);
   return new THREE.ShaderMaterial({
     defines: opts.cheap ? { CHEAP: "" } : {},
+    // Push the globe surface back in depth so border lines never sink into it.
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
     uniforms: {
       uLand: { value: landTex },
       uLow: { value: new THREE.Color(C.land.low) },
