@@ -21,9 +21,9 @@ export function mapPhoton(json) {
     const name = clean(p.name) || clean(p.city) || clean(p.street);
     if (!name || !Number.isFinite(num(lat)) || !Number.isFinite(num(lng))) continue;
     const region = [p.city !== p.name ? p.city : null, p.state].map(clean).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(", ");
-    out.push({ id: `p:${p.osm_type || ""}${p.osm_id ?? out.length}`, name, region, country: clean(p.country), countryCode: clean(p.countrycode).toUpperCase(), lat: num(lat), lng: num(lng), source: "photon" });
+    out.push({ id: `p:${p.osm_type || ""}${p.osm_id ?? out.length}`, name, region, country: clean(p.country), countryCode: clean(p.countrycode).toUpperCase(), lat: num(lat), lng: num(lng), type: clean(p.type || (p.osm_key === "place" ? p.osm_value : "")), source: "photon" });
   }
-  return dedupe(out);
+  return dedupe(out).slice(0, QUICK_ADD.limit);
 }
 
 // Nominatim jsonv2 with addressdetails -> same shape.
@@ -36,16 +36,22 @@ export function mapNominatim(list) {
     if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
     const city = clean(a.city || a.town || a.village || a.municipality);
     const region = [city !== name ? city : "", clean(a.state || a.region || a.county)].filter(Boolean).join(", ");
-    out.push({ id: `n:${r.osm_type || ""}${r.osm_id ?? r.place_id ?? out.length}`, name, region, country: clean(a.country), countryCode: clean(a.country_code).toUpperCase(), lat, lng, source: "nominatim" });
+    out.push({ id: `n:${r.osm_type || ""}${r.osm_id ?? r.place_id ?? out.length}`, name, region, country: clean(a.country), countryCode: clean(a.country_code).toUpperCase(), lat, lng, type: clean(r.addresstype || r.type), source: "nominatim" });
   }
-  return dedupe(out);
+  return dedupe(out).slice(0, QUICK_ADD.limit);
 }
 
-// Same name and place within about 1 km collapse into one suggestion.
+// Settlements first: a search for "Lisbon" should land on the city, not the district or
+// the municipality polygon. Lower rank sorts first; the order is stable within a rank.
+export const PLACE_RANK = { city: 0, town: 1, village: 2, hamlet: 3, suburb: 4, locality: 4, district: 5, municipality: 5, county: 6, state: 7, region: 7, country: 8 };
+export const placeRank = (type) => PLACE_RANK[String(type || "").toLowerCase()] ?? 4.5;
+
+// Rank, then drop repeats with the same name, region and country (keep the best ranked).
 function dedupe(list) {
+  const ranked = list.map((r, i) => ({ r, i })).sort((a, b) => placeRank(a.r.type) - placeRank(b.r.type) || a.i - b.i).map((x) => x.r);
   const seen = new Set();
-  return list.filter((r) => {
-    const k = `${r.name.toLowerCase()}|${r.country}|${r.lat.toFixed(2)},${r.lng.toFixed(2)}`;
+  return ranked.filter((r) => {
+    const k = `${r.name.toLowerCase()}|${r.region.toLowerCase()}|${r.country.toLowerCase()}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -86,10 +92,11 @@ export function makeRateGate(minGapMs = QUICK_ADD.minGapMs, now = () => Date.now
 export const shouldSearch = (q) => clean(q).length >= QUICK_ADD.minChars;
 
 export function photonQueryUrl(q, base = QUICK_ADD.photonUrl) {
-  return `${base}?q=${encodeURIComponent(clean(q))}&limit=${QUICK_ADD.limit}&lang=en`;
+  // Ask for a few extra so ranking and dedupe still leave a full list.
+  return `${base}?q=${encodeURIComponent(clean(q))}&limit=${QUICK_ADD.limit + 4}&lang=en`;
 }
 export function nominatimQueryUrl(q, base = QUICK_ADD.nominatimUrl) {
-  return `${base}?format=jsonv2&addressdetails=1&limit=${QUICK_ADD.limit}&accept-language=en&q=${encodeURIComponent(clean(q))}`;
+  return `${base}?format=jsonv2&addressdetails=1&limit=${QUICK_ADD.limit + 4}&accept-language=en&q=${encodeURIComponent(clean(q))}`;
 }
 
 // Photon first; any failure or empty result tries Nominatim. Respects the shared gate and

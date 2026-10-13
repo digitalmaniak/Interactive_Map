@@ -13,7 +13,7 @@ const photon = { features: [
   { geometry: { coordinates: [1, 2] }, properties: {} },
 ] };
 const p = mapPhoton(photon);
-ok(p.length === 2, "photon: dedupes same place, drops rows without name or coordinates");
+ok(p.length === 2, "photon: dedupes by name, region and country, drops rows without name or coordinates");
 ok(p[0].name === "Chamonix-Mont-Blanc" && p[0].lat === 45.9237 && p[0].lng === 6.8694, "photon: lon/lat order mapped to lat, lng");
 ok(p[1].region === "Chamonix, Auvergne-Rhône-Alpes" && p[1].country === "France" && p[1].countryCode === "FR", "photon: region, country, country code");
 ok(placeLine(p[1]) === "Chamonix, Auvergne-Rhône-Alpes, France", "placeLine joins region and country");
@@ -76,5 +76,21 @@ ok(!shouldSearch("a") && !shouldSearch("  b ") && shouldSearch("ni"), `min ${QUI
   let aborted = false;
   try { await geocode("paris", { fetchImpl: f1, gate, sleep, signal: ac.signal }); } catch (e) { aborted = e.name === "AbortError"; }
   ok(aborted, "geocode: stale (aborted) request rejects with AbortError and never falls back");
+}
+// Lisbon: the city wins over the municipality and district results (real Photon shape).
+{
+  const lis = { features: [
+    { geometry: { coordinates: [-9.29, 38.995] }, properties: { osm_id: 11, name: "Lisboa", type: "county", state: "Lisbon", country: "Portugal", countrycode: "PT" } },
+    { geometry: { coordinates: [-9.20, 38.90] }, properties: { osm_id: 12, name: "Lisbon", type: "district", state: "Lisbon", country: "Portugal", countrycode: "PT" } },
+    { geometry: { coordinates: [-9.1365919, 38.7077507] }, properties: { osm_id: 13, name: "Lisbon", type: "city", state: "Lisbon", country: "Portugal", countrycode: "PT" } },
+    { geometry: { coordinates: [-9.14, 38.72] }, properties: { osm_id: 14, name: "Lisbon", type: "city", state: "Lisbon", country: "Portugal", countrycode: "PT" } },
+    { geometry: { coordinates: [-70.1, 44.0] }, properties: { osm_id: 15, name: "Lisbon", type: "town", state: "Maine", country: "United States", countrycode: "US" } },
+  ] };
+  const r = mapPhoton(lis);
+  ok(r[0].name === "Lisbon" && Math.abs(r[0].lat - 38.72) < 0.03 && Math.abs(r[0].lng + 9.14) < 0.03, `Lisbon: first result is the city near 38.72, -9.14 (${r[0].lat}, ${r[0].lng})`);
+  ok(r.filter((x) => x.name === "Lisbon" && x.country === "Portugal").length === 1, "Lisbon: city and district with the same name, region and country collapse to one");
+  ok(r.some((x) => x.country === "United States"), "Lisbon, Maine stays (different region and country)");
+  const nm = mapNominatim([{ lat: "38.99", lon: "-9.29", name: "Lisboa", addresstype: "municipality", address: { state: "Lisbon", country: "Portugal", country_code: "pt" } }, { lat: "38.7077", lon: "-9.1366", name: "Lisbon", addresstype: "city", address: { state: "Lisbon", country: "Portugal", country_code: "pt" } }]);
+  ok(nm[0].name === "Lisbon" && nm[0].lat > 38.7 && nm[0].lat < 38.73, "nominatim: city ranks above municipality");
 }
 process.exit(failed ? 1 : 0);
