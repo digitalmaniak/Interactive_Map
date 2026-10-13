@@ -17,6 +17,7 @@ import LegsLayer from "./legs/LegsLayer";
 import { resolveLegs } from "./legs/legGeometry";
 import { fetchJourneyLegs } from "../../../lib/journeys/legs";
 import { tripZoomK } from "./legs/legGeometry";
+import useFlyover from "./flyover/useFlyover";
 import { poseFor, localFrame, raySphere, solveTripFit, estimateLabelBox } from "./tripFit";
 
 // Trip framing margins: 80 px plus the overlay chrome measured from the DOM (tab bar and
@@ -292,7 +293,7 @@ function readLive(camera, controls, lastHeading) {
 
 function sampleTween(tw, now) {
   const raw = THREE.MathUtils.clamp((now - tw.t0) / tw.ms, 0, 1);
-  const e = easeMove(raw);
+  const e = (tw.ease || easeMove)(raw);
   const a = tw.from, b = tw.to;
   const n = new THREE.Vector3().copy(a.n);
   if (tw.d > 1e-6) {
@@ -326,12 +327,13 @@ function makeTween(from, goal, now, reducedMotion) {
   const d = from.n.angleTo(to.n);
   const hPeak = Math.min(LIFT_CAP, Math.max(from.D, to.D, from.D + 1.2 * d));
   const bump = reducedMotion || d < 0.05 || goal.zoomOnly ? 0 : Math.max(0, hPeak - Math.max(from.D, to.D));
-  const ms = THREE.MathUtils.clamp(700 + 900 * Math.sqrt(d / Math.PI) + 250 * Math.abs(Math.log2(to.D / from.D)), 600, 2200);
+  const ms = goal.ms ?? THREE.MathUtils.clamp(700 + 900 * Math.sqrt(d / Math.PI) + 250 * Math.abs(Math.log2(to.D / from.D)), 600, 2200);
   return {
     from, to, d, bump, ms, t0: now,
     q: new THREE.Quaternion().setFromUnitVectors(from.n, to.n),
     dh: wrapPi(to.heading - from.heading),
     zoomOnly: !!goal.zoomOnly,
+    ease: goal.ease || null,
     goal,
   };
 }
@@ -986,15 +988,8 @@ export default function GlobeScene({
     moveRef.current = { n, D: HOME_DIST, tilt: 0, fov: CAM.keyframes[0].fov, trip: false };
   }, [items]);
 
-  // Opening a trip: frame its pins (skipped for the Imported collection, which opens as
-  // a single point via flyTo).
-  useEffect(() => {
-    const key = focusing && !focusIsCollection ? String(focusJourneyId) : null;
-    if (key === focusKeyRef.current) return;
-    const stops = items.filter((it) => !it.dimmed);
-    if (key != null && stops.length === 0) return; // wait for pins
-    focusKeyRef.current = key;
-    if (key == null) return;
+  // Normal trip fit goal (used when a trip opens and when a flyover ends).
+  const tripFitGoal = useCallback((stops) => {
     // Frame the pins' ground points so their projected bbox is centred in the visible
     // area left of the panel with 80 px padding, at the trip tilt (iterative solve).
     const fr = tripFraming(stops);
@@ -1009,9 +1004,21 @@ export default function GlobeScene({
       });
       n = sol.n; D = sol.D;
     }
+    return { n, D, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true };
+  }, [panelOpen, panelWidth]);
+
+  // Opening a trip: frame its pins (skipped for the Imported collection, which opens as
+  // a single point via flyTo).
+  useEffect(() => {
+    const key = focusing && !focusIsCollection ? String(focusJourneyId) : null;
+    if (key === focusKeyRef.current) return;
+    const stops = items.filter((it) => !it.dimmed);
+    if (key != null && stops.length === 0) return; // wait for pins
+    focusKeyRef.current = key;
+    if (key == null) return;
     engagedRef.current = { kind: "trip", key };
-    moveRef.current = { n, D, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true };
-  }, [focusing, focusIsCollection, focusJourneyId, items, panelOpen, panelWidth]);
+    moveRef.current = tripFitGoal(stops);
+  }, [focusing, focusIsCollection, focusJourneyId, items, panelOpen, panelWidth, tripFitGoal]);
 
   useEffect(() => {
     if (!flyTo) return;
@@ -1023,6 +1030,26 @@ export default function GlobeScene({
     if (!(eng && eng.kind === "trip" && eng.key === focusKeyRef.current)) engagedRef.current = { kind: "point", n };
     moveRef.current = { n, D: 1.12, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), fov: TRIP_KEY.fov, trip: true };
   }, [flyTo]);
+
+  // Trip flyover: stop to stop in leg order through the same CameraController.
+  const flyEnabled = focusing && !focusIsCollection && legs.length > 0;
+  const flyEndGoal = useCallback(() => tripFitGoal(items.filter((it) => !it.dimmed)), [tripFitGoal, items]);
+  const fly = useFlyover({ legs, enabled: flyEnabled, reducedMotion, moveRef, fov: TRIP_KEY.fov, endGoal: flyEndGoal });
+  const flyOn = fly.state.playing || fly.state.paused;
+  const shownActivePinId = flyOn ? fly.state.pinId : activePinId;
+  const activeLegId = flyOn ? fly.state.legId : undefined;
+  const flyToggle = fly.toggle, flyStop = fly.stop;
+  useEffect(() => {
+    if (!flyEnabled) return undefined;
+    const onKey = (e) => {
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName))) return;
+      if (e.code === "Space" || e.key === " ") { e.preventDefault(); flyToggle(); }
+      else if (e.key === "Escape" && flyOn) { e.preventDefault(); flyStop(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [flyEnabled, flyOn, flyToggle, flyStop]);
 
   // Exit when the selection is gone: a trip whose focus cleared, or a point whose panel
   // closed. Map button, empty click and panel close all land here.
@@ -1170,13 +1197,13 @@ export default function GlobeScene({
         <FpsGuard minFps={20} onLow={onLowFps} />
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} cheap={force3d} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
-        <LegsLayer legs={legs} activePinId={activePinId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
+        <LegsLayer legs={legs} activePinId={shownActivePinId} activeLegId={activeLegId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
         <Stops
           beamHeightRef={beamHeightRef}
           hideBeams={force3d}
           tripBlend={tripBlend}
           items={items}
-          activePinId={activePinId}
+          activePinId={shownActivePinId}
           hoveredPinId={hoveredPinId}
           reducedMotion={reducedMotion}
           onSelect={(pin) => onPinClick?.(pin)}
@@ -1195,7 +1222,7 @@ export default function GlobeScene({
           onStart={() => { moveRef.current = null; }}
         />
         <CameraController pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
-        <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={activePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
+        <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={shownActivePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>
             <Bloom
@@ -1209,6 +1236,25 @@ export default function GlobeScene({
         )}
       </Canvas>
 
+      {flyEnabled && (
+        <div className="v2-flyover" style={{ right: panelOpen ? panelWidth + 16 : 16 }}>
+          <button
+            type="button"
+            className="v2-flyover-btn"
+            aria-pressed={fly.state.playing}
+            aria-label={fly.state.playing ? "Pause flyover (Space)" : fly.state.paused ? "Resume flyover (Space)" : "Play flyover (Space)"}
+            onClick={fly.toggle}
+          >
+            {fly.state.playing ? "Pause" : fly.state.paused ? "Resume" : "Play flyover"}
+          </button>
+          {flyOn && (
+            <button type="button" className="v2-flyover-btn is-dim" aria-label="Stop flyover (Esc)" onClick={fly.stop}>Stop</button>
+          )}
+          <span className="v2-flyover-status" role="status" aria-live="polite">
+            {flyOn && fly.state.legIndex >= 0 ? `Leg ${fly.state.legIndex + 1} of ${legs.length}` : ""}
+          </span>
+        </div>
+      )}
       {contextLost && (
         <div className="v2-globe-notice" role="status">Globe paused. Graphics were interrupted, reload the page to restore it.</div>
       )}
@@ -1217,7 +1263,7 @@ export default function GlobeScene({
           <div
             key={it.pin.id}
             ref={(el) => { labelEls.current[i] = el; }}
-            className={`v2-pin-label${it.pin.id === activePinId ? " is-active" : ""}${reducedMotion ? " no-motion" : ""}`}
+            className={`v2-pin-label${it.pin.id === shownActivePinId ? " is-active" : ""}${flyOn && it.pin.id === shownActivePinId ? " is-flyover" : ""}${reducedMotion ? " no-motion" : ""}`}
             style={{ opacity: 0, visibility: "hidden" }}
             onClick={() => onClusterTap(i)}
           >

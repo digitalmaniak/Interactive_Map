@@ -46,7 +46,7 @@ function makeSegs(px) {
   return l;
 }
 
-export default function LegsLayer({ legs, activePinId, tripBlend, reducedMotion, lite = false }) {
+export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, reducedMotion, lite = false }) {
   const { camera, size, gl } = useThree();
   const surfaceGroup = useRef();
   const flyGroup = useRef();
@@ -58,7 +58,8 @@ export default function LegsLayer({ legs, activePinId, tripBlend, reducedMotion,
     const out = [];
     for (const leg of legs || []) {
       const s = STYLE[leg.mode] || STYLE.drive;
-      const active = activePinId != null && leg.toPinId === activePinId;
+      // Flyover names the active leg directly; otherwise the leg arriving at the active stop.
+      const active = activeLegId !== undefined ? activeLegId != null && leg.id === activeLegId : activePinId != null && leg.toPinId === activePinId;
       const fly = leg.mode === "fly";
       const path = fly ? flyArc(leg.a.v, leg.b.v, { offsetDeg: leg.offsetDeg }) : { points: surfacePath(leg.a.v, leg.b.v), alpha: null };
       const baseA = active ? 1 : s.alpha;
@@ -69,7 +70,7 @@ export default function LegsLayer({ legs, activePinId, tripBlend, reducedMotion,
       out.push({ leg, s, fly, active, line, points: path.points, arcScale: FLY_TRIP_SCALE });
     }
     return out;
-  }, [legs, activePinId]);
+  }, [legs, activePinId, activeLegId]);
 
   // Pinless endpoints (airports, stopovers) and cruise ports: 4 px hollow rings, no label.
   const rings = useMemo(() => {
