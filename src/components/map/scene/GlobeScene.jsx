@@ -13,6 +13,7 @@ import { tokens, tiers, bezier } from "./tokens";
 import { detectRenderTier } from "./renderTier";
 import { supabase } from "../../../lib/supabase/client";
 import FpsGuard from "./FpsGuard";
+import { poseFor, localFrame, raySphere, solveTripFit } from "./tripFit";
 import StaticGlobe from "./StaticGlobe";
 
 // v2 main view (DESIGN.md v2: mock A globe, mock C trip framing).
@@ -110,7 +111,7 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend }) {
 
 // Stop dots (one InstancedMesh) and stop beams (one InstancedMesh).
 // Route colours are pushed above 1 (emissive 1.6, accent 2.0) so only they cross the bloom threshold.
-function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMotion }) {
+function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMotion, beamHeightRef }) {
   const dots = useRef();
   const beams = useRef();
   const tmp = useMemo(() => new THREE.Object3D(), []);
@@ -139,6 +140,7 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
     const tripish = THREE.MathUtils.clamp((2.4 - camera.position.length()) / 1.2, 0, 1);
     beamMat.uniforms.uGrow.value = g;
     beamMat.uniforms.uHeight.value = THREE.MathUtils.lerp(tokens.beam.heightR.globe, tokens.beam.heightR.trip, tripish) * (dist < 0.5 ? dist / 0.5 + 0.15 : 1);
+    if (beamHeightRef) beamHeightRef.current = beamMat.uniforms.uHeight.value * g;
     beamMat.uniforms.uWidth.value = 0.0012 * THREE.MathUtils.clamp(dist / 0.3, 0.004, 1); // thin beams near the surface
     const aColor = beamGeo.getAttribute("aColor");
     const aAlpha = beamGeo.getAttribute("aAlpha");
@@ -196,15 +198,6 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
 export const panelOffsetFor = (open, width, panelWidth) =>
   open && width > panelWidth * 1.6 ? panelWidth / 2 : 0;
 
-// Trip fit for the visible area left of the panel: a narrower view needs more altitude.
-function fitForView(fit, view) {
-  if (!view || !view.offset || !view.height) return fit;
-  const availAspect = (view.width - 2 * view.offset) / view.height;
-  if (availAspect >= 1) return fit;
-  const scale = Math.min(1.8, 1 / Math.max(availAspect, 0.3));
-  return 1 + (fit - 1) * scale;
-}
-
 // One camera controller (DESIGN.md, Camera motion spec v1). Live state:
 // n (unit look target), D (camera distance from the centre, in R), tilt, heading,
 // fov and panel offset. Every view change runs one tween from the live state to the
@@ -215,24 +208,6 @@ const FADE_MS = 180;
 const LIFT_CAP = HOME_DIST;
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const lerp = THREE.MathUtils.lerp;
-
-function localFrame(n) {
-  const north = new THREE.Vector3(0, 1, 0).addScaledVector(n, -n.y);
-  if (north.lengthSq() < 1e-6) north.set(0, 0, -1);
-  north.normalize();
-  const east = new THREE.Vector3().crossVectors(north, n).normalize();
-  return { north, east };
-}
-
-// Heading 0 leans the camera toward the south (looking north), as in mock C.
-function poseFor(n, D, tilt, heading, outPos) {
-  const { north, east } = localFrame(n);
-  const lean = north.multiplyScalar(-Math.cos(heading)).addScaledVector(east, -Math.sin(heading));
-  const u = n.clone().multiplyScalar(Math.cos(tilt)).addScaledVector(lean, Math.sin(tilt));
-  const tu = n.dot(u);
-  const s = -tu + Math.sqrt(Math.max(tu * tu - GLOBE_R * GLOBE_R + D * D, 0));
-  return outPos.copy(n).multiplyScalar(GLOBE_R).addScaledVector(u, s);
-}
 
 function readLive(camera, controls, lastHeading) {
   const t = controls && controls.target.lengthSq() > 1e-6 ? controls.target.clone() : null;
@@ -344,6 +319,8 @@ function CameraController({ controlsRef, moveRef, reducedMotion, tripView, tripB
       controls.minDistance = surfaceTarget ? (tripView.current ? TRIP_MIN_ALT : MIN_DIST - GLOBE_R) : MIN_DIST;
       // Wheel and pinch get faster near the surface so the last stretch is not sluggish.
       controls.zoomSpeed = THREE.MathUtils.clamp(0.7 + (0.4 - alt) * 4, 0.7, 2.2);
+      // Trip view zooms toward the cursor or pinch centre (handled below), not the target.
+      controls.enableZoom = !tripView.current;
     }
     // Near plane follows altitude (about 0.1 x altitude) so near ground lines keep depth precision.
     const near = THREE.MathUtils.clamp(alt * 0.1, 0.0001, 0.05);
@@ -442,6 +419,68 @@ function CameraController({ controlsRef, moveRef, reducedMotion, tripView, tripB
     }
   }
 
+  // Zoom toward a screen point in trip view: scale the camera and look target about the
+  // ground point under the cursor, so that point stays put and stops never drift behind
+  // the panel. Wheel uses the cursor, pinch uses the midpoint of the two touches.
+  useEffect(() => {
+    const el = gl.domElement;
+    const rc = new THREE.Raycaster();
+    const zoomAt = (clientX, clientY, scale) => {
+      const controls = controlsRef.current;
+      if (!controls || !tripView.current) return false;
+      const rect = el.getBoundingClientRect();
+      rc.setFromCamera(new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1), camera);
+      const P = raySphere(rc.ray);
+      if (!P) return false;
+      const alt = camera.position.length() - GLOBE_R;
+      const camToP = camera.position.distanceTo(P);
+      let sc = scale;
+      // Keep altitude within [TRIP_MIN_ALT, MAX_DIST - R] (altitude scales about P).
+      if (alt * sc < TRIP_MIN_ALT) sc = TRIP_MIN_ALT / Math.max(alt, 1e-6);
+      if (camToP * sc > MAX_DIST - GLOBE_R) sc = (MAX_DIST - GLOBE_R) / camToP;
+      if (Math.abs(sc - 1) < 1e-5) return true;
+      moveRef.current = null; // user zoom cancels any tween
+      camera.position.sub(P).multiplyScalar(sc).add(P);
+      const t = controls.target.clone().sub(P).multiplyScalar(sc).add(P);
+      controls.target.copy(t.normalize().multiplyScalar(GLOBE_R));
+      controls.update();
+      return true;
+    };
+    const onWheel = (e) => {
+      if (!tripView.current) return;
+      const speed = controlsRef.current ? controlsRef.current.zoomSpeed : 1;
+      if (zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * 0.0012 * speed))) {
+        e.preventDefault();
+        idleUntil.current = performance.now() + CAM.idleResumeMs;
+      }
+    };
+    const touches = new Map();
+    let pinch = null;
+    const onDown = (e) => { if (e.pointerType === "touch") touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); };
+    const onUp = (e) => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; };
+    const onMove = (e) => {
+      if (!touches.has(e.pointerId)) return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size !== 2 || !tripView.current) return;
+      const [a, b] = [...touches.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch && d > 0) zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, Math.pow(pinch / d, 1.2));
+      pinch = d;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+    };
+  }, [gl, camera, controlsRef, moveRef, tripView]);
+
   useEffect(() => {
     const c = controlsRef.current;
     if (!c) return;
@@ -471,12 +510,12 @@ function labelPriority(it, activePinId, meta) {
   return 40;
 }
 
-function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, meta, clusterRef, labelMix }) {
+function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, meta, clusterRef, labelMix, beamHeightRef }) {
   const { camera, size } = useThree();
   const v = useMemo(() => new THREE.Vector3(), []);
   const camDir = useMemo(() => new THREE.Vector3(), []);
   const nrm = useMemo(() => new THREE.Vector3(), []);
-  const st = useRef({ last: 0, mat: new THREE.Matrix4(), dirty: true, state: [], placed: new Set(), heads: new Map() });
+  const st = useRef({ last: 0, mat: new THREE.Matrix4(), dirty: true, state: [], placed: new Set(), heads: new Map(), flip: new Map() });
   const order = useMemo(() => {
     const ts = (it) => { const d = Date.parse(it.pin.start_date || ""); return Number.isFinite(d) ? d : Infinity; };
     return items
@@ -548,7 +587,18 @@ function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, met
         const el = labelEls.current[c.i];
         if (!el) continue;
         const w = (el.offsetWidth || 80) + LABEL_PAD * 2, h = (el.offsetHeight || 28) + LABEL_PAD * 2;
-        const box = { l: c.x - w / 2, r: c.x + w / 2, t: c.y - 10 - h + LABEL_PAD, b: c.y - 10 + LABEL_PAD };
+        let box = { l: c.x - w / 2, r: c.x + w / 2, t: c.y - 10 - h + LABEL_PAD, b: c.y - 10 + LABEL_PAD };
+        // Flip below the pin when the beam's projected top leans across the label (before
+        // the collision test, so placement uses the flipped box).
+        const top = items[c.i].pos.clone().multiplyScalar(1 + (beamHeightRef?.current || 0)).project(camera);
+        const tx = (top.x * 0.5 + 0.5) * size.width, ty = (-top.y * 0.5 + 0.5) * size.height;
+        let crosses = false;
+        for (let k = 1; k <= 8 && !crosses; k++) {
+          const px = c.x + (tx - c.x) * (k / 8), py = c.y + (ty - c.y) * (k / 8);
+          crosses = px > box.l + LABEL_PAD && px < box.r - LABEL_PAD && py > box.t + LABEL_PAD && py < box.b - LABEL_PAD;
+        }
+        if (crosses) box = { l: box.l, r: box.r, t: c.y + 10 - LABEL_PAD, b: c.y + 10 + h - LABEL_PAD };
+        s.flip.set(c.i, crosses);
         if (boxes.some((o) => box.l < o.r && box.r > o.l && box.t < o.b && box.b > o.t)) continue;
         // Hysteresis: a hidden label must stay hidden 200 ms before returning.
         const prev = s.state[c.i];
@@ -605,7 +655,7 @@ function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, met
       const el = labelEls.current[i];
       if (!el) continue;
       v.copy(items[i].pos).project(camera);
-      el.style.transform = `translate(${(v.x * 0.5 + 0.5) * size.width}px, ${(-v.y * 0.5 + 0.5) * size.height}px) translate(-50%, calc(-100% - 10px))`;
+      el.style.transform = `translate(${(v.x * 0.5 + 0.5) * size.width}px, ${(-v.y * 0.5 + 0.5) * size.height}px) ${s.flip.get(i) ? "translate(-50%, 10px)" : "translate(-50%, calc(-100% - 10px))"}`;
     }
   });
   return null;
@@ -696,6 +746,7 @@ export default function GlobeScene({
   const hoverRafRef = useRef(null);
   const tripView = useRef(false);
   const tripBlend = useRef(0);
+  const beamHeightRef = useRef(0);
   const labelMix = useRef({ active: false, p: 1 });
   const moveRef = useRef(null);
   const viewRef = useRef(null);
@@ -786,8 +837,19 @@ export default function GlobeScene({
     const prev = focusKeyRef.current;
     focusKeyRef.current = key;
     if (key != null) {
+      // Frame the pins' ground points so their projected bbox is centred in the visible
+      // area left of the panel with 80 px padding, at the trip tilt (iterative solve).
       const fr = tripFraming(stops);
-      moveRef.current = { n: fr.n, D: fitForView(fr.fit, viewRef.current), tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true };
+      const view = viewRef.current;
+      let n = fr.n, D = fr.fit;
+      if (view && view.width && view.height) {
+        const sol = solveTripFit(stops.map((it) => it.pos.clone().normalize()), {
+          W: view.width, H: view.height, offset: panelOffsetFor(panelOpen, view.width, panelWidth),
+          fov: TRIP_KEY.fov, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, pad: 80, minAlt: TRIP_MIN_ALT,
+        });
+        n = sol.n; D = sol.D;
+      }
+      moveRef.current = { n, D, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true };
     } else if (prev != null) {
       // Leaving a trip: stay over the trip's region (centroid of its pins, else the
       // current look target), level the tilt and pull back to globe view altitude.
@@ -801,7 +863,7 @@ export default function GlobeScene({
       }
       moveRef.current = { n, D: HOME_DIST, tilt: 0, fov: CAM.keyframes[0].fov, trip: false };
     }
-  }, [focusing, focusJourneyId, items]);
+  }, [focusing, focusJourneyId, items, panelOpen, panelWidth]);
 
   useEffect(() => {
     if (!flyTo) return;
@@ -895,6 +957,7 @@ export default function GlobeScene({
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
         <Stops
+          beamHeightRef={beamHeightRef}
           items={items}
           activePinId={activePinId}
           hoveredPinId={hoveredPinId}
@@ -915,7 +978,7 @@ export default function GlobeScene({
           onStart={() => { moveRef.current = null; }}
         />
         <CameraController controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
-        <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={activePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} />
+        <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={activePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>
             <Bloom

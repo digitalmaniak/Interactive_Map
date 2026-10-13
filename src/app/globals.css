@@ -229,6 +229,8 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 .v2-pin-label {
   position: absolute; left: 0; top: 0; will-change: transform, opacity;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
+  /* Soft dark backing so name and coordinates read over beams. */
+  padding: 4px; border-radius: 4px; background: rgba(7, 9, 11, 0.7);
   transition: opacity 150ms ease, visibility 0s linear 150ms;
 }
 .v2-pin-label[style*="visibility: visible"] { transition: opacity 150ms ease, visibility 0s; }
