@@ -23,8 +23,11 @@ const C = tokens.color;
 const CAM = tokens.camera;
 const HOME_DIST = CAM.keyframes[0].distR;
 const MIN_DIST = 1.08;
-// Trip view lets the camera come about 3x closer to the surface than MIN_DIST.
-const TRIP_MIN_DIST = GLOBE_R + (MIN_DIST - GLOBE_R) / 3;
+// Trip view lets the camera down to about 8 km: altitude 0.00125 R, distance 1.00125 R.
+const TRIP_MIN_ALT = 0.00125;
+// Below about 50 km the baked relief texture fades out so its softness reads as intentional.
+const RELIEF_FADE_ALT = 0.0078;
+const TRIP_MIN_DIST = GLOBE_R + TRIP_MIN_ALT;
 const MAX_DIST = 6;
 const LABEL_DIST = 1.9;
 const DRAG_PX = 5;
@@ -68,7 +71,7 @@ function tripFraming(points) {
 }
 
 function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend }) {
-  const { gl, size } = useThree();
+  const { gl, size, camera } = useThree();
   const t = tiers[tier];
   const { material, atmo, coast, tex } = useMemo(() => {
     const max = gl.capabilities.maxTextureSize || 4096;
@@ -80,6 +83,8 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend }) {
     material.uniforms.uDpr.value = gl.getPixelRatio();
     // Trip only uniforms follow tripBlend (0 globe, 1 trip), driven by the camera tween.
     const b = tripBlend ? tripBlend.current : 0;
+    const alt = camera.position.length() - GLOBE_R;
+    material.uniforms.uReliefMix.value = THREE.MathUtils.smoothstep(alt, RELIEF_FADE_ALT * 0.25, RELIEF_FADE_ALT);
     material.uniforms.uHatchSpacing.value = THREE.MathUtils.lerp(tokens.hatch.spacingPx.globe, tokens.hatch.spacingPx.trip, b);
   });
   void size;
@@ -128,13 +133,13 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
     const d = dots.current, b = beams.current;
     if (!d || !b) return;
     const dist = camera.position.length() - GLOBE_R;
-    const px = THREE.MathUtils.clamp(dist * 0.0055, 0.0007, 0.02); // ~6 px disc
+    const px = THREE.MathUtils.clamp(dist * 0.0055, 0.000006, 0.02); // ~6 px disc
     if (growStart.current == null) growStart.current = performance.now();
     const g = reducedMotion ? 1 : easeGrow(Math.min(1, (performance.now() - growStart.current) / tokens.beam.growMs));
     const tripish = THREE.MathUtils.clamp((2.4 - camera.position.length()) / 1.2, 0, 1);
     beamMat.uniforms.uGrow.value = g;
     beamMat.uniforms.uHeight.value = THREE.MathUtils.lerp(tokens.beam.heightR.globe, tokens.beam.heightR.trip, tripish) * (dist < 0.5 ? dist / 0.5 + 0.15 : 1);
-    beamMat.uniforms.uWidth.value = 0.0012;
+    beamMat.uniforms.uWidth.value = 0.0012 * THREE.MathUtils.clamp(dist / 0.3, 0.004, 1); // thin beams near the surface
     const aColor = beamGeo.getAttribute("aColor");
     const aAlpha = beamGeo.getAttribute("aAlpha");
     items.forEach((it, i) => {
@@ -333,10 +338,15 @@ function CameraController({ controlsRef, moveRef, reducedMotion, tripView, tripB
     const alt = camera.position.length() - GLOBE_R;
     if (controls) {
       controls.rotateSpeed = THREE.MathUtils.clamp(alt * 0.35, 0.03, 0.5);
-      controls.minDistance = tripView.current ? TRIP_MIN_DIST : MIN_DIST;
+      // OrbitControls clamps the camera to target distance. In trip view the target sits on
+      // the surface, so the limit is the minimum altitude, not the centre distance.
+      const surfaceTarget = controls.target.lengthSq() > 0.25;
+      controls.minDistance = surfaceTarget ? (tripView.current ? TRIP_MIN_ALT : MIN_DIST - GLOBE_R) : MIN_DIST;
+      // Wheel and pinch get faster near the surface so the last stretch is not sluggish.
+      controls.zoomSpeed = THREE.MathUtils.clamp(0.7 + (0.4 - alt) * 4, 0.7, 2.2);
     }
     // Near plane follows altitude (about 0.1 x altitude) so near ground lines keep depth precision.
-    const near = THREE.MathUtils.clamp(alt * 0.1, 0.0005, 0.05);
+    const near = THREE.MathUtils.clamp(alt * 0.1, 0.0001, 0.05);
     if (Math.abs(near - camera.near) > camera.near * 0.05) { camera.near = near; camera.updateProjectionMatrix(); }
 
     const panelTarget = panelOffsetFor(panelOpen, size.width, panelWidth);
@@ -704,7 +714,7 @@ export default function GlobeScene({
             pin: p,
             lon,
             lat,
-            pos: lonLatToVec3(lon, lat, GLOBE_R * 1.002),
+            pos: lonLatToVec3(lon, lat, GLOBE_R * 1.00005),
             dimmed: focusing && p.journey_id !== focusJourneyId,
             text: (p.location_name || "").split(",")[0].trim() || p.title || "",
             coord: fmtCoord(lat, lon),
@@ -763,7 +773,7 @@ export default function GlobeScene({
     const pxPerUnit = h / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * Math.max(alt, 1e-3));
     const curPx = spread * pxPerUnit;
     const factor = curPx > 1 ? THREE.MathUtils.clamp(curPx / (CLUSTER_PX * 2), 0.15, 0.85) : 0.4;
-    moveRef.current = { n: c, D: GLOBE_R + (cam.position.length() - GLOBE_R) * factor, zoomOnly: true };
+    moveRef.current = { n: c, D: Math.max(TRIP_MIN_DIST, GLOBE_R + (cam.position.length() - GLOBE_R) * factor), zoomOnly: true };
   }, [items]);
 
   // Opening a trip eases into mock C's tilted close view. Closing eases back out.

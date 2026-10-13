@@ -21,6 +21,7 @@ export function createGlobeMaterial(landTex) {
       uHatchDir: { value: new THREE.Vector2(-Math.sin(a), Math.cos(a)) },
       uHatchSpacing: { value: tokens.hatch.spacingPx.globe },
       uDpr: { value: 1 },
+      uReliefMix: { value: 1 },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -37,7 +38,7 @@ export function createGlobeMaterial(landTex) {
     fragmentShader: /* glsl */ `
       uniform sampler2D uLand;
       uniform vec3 uLow, uHigh, uRidge, uOcean, uLimb, uHatch;
-      uniform float uHatchOpacity, uHatchSpacing, uDpr;
+      uniform float uHatchOpacity, uHatchSpacing, uDpr, uReliefMix;
       uniform vec2 uHatchDir;
       varying vec2 vUv;
       varying vec3 vNormalW;
@@ -48,7 +49,8 @@ export function createGlobeMaterial(landTex) {
         // mask is magnified up close, and soft (not aliased) when it is minified.
         float lw = clamp(fwidth(m.r) * 1.5, 0.02, 0.15);
         float land = smoothstep(0.5 - lw, 0.5 + lw, m.r);
-        float relief = m.g;
+        // Relief fades to a flat mid tone near the surface (uReliefMix from altitude).
+        float relief = mix(0.35, m.g, uReliefMix);
         vec3 viewDir = normalize(cameraPosition - vPosW);
         float facing = clamp(dot(normalize(vNormalW), viewDir), 0.0, 1.0);
         // Ocean darkens toward the limb.

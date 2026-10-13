@@ -101,7 +101,7 @@ export function buildLandTexture(fc, width) {
 const polygonsOf = (g) => (g?.type === "Polygon" ? [g.coordinates] : g?.type === "MultiPolygon" ? g.coordinates : []);
 
 // All coastlines as one merged line segment buffer slightly above the surface (one draw call).
-export function buildCoastGeometry(fc, r = GLOBE_R * 1.0015) {
+export function buildCoastGeometry(fc, r = GLOBE_R * 1.00004) {
   const segs = [];
   const a = new THREE.Vector3(), b = new THREE.Vector3();
   for (const f of fc.features) {
