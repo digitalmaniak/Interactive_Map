@@ -368,3 +368,5 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
   .ui-layer .bottom-left-group, .ui-layer .bottom-right-group { margin-bottom: env(safe-area-inset-bottom, 0px); }
   .app-container.is-sheet-open .ui-layer .bottom-right-group { margin-bottom: 0; }
 }
+/* Desktop journals header: NEW JOURNEY sizes to its label so the row fits the 350 px panel. */
+@media (min-width: 768px) { .journeys-head .btn-green { width: auto; } }
