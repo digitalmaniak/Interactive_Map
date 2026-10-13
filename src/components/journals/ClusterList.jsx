@@ -38,10 +38,10 @@ export default function ClusterList({ clusterPins, onSelectPin, onBack }) {
               {formatPinDate(pin.start_date) || "Undated"}
             </div>
             <div style={{ fontSize: "1.1rem", color: "var(--v2-text)", fontWeight: 600, margin: "0.25rem 0" }}>
-              {pin.location_name}
+              {pin.title || pin.location_name}
             </div>
             <div style={{ fontSize: "0.85rem", color: "var(--v2-text-dim)", lineHeight: 1.4 }}>
-              {pin.title}
+              {pin.title ? pin.location_name : null}
             </div>
           </div>
         ))}

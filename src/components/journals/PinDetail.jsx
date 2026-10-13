@@ -51,7 +51,7 @@ export default function PinDetail({
       {isConfirmingDelete ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", padding: "1rem 0" }}>
           <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 700, color: "var(--v2-text)" }}>Remove this memory?</h2>
-          <p style={{ fontSize: "0.9rem", color: "var(--v2-text-dim)", margin: 0, lineHeight: 1.5 }}>This will permanently remove &quot;{activePin.title}&quot; and all of its logs.</p>
+          <p style={{ fontSize: "0.9rem", color: "var(--v2-text-dim)", margin: 0, lineHeight: 1.5 }}>This will remove &quot;{activePin.title || activePin.location_name}&quot; and its logs from your journal.</p>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button className="glass-pill icon-button" style={{ flex: 1, background: "var(--v2-surface-2)", border: "1px solid var(--v2-hairline)", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "var(--v2-text-dim)" }} onClick={() => setIsConfirmingDelete(false)}>CANCEL</button>
             <button className="glass-pill btn-red" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={handleRemovePin}>REMOVE</button>
@@ -96,8 +96,8 @@ export default function PinDetail({
               <div style={{ fontSize: "0.8rem", color: "var(--v2-text-dim)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "var(--v2-mono)", marginBottom: "0.25rem" }}>
                 {formatPinDate(activePin.start_date) || "Undated"}{activePin.end_date && activePin.end_date !== activePin.start_date ? ` – ${formatPinDate(activePin.end_date)}` : ""}
               </div>
-              <h2 style={{ fontSize: "1.5rem", margin: "0 0 0.5rem 0", fontWeight: 700, color: "var(--v2-text)", lineHeight: 1.2 }}>{activePin.location_name}</h2>
-              <p style={{ fontSize: "0.95rem", color: "var(--v2-text-dim)", margin: "0 0 1rem 0", lineHeight: 1.4 }}>{activePin.title}</p>
+              <h2 style={{ fontSize: "1.5rem", margin: "0 0 0.5rem 0", fontWeight: 700, color: "var(--v2-text)", lineHeight: 1.2 }}>{activePin.title || activePin.location_name}</h2>
+              <p style={{ fontSize: "0.95rem", color: "var(--v2-text-dim)", margin: "0 0 1rem 0", lineHeight: 1.4 }}>{activePin.title ? activePin.location_name : null}</p>
             </div>
             <button title="Edit pin" onClick={startEditingPin} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--v2-text-dim)", flexShrink: 0, padding: "0.25rem", display: "flex" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
