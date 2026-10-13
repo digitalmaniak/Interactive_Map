@@ -23,11 +23,11 @@ import { useTravelData } from "../hooks/useTravelData";
 import AuthGate from "./shell/AuthGate";
 import AppShell from "./shell/AppShell";
 import JournalsPanel from "./journals/JournalsPanel";
-import WorldMap from "./WorldMap";
+import MapScene from "./map/scene";
 import MapLoader from "./map/MapLoader";
 
 /**
- * Thin composer: hooks + AuthGate + MapLoader + WorldMap + AppShell + JournalsPanel.
+ * Thin composer: hooks + AuthGate + MapLoader + MapScene (R3F) + AppShell + JournalsPanel.
  * PR7 final MapCanvas split step — shell chrome and pin load extracted; pin CRUD
  * and journal interaction state remain here (tightly coupled; leave for Journey props later).
  */
@@ -70,7 +70,7 @@ export default function MapCanvas() {
     handleGoogle,
   } = useAuthSession();
 
-  // Journeys + flat pins (WorldMap) — useTravelData
+  // Journeys + flat pins (MapScene) — useTravelData
   const { journeys, pins, setPins, reload: reloadTravelData } = useTravelData(session);
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -189,6 +189,7 @@ export default function MapCanvas() {
 
   // Reset inline edit modes whenever the active pin changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing load on mount, unchanged in v2 PR 1
     setIsEditingPin(false);
     setEditingLogId(null);
   }, [activePin?.id]);
@@ -544,16 +545,14 @@ export default function MapCanvas() {
       <MapLoader>
         {({ isLoaded, geoJsonData, statesData }) => (
           <>
-      {/* Flat 2D world map (D3-geo SVG) — data from MapLoader */}
+      {/* v2 map: React Three Fiber scene, orthographic top down camera. Data from MapLoader */}
       <div className="canvas-container">
         {isLoaded && geoJsonData && (
-          <WorldMap
+          <MapScene
             geoJson={geoJsonData}
-            statesGeoJson={statesData}
             pins={pins}
             activePinId={activePin?.id || null}
             focusJourneyId={activeJourneyId}
-            showPaths={showFlightPaths && !activePin}
             flyTo={flyTo}
             onPinClick={handlePinClick}
             onMapClick={handleMapClick}

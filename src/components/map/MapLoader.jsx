@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 /**
  * GeoJSON fetch (countries + US states) + animated loading progress overlay.
  * Owns loader state; exposes { isLoaded, geoJsonData, statesData } via children render prop.
- * Behavior-identical extract from MapCanvas — no WorldMap changes.
+ * Behavior-identical extract from MapCanvas. No map renderer changes.
  */
 export default function MapLoader({ children }) {
   const [loadingProgress, setLoadingProgress] = useState(10);
