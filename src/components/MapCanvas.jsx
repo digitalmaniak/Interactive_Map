@@ -355,7 +355,7 @@ export default function MapCanvas() {
     try {
       const { error, deleted } = await deletePinRow(id);
       if (error) throw error;
-      if (!deleted) throw new Error("This memory could not be removed. It may already be gone.");
+      if (!deleted) throw new Error("This memory could not be removed. Please try again.");
       // Soft deleted on the server. Close the dialog and drop the pin everywhere it is shown.
       setIsConfirmingDelete(false);
       setPins((prev) => prev.filter((p) => p.id !== id));

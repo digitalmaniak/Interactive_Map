@@ -43,14 +43,11 @@ export async function updatePin(id, fields) {
 
 /** Delete a pin by id. */
 export async function removePin(id) {
-  // Soft delete: stamp deleted_at instead of removing the row. No RETURNING (the SELECT
-  // policy hides deleted rows); an exact count tells us one row changed.
-  const { error, count } = await supabase
-    .from("pins")
-    .update({ deleted_at: new Date().toISOString() }, { count: "exact" })
-    .eq("id", id)
-    .is("deleted_at", null);
-  return { error, deleted: count ?? 0 };
+  // Soft delete through Harbor's owner-only RPC (safe to call twice). Success is ok or
+  // already_deleted; anything else is reported as not removed.
+  const { data, error } = await supabase.rpc("soft_delete_pin", { p_id: id });
+  const ok = Boolean(data && (data.ok || data.already_deleted));
+  return { error, deleted: ok ? 1 : 0 };
 }
 
 /** Insert a single pin_logs row; returns the inserted row via .select().single(). */
