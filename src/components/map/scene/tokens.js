@@ -35,9 +35,9 @@ export const tokens = {
 
 // Performance tiers (DESIGN.md mobile budget).
 export const tiers = {
-  desktop: { dpr: [1.25, 2], msaa: true, bloom: tokens.glow.desktop, globeSeg: [256, 128], maskW: 4096, labels: 40 },
-  phoneHigh: { dpr: [1.25, 2], msaa: false, bloom: tokens.glow.phoneHigh, globeSeg: [128, 64], maskW: 2048, labels: 16 },
-  phoneLow: { dpr: [1, 1.5], msaa: false, bloom: null, globeSeg: [96, 48], maskW: 2048, labels: 10 },
+  desktop: { dpr: [1.25, 2], msaa: true, bloom: tokens.glow.desktop, globeSeg: [256, 128], maskW: 4096, labels: 24 },
+  phoneHigh: { dpr: [1.25, 2], msaa: false, bloom: tokens.glow.phoneHigh, globeSeg: [128, 64], maskW: 2048, labels: 12 },
+  phoneLow: { dpr: [1, 1.5], msaa: false, bloom: null, globeSeg: [96, 48], maskW: 2048, labels: 12 },
 };
 
 // Cubic bezier easing (CSS style), solved by Newton iterations.

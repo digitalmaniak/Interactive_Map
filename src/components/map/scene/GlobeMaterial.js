@@ -44,7 +44,10 @@ export function createGlobeMaterial(landTex) {
       varying vec3 vPosW;
       void main() {
         vec4 m = texture2D(uLand, vUv);
-        float land = smoothstep(0.35, 0.65, m.r);
+        // Land edge width follows screen space derivatives so the coast stays crisp when the
+        // mask is magnified up close, and soft (not aliased) when it is minified.
+        float lw = clamp(fwidth(m.r) * 1.5, 0.02, 0.15);
+        float land = smoothstep(0.5 - lw, 0.5 + lw, m.r);
         float relief = m.g;
         vec3 viewDir = normalize(cameraPosition - vPosW);
         float facing = clamp(dot(normalize(vNormalW), viewDir), 0.0, 1.0);
@@ -53,7 +56,9 @@ export function createGlobeMaterial(landTex) {
         // Screen space hatch, 1 px lines with a 0.75 px edge.
         float s = dot(gl_FragCoord.xy / uDpr, uHatchDir);
         float h = abs(fract(s / uHatchSpacing) - 0.5) * uHatchSpacing;
-        float line = smoothstep(0.5 + 0.75, 0.5, h);
+        // Antialias width from fwidth: about one device pixel at any zoom or dpr, no shimmer.
+        float aa = max(fwidth(s), 1e-4);
+        float line = 1.0 - smoothstep(0.5, 0.5 + aa, h);
         // Fade to 0 over the last 15 percent toward the limb, and lift slightly near coasts.
         float limbFade = smoothstep(0.0, 0.15, facing);
         float nearCoast = mix(0.08, 0.14, smoothstep(0.0, 0.25, 1.0 - m.b)) / 0.14;

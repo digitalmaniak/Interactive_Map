@@ -11,6 +11,7 @@ import { GLOBE_R, rewindGeo, lonLatToVec3, vec3ToLonLat, buildLandTexture, build
 import { createGlobeMaterial, createAtmosphereMaterial, createBeamMaterial } from "./GlobeMaterial";
 import { tokens, tiers, bezier } from "./tokens";
 import { detectRenderTier } from "./renderTier";
+import { supabase } from "../../../lib/supabase/client";
 import FpsGuard from "./FpsGuard";
 import StaticGlobe from "./StaticGlobe";
 
@@ -22,6 +23,8 @@ const C = tokens.color;
 const CAM = tokens.camera;
 const HOME_DIST = CAM.keyframes[0].distR;
 const MIN_DIST = 1.08;
+// Trip view lets the camera come about 3x closer to the surface than MIN_DIST.
+const TRIP_MIN_DIST = GLOBE_R + (MIN_DIST - GLOBE_R) / 3;
 const MAX_DIST = 6;
 const LABEL_DIST = 1.9;
 const DRAG_PX = 5;
@@ -263,7 +266,17 @@ function CameraDirector({ controlsRef, moveRef, reducedMotion, tripView, onArriv
 
   useFrame((_, delta) => {
     const controls = controlsRef.current;
-    if (controls) controls.rotateSpeed = THREE.MathUtils.clamp((camera.position.length() - GLOBE_R) * 0.35, 0.03, 0.5);
+    const alt = camera.position.length() - GLOBE_R;
+    if (controls) {
+      controls.rotateSpeed = THREE.MathUtils.clamp(alt * 0.35, 0.03, 0.5);
+      controls.minDistance = tripView.current ? TRIP_MIN_DIST : MIN_DIST;
+    }
+    // Near plane follows altitude (about 0.1 x altitude) so near ground lines keep depth precision.
+    const near = THREE.MathUtils.clamp(alt * 0.1, 0.0005, 0.05);
+    if (Math.abs(near - camera.near) > camera.near * 0.05) {
+      camera.near = near;
+      camera.updateProjectionMatrix();
+    }
     const req = moveRef.current;
     if (req !== seen.current) {
       seen.current = req;
@@ -346,26 +359,124 @@ function CameraDirector({ controlsRef, moveRef, reducedMotion, tripView, onArriv
 }
 
 // HTML labels above the canvas, positioned each frame without React re-renders.
-function LabelProjector({ items, labelEls, focusing, maxLabels }) {
+// Overlap rule (DESIGN.md, Label overlap rule v1): place labels by priority, hide any
+// that overlap a placed one (beam and dot stay), merge pins within 28 px into one mono
+// cluster label. Placement recomputes only while the camera moves, at most every 100 ms.
+const CLUSTER_PX = 28;
+const LABEL_PAD = 6;
+const LABEL_RECOMPUTE_MS = 100;
+const LABEL_RETURN_MS = 200;
+const FACING_MIN = Math.cos(THREE.MathUtils.degToRad(75));
+
+function labelPriority(it, activePinId, meta) {
+  if (it.pin.id === activePinId) return 100;
+  if (meta.ends.has(it.pin.id)) return 80;
+  if (meta.notes.has(it.pin.id)) return 60;
+  return 40;
+}
+
+function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, meta, clusterRef }) {
   const { camera, size } = useThree();
   const v = useMemo(() => new THREE.Vector3(), []);
   const camDir = useMemo(() => new THREE.Vector3(), []);
+  const nrm = useMemo(() => new THREE.Vector3(), []);
+  const st = useRef({ last: 0, mat: new THREE.Matrix4(), dirty: true, state: [], placed: new Set(), heads: new Map() });
+  const order = useMemo(() => {
+    const ts = (it) => { const d = Date.parse(it.pin.start_date || ""); return Number.isFinite(d) ? d : Infinity; };
+    return items
+      .map((it, i) => ({ i, p: labelPriority(it, activePinId, meta), t: ts(it) }))
+      .sort((a, b) => b.p - a.p || a.t - b.t)
+      .map((o) => o.i);
+  }, [items, activePinId, meta]);
+  useEffect(() => { st.current.dirty = true; }, [order, size.width, size.height, focusing, maxLabels]);
+
   useFrame(() => {
-    const close = camera.position.length() < LABEL_DIST;
-    let shown = 0;
-    items.forEach((it, i) => {
+    const s = st.current;
+    const now = performance.now();
+    camera.updateMatrixWorld();
+    const moved = !s.mat.equals(camera.matrixWorld) || !s.projKey || s.projKey !== camera.projectionMatrix.elements.join(",");
+    if ((moved || s.dirty) && now - s.last >= LABEL_RECOMPUTE_MS) {
+      s.last = now;
+      s.dirty = false;
+      s.mat.copy(camera.matrixWorld);
+      s.projKey = camera.projectionMatrix.elements.join(",");
+      const close = camera.position.length() < LABEL_DIST;
+      // Project visible candidates.
+      const scr = [];
+      for (const i of order) {
+        const it = items[i];
+        if (!it || it.dimmed || !(close || focusing)) continue;
+        nrm.copy(it.pos).normalize();
+        camDir.copy(camera.position).sub(it.pos).normalize();
+        if (camDir.dot(nrm) < FACING_MIN) continue;
+        v.copy(it.pos).project(camera);
+        if (v.z > 1) continue;
+        scr.push({ i, x: (v.x * 0.5 + 0.5) * size.width, y: (-v.y * 0.5 + 0.5) * size.height });
+      }
+      // Cluster in priority order with a grid of screen buckets (cell = 28 px).
+      const grid = new Map();
+      const clusters = [];
+      for (const c of scr) {
+        const gx = Math.floor(c.x / CLUSTER_PX), gy = Math.floor(c.y / CLUSTER_PX);
+        let host = null;
+        for (let dx = -1; dx <= 1 && !host; dx++) for (let dy = -1; dy <= 1 && !host; dy++) {
+          for (const h of grid.get(`${gx + dx},${gy + dy}`) || []) {
+            if (Math.hypot(h.x - c.x, h.y - c.y) <= CLUSTER_PX) { host = h; break; }
+          }
+        }
+        if (host) { host.members.push(c.i); continue; }
+        const h = { ...c, members: [c.i] };
+        clusters.push(h);
+        const k = `${gx},${gy}`;
+        if (!grid.has(k)) grid.set(k, []);
+        grid.get(k).push(h);
+      }
+      // Place by priority, skipping overlaps, capped per device.
+      const boxes = [];
+      const placed = new Set();
+      const heads = new Map();
+      for (const c of clusters) {
+        if (placed.size >= maxLabels) break;
+        const el = labelEls.current[c.i];
+        if (!el) continue;
+        const w = (el.offsetWidth || 80) + LABEL_PAD * 2, h = (el.offsetHeight || 28) + LABEL_PAD * 2;
+        const box = { l: c.x - w / 2, r: c.x + w / 2, t: c.y - 10 - h + LABEL_PAD, b: c.y - 10 + LABEL_PAD };
+        if (boxes.some((o) => box.l < o.r && box.r > o.l && box.t < o.b && box.b > o.t)) continue;
+        // Hysteresis: a hidden label must stay hidden 200 ms before returning.
+        const prev = s.state[c.i];
+        if (prev && !prev.shown && now - prev.hiddenAt < LABEL_RETURN_MS) continue;
+        boxes.push(box);
+        placed.add(c.i);
+        heads.set(c.i, c.members);
+      }
+      for (let i = 0; i < items.length; i++) {
+        const prev = s.state[i] || { shown: false, hiddenAt: -Infinity };
+        const show = placed.has(i);
+        if (prev.shown && !show) prev.hiddenAt = now;
+        prev.shown = show;
+        s.state[i] = prev;
+        const el = labelEls.current[i];
+        if (!el) continue;
+        const members = heads.get(i);
+        const cluster = !!members && members.length > 1;
+        const place = el.firstChild;
+        const want = cluster ? `${items[i].text} +${members.length - 1}` : items[i].text;
+        if (place && place.textContent !== want) place.textContent = want;
+        el.classList.toggle("is-cluster", cluster);
+        el.style.pointerEvents = cluster ? "auto" : "none";
+        el.style.opacity = show ? "1" : "0";
+        el.style.visibility = show ? "visible" : "hidden";
+      }
+      s.heads = heads;
+      clusterRef.current = heads;
+    }
+    // Keep shown labels glued to their pins every frame.
+    for (const i of s.heads.keys()) {
       const el = labelEls.current[i];
-      if (!el) return;
-      camDir.copy(camera.position).sub(it.pos).normalize();
-      const facing = camDir.dot(it.pos.clone().normalize()) > 0.15;
-      const show = facing && !it.dimmed && (close || focusing) && shown < maxLabels;
-      if (!show) { el.style.opacity = "0"; el.style.visibility = "hidden"; return; }
-      shown++;
-      v.copy(it.pos).project(camera);
-      el.style.visibility = "visible";
-      el.style.opacity = "1";
+      if (!el) continue;
+      v.copy(items[i].pos).project(camera);
       el.style.transform = `translate(${(v.x * 0.5 + 0.5) * size.width}px, ${(-v.y * 0.5 + 0.5) * size.height}px) translate(-50%, calc(-100% - 10px))`;
-    });
+    }
   });
   return null;
 }
@@ -479,6 +590,60 @@ export default function GlobeScene({
         }),
     [pins, focusing, focusJourneyId]
   );
+
+  // Label priority inputs: first and last stops (journey_route_stops order) and stops
+  // with notes (journal_blocks rows on the place). Read only.
+  const [labelMeta, setLabelMeta] = useState({ ends: new Set(), notes: new Set() });
+  useEffect(() => {
+    if (!focusing) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: stops } = await supabase
+          .from("journey_route_stops")
+          .select("pin_id, stop_index")
+          .eq("journey_id", focusJourneyId)
+          .order("stop_index", { ascending: true });
+        const ids = (stops || []).map((r) => r.pin_id).filter(Boolean);
+        const ends = new Set(ids.length ? [ids[0], ids[ids.length - 1]] : []);
+        let notes = new Set();
+        if (ids.length) {
+          const { data: blocks } = await supabase
+            .from("journal_blocks")
+            .select("parent_id")
+            .eq("parent_type", "place")
+            .in("parent_id", ids);
+          notes = new Set((blocks || []).map((b) => b.parent_id));
+        }
+        if (!cancelled) setLabelMeta({ ends, notes });
+      } catch {
+        // Priority falls back to the default tier; labels still render.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [focusing, focusJourneyId]);
+
+  // Cluster tap: ease the camera in over the cluster until its pins separate.
+  const clusterRef = useRef(new Map());
+  const onClusterTap = useCallback((i) => {
+    const members = clusterRef.current.get(i);
+    const cam = controlsRef.current?.object;
+    if (!members || members.length < 2 || !cam) return;
+    const pts = members.map((m) => items[m]).filter(Boolean);
+    const c = new THREE.Vector3();
+    for (const p of pts) c.add(p.pos);
+    c.normalize();
+    let spread = 0;
+    for (const p of pts) for (const q of pts) spread = Math.max(spread, p.pos.distanceTo(q.pos));
+    const alt = cam.position.length() - GLOBE_R;
+    // Screen separation scales roughly with 1 / altitude; aim for about 2x the merge radius.
+    const h = Math.max(window.innerHeight || 800, 1);
+    const pxPerUnit = h / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * Math.max(alt, 1e-3));
+    const curPx = spread * pxPerUnit;
+    const factor = curPx > 1 ? THREE.MathUtils.clamp(curPx / (CLUSTER_PX * 2), 0.15, 0.85) : 0.4;
+    const nextAlt = Math.max(TRIP_MIN_DIST - GLOBE_R, alt * factor);
+    moveRef.current = { kind: "open", n: c, fit: GLOBE_R + nextAlt };
+  }, [items]);
 
   // Opening a trip eases into mock C's tilted close view. Closing eases back out.
   const focusKeyRef = useRef(null);
@@ -612,7 +777,7 @@ export default function GlobeScene({
         />
         <ViewOffset panelOpen={panelOpen} panelWidth={panelWidth} reducedMotion={reducedMotion} viewRef={viewRef} />
         <CameraDirector controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} />
-        <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} />
+        <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={activePinId} meta={labelMeta} clusterRef={clusterRef} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>
             <Bloom
@@ -633,6 +798,7 @@ export default function GlobeScene({
             ref={(el) => { labelEls.current[i] = el; }}
             className={`v2-pin-label${it.pin.id === activePinId ? " is-active" : ""}${reducedMotion ? " no-motion" : ""}`}
             style={{ opacity: 0, visibility: "hidden" }}
+            onClick={() => onClusterTap(i)}
           >
             <span className="v2-pin-label-place">{it.text}</span>
             <span className="v2-pin-label-coord">{it.coord}</span>

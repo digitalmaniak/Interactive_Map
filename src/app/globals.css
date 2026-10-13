@@ -229,8 +229,11 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 .v2-pin-label {
   position: absolute; left: 0; top: 0; will-change: transform, opacity;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  transition: opacity 250ms ease;
+  transition: opacity 150ms ease, visibility 0s linear 150ms;
 }
+.v2-pin-label[style*="visibility: visible"] { transition: opacity 150ms ease, visibility 0s; }
+.v2-pin-label.is-cluster { cursor: pointer; }
+.v2-pin-label.is-cluster .v2-pin-label-place { font-family: var(--v2-mono); letter-spacing: 0.08em; }
 .v2-pin-label.no-motion { transition: none; }
 .v2-pin-label-place {
   font: 500 11px/1 var(--v2-sans); letter-spacing: 0.22em; text-transform: uppercase;
