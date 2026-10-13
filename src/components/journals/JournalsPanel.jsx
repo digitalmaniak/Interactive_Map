@@ -1,5 +1,8 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
+import JourneyLegsReview from "./JourneyLegsReview";
+import { fetchDraftLegCounts } from "../../lib/journeys/legs";
 import AddMemoryForm from "./AddMemoryForm";
 import JourneyList from "./JourneyList";
 import JourneyPlacesList from "./JourneyPlacesList";
@@ -72,6 +75,23 @@ export default function JournalsPanel({
   onStopSharingJourney,
   onMovePlace,
 }) {
+  const [reviewJourneyId, setReviewJourneyId] = useState(null);
+  const [draftCounts, setDraftCounts] = useState({});
+
+  const refreshDraftCounts = useCallback(() => {
+    fetchDraftLegCounts().then(setDraftCounts).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (activeTab === "Journals") refreshDraftCounts();
+  }, [activeTab, refreshDraftCounts]);
+
+  const reviewJourney = reviewJourneyId ? (journeys || []).find((j) => j.id === reviewJourneyId) || null : null;
+  const pinsById = useMemo(() => {
+    const map = {};
+    for (const j of journeys || []) for (const p of j.places || []) map[p.id] = p;
+    return map;
+  }, [journeys]);
+
   return (
     <div className="journals-panel" style={{
       position: "absolute",
@@ -143,6 +163,13 @@ export default function JournalsPanel({
           onSelectPin={onSelectPin}
           onBack={onBackFromCluster}
         />
+      ) : reviewJourney ? (
+        <JourneyLegsReview
+          journey={reviewJourney}
+          pinsById={pinsById}
+          onBack={() => { setReviewJourneyId(null); refreshDraftCounts(); }}
+          onConfirmed={refreshDraftCounts}
+        />
       ) : activeJourney ? (
         <JourneyPlacesList
           journey={activeJourney}
@@ -162,6 +189,8 @@ export default function JournalsPanel({
           onSoftDeleteJourney={onSoftDeleteJourney}
           onShareJourney={onShareJourney}
           onStopSharingJourney={onStopSharingJourney}
+          draftCounts={draftCounts}
+          onReviewLegs={(journey) => setReviewJourneyId(journey.id)}
         />
       )}
     </div>

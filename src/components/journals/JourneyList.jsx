@@ -27,6 +27,8 @@ export default function JourneyList({
   onSoftDeleteJourney,
   onShareJourney,
   onStopSharingJourney,
+  draftCounts = {},
+  onReviewLegs,
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState(emptyForm());
@@ -309,6 +311,17 @@ export default function JourneyList({
                   </div>
                 )}
               </div>
+              {onReviewLegs && !String(journey.id).startsWith("__") && (
+                <button
+                  type="button"
+                  className="legs-entry"
+                  onClick={(e) => { e.stopPropagation(); onReviewLegs(journey); }}
+                  aria-label={`Review legs for ${journey.title}${draftCounts[journey.id] ? `, ${draftCounts[journey.id]} draft` : ""}`}
+                >
+                  <span>Review legs</span>
+                  {draftCounts[journey.id] ? <span className="legs-badge">{draftCounts[journey.id]} draft</span> : null}
+                </button>
+              )}
               {confirmDeleteId === journey.id && (
                 <div
                   onClick={(e) => e.stopPropagation()}
