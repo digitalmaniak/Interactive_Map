@@ -5,6 +5,7 @@ export const QUICK_ADD = {
   minChars: 2,
   minGapMs: 1000, // at most one request per second
   limit: 6,
+  timeoutMs: 6000, // a slow geocoder falls through to the next one instead of hanging
   photonUrl: "https://photon.komoot.io/api/",
   nominatimUrl: "https://nominatim.openstreetmap.org/search",
 };
@@ -107,9 +108,23 @@ export async function geocode(q, { signal, gate, fetchImpl = fetch, sleep = (ms)
     if (w) await sleep(w);
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     gate?.mark();
-    const res = await fetchImpl(url, { signal, headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error(`geocoder ${res.status}`);
-    return map(await res.json());
+    // Per-request timeout on top of the caller's abort signal.
+    const ac = new AbortController();
+    const onAbort = () => ac.abort();
+    signal?.addEventListener?.("abort", onAbort, { once: true });
+    const timer = setTimeout(() => ac.abort(), QUICK_ADD.timeoutMs);
+    try {
+      const res = await fetchImpl(url, { signal: ac.signal, headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error(`geocoder ${res.status}`);
+      return map(await res.json());
+    } catch (e) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      if (e?.name === "AbortError") throw new Error("geocoder timeout");
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener?.("abort", onAbort);
+    }
   };
   let firstErr = null;
   try {

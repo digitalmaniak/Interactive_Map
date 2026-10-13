@@ -57,12 +57,22 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
     return () => window.removeEventListener("keydown", onKey);
   }, [dialog]);
 
-  const onChange = (e) => {
-    const v = e.target.value;
+  // Search runs off the native input event (typing, paste, autofill, IME and the clear
+  // button all fire it), debounced. React's onChange only mirrors the value.
+  const handleText = useCallback((v) => {
     setQ(v);
     if (shouldSearch(v)) runRef.current?.(v);
     else { runRef.current?.cancel(); ctl.current?.abort(); setBusy(false); setResults([]); setSel(-1); setError(""); setOpen(false); }
-  };
+  }, []);
+  useEffect(() => {
+    const el = input.current;
+    if (!el) return undefined;
+    const onInput = () => handleText(el.value);
+    el.addEventListener("input", onInput);
+    el.addEventListener("search", onInput);
+    return () => { el.removeEventListener("input", onInput); el.removeEventListener("search", onInput); };
+  }, [handleText]);
+  const onChange = (e) => setQ(e.target.value);
 
   const pick = useCallback((r) => {
     if (!r) return;
