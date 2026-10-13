@@ -23,6 +23,7 @@ export default function JourneyList({
   journeys,
   loading = false,
   onSelectJourney,
+  onOpenReview,
   onCreateJourney,
   onUpdateJourney,
   onSoftDeleteJourney,
@@ -120,6 +121,9 @@ export default function JourneyList({
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
           Journeys
         </h2>
+        {onOpenReview && (
+          <button type="button" className="glass-pill icon-button" onClick={onOpenReview} style={{ padding: "0.35rem 0.75rem", fontSize: "0.7rem", fontWeight: 700, flexShrink: 0, background: "var(--v2-surface-2)", border: "1px solid var(--v2-hairline)", color: "var(--v2-text)" }}>REVIEW</button>
+        )}
         {onCreateJourney && (
           <button
             type="button"

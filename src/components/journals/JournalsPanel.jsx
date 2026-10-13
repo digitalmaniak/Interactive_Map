@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ReviewItems from "./ReviewItems";
 import JourneyLegsReview from "./JourneyLegsReview";
 import { fetchDraftLegCounts } from "../../lib/journeys/legs";
 import AddMemoryForm from "./AddMemoryForm";
@@ -81,6 +82,7 @@ export default function JournalsPanel({
   onMovePlace,
 }) {
   const [reviewJourneyId, setReviewJourneyId] = useState(null);
+  const [reviewAll, setReviewAll] = useState(false);
   const [draftCounts, setDraftCounts] = useState({});
 
   const refreshDraftCounts = useCallback(() => {
@@ -175,6 +177,12 @@ export default function JournalsPanel({
           onSelectPin={onSelectPin}
           onBack={onBackFromCluster}
         />
+      ) : reviewAll ? (
+        <ReviewItems
+          journeys={journeys}
+          onBack={() => { setReviewAll(false); refreshDraftCounts(); }}
+          onConfirmed={refreshDraftCounts}
+        />
       ) : reviewJourney ? (
         <JourneyLegsReview
           journey={reviewJourney}
@@ -204,6 +212,7 @@ export default function JournalsPanel({
           onStopSharingJourney={onStopSharingJourney}
           draftCounts={draftCounts}
           onReviewLegs={(journey) => setReviewJourneyId(journey.id)}
+          onOpenReview={() => setReviewAll(true)}
         />
       )}
     </div>
