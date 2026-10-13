@@ -9,16 +9,16 @@ const MapCanvas = dynamic(() => import("../components/MapCanvas"), {
     <div style={{
       width: "100vw",
       height: "100vh",
-      background: "#1a0210",
+      background: "var(--v2-bg)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      fontFamily: "var(--font-orbitron), monospace",
-      color: "#f8fafc",
+      fontFamily: "var(--v2-mono), monospace",
+      color: "var(--v2-text-dim)",
       letterSpacing: "0.2em",
       fontSize: "1.25rem"
     }}>
-      LOADING SYSTEM CONTEXT...
+      LOADING
     </div>
   )
 });

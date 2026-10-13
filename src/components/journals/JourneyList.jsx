@@ -113,7 +113,7 @@ export default function JourneyList({
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", flexShrink: 0 }}>
-        <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 600, color: "var(--ink)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 600, color: "var(--v2-text)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
           Journeys
         </h2>
@@ -133,12 +133,12 @@ export default function JourneyList({
           </button>
         )}
       </div>
-      <p style={{ fontSize: "0.85rem", color: "var(--muted)", margin: 0, flexShrink: 0 }}>
+      <p style={{ fontSize: "0.85rem", color: "var(--v2-text-dim)", margin: 0, flexShrink: 0 }}>
         Your trips and collections. Open one to see its places.
       </p>
 
       {showCreate && (
-        <form onSubmit={submitCreate} style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: "var(--radius-card)", border: "1px solid var(--stone)", background: "var(--surface)", flexShrink: 0 }}>
+        <form onSubmit={submitCreate} style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: "var(--v2-radius)", border: "1px solid var(--v2-hairline)", background: "var(--v2-surface)", flexShrink: 0 }}>
           <label className="panel-label">Title *</label>
           <input
             type="text"
@@ -181,7 +181,7 @@ export default function JourneyList({
             <button
               type="button"
               className="glass-pill icon-button"
-              style={{ flex: 1, background: "var(--paper-soft)", border: "1px solid var(--stone)", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "var(--muted)" }}
+              style={{ flex: 1, background: "var(--v2-surface-2)", border: "1px solid var(--v2-hairline)", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "var(--v2-text-dim)" }}
               onClick={() => { setShowCreate(false); setCreateForm(emptyForm()); }}
               disabled={busy}
             >
@@ -204,7 +204,7 @@ export default function JourneyList({
                 key={journey.id}
                 onSubmit={(e) => submitEdit(e, journey.id)}
                 onClick={(e) => e.stopPropagation()}
-                style={{ padding: "0.75rem", borderRadius: "var(--radius-card)", border: "1px solid var(--accent-border)", background: "var(--surface)" }}
+                style={{ padding: "0.75rem", borderRadius: "var(--v2-radius)", border: "1px solid var(--v2-route-border)", background: "var(--v2-surface)" }}
               >
                 <label className="panel-label">Title *</label>
                 <input type="text" className="panel-input" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} required />
@@ -236,7 +236,7 @@ export default function JourneyList({
                 )}
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
                   <button type="submit" className="glass-pill btn-green" style={{ flex: 1, display: "flex", justifyContent: "center" }} disabled={busy || !editForm.title.trim()}>SAVE</button>
-                  <button type="button" className="glass-pill icon-button" style={{ flex: 1, background: "var(--paper-soft)", border: "1px solid var(--stone)", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "var(--muted)" }} onClick={cancelEdit} disabled={busy}>CANCEL</button>
+                  <button type="button" className="glass-pill icon-button" style={{ flex: 1, background: "var(--v2-surface-2)", border: "1px solid var(--v2-hairline)", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "var(--v2-text-dim)" }} onClick={cancelEdit} disabled={busy}>CANCEL</button>
                 </div>
               </form>
             );
@@ -250,24 +250,24 @@ export default function JourneyList({
                 flexDirection: "column",
                 padding: "1rem",
                 cursor: "pointer",
-                borderRadius: "var(--radius-card)",
-                border: "1px solid #E7E5E4",
-                background: "var(--surface)",
+                borderRadius: "var(--v2-radius)",
+                border: "1px solid var(--v2-hairline)",
+                background: "var(--v2-surface)",
                 transition: "all 0.2s ease",
               }}
               onClick={() => onSelectJourney(journey)}
-              onMouseOver={(e) => { e.currentTarget.style.background = "#FAFAF8"; }}
-              onMouseOut={(e) => { e.currentTarget.style.background = "#FFFFFF"; }}
+              onMouseOver={(e) => { e.currentTarget.style.background = "var(--v2-surface-2)"; }}
+              onMouseOut={(e) => { e.currentTarget.style.background = "var(--v2-surface)"; }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--v2-text-dim)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "var(--v2-mono)" }}>
                     {dates || "Undated"}
                   </div>
-                  <div style={{ fontSize: "1.1rem", color: "var(--ink)", fontWeight: 600, margin: "0.25rem 0" }}>
+                  <div style={{ fontSize: "1.1rem", color: "var(--v2-text)", fontWeight: 600, margin: "0.25rem 0" }}>
                     {journey.title}
                   </div>
-                  <div style={{ fontSize: "0.85rem", color: "var(--muted)", lineHeight: 1.4 }}>
+                  <div style={{ fontSize: "0.85rem", color: "var(--v2-text-dim)", lineHeight: 1.4 }}>
                     {placeCount} {placeCount === 1 ? "place" : "places"}
                     {shared ? " · Shared" : ""}
                   </div>
@@ -279,7 +279,7 @@ export default function JourneyList({
                         type="button"
                         title="Edit journey"
                         onClick={(e) => startEdit(journey, e)}
-                        style={{ background: "transparent", border: "1px solid var(--stone)", borderRadius: "8px", padding: "0.25rem 0.4rem", cursor: "pointer", color: "var(--muted)", fontSize: "0.7rem", fontWeight: 700 }}
+                        style={{ background: "transparent", border: "1px solid var(--v2-hairline)", borderRadius: "2px", padding: "0.25rem 0.4rem", cursor: "pointer", color: "var(--v2-text-dim)", fontSize: "0.7rem", fontWeight: 700 }}
                         disabled={busy}
                       >
                         Edit
@@ -300,7 +300,7 @@ export default function JourneyList({
                         type="button"
                         title="Delete journey"
                         onClick={(e) => requestDelete(journey, e)}
-                        style={{ background: "transparent", border: "1px solid rgba(220,38,38,0.25)", borderRadius: "6px", padding: "0.25rem 0.4rem", cursor: "pointer", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700 }}
+                        style={{ background: "transparent", border: "1px solid rgba(242,85,90,0.25)", borderRadius: "2px", padding: "0.25rem 0.4rem", cursor: "pointer", color: "var(--v2-danger)", fontSize: "0.7rem", fontWeight: 700 }}
                         disabled={busy}
                       >
                         Del
@@ -312,9 +312,9 @@ export default function JourneyList({
               {confirmDeleteId === journey.id && (
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  style={{ marginTop: "0.75rem", padding: "0.65rem", borderRadius: "8px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)" }}
+                  style={{ marginTop: "0.75rem", padding: "0.65rem", borderRadius: "2px", background: "rgba(242,85,90,0.06)", border: "1px solid rgba(242,85,90,0.2)" }}
                 >
-                  <div style={{ fontSize: "0.8rem", color: "#7f1d1d", marginBottom: "0.5rem" }}>
+                  <div style={{ fontSize: "0.8rem", color: "var(--v2-danger)", marginBottom: "0.5rem" }}>
                     Soft-delete &ldquo;{journey.title}&rdquo;? Places move to Imported.
                   </div>
                   <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -322,7 +322,7 @@ export default function JourneyList({
                       type="button"
                       onClick={(e) => confirmDelete(journey, e)}
                       disabled={busy}
-                      style={{ flex: 1, background: "#dc2626", color: "white", border: "none", borderRadius: "6px", padding: "0.4rem", fontSize: "0.7rem", fontWeight: 700, cursor: "pointer" }}
+                      style={{ flex: 1, background: "var(--v2-danger)", color: "var(--v2-bg)", border: "none", borderRadius: "2px", padding: "0.4rem", fontSize: "0.7rem", fontWeight: 700, cursor: "pointer" }}
                     >
                       DELETE
                     </button>
@@ -330,7 +330,7 @@ export default function JourneyList({
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
                       disabled={busy}
-                      style={{ flex: 1, background: "var(--paper-soft)", border: "1px solid var(--stone)", borderRadius: "10px", padding: "0.4rem", fontSize: "0.7rem", fontWeight: 700, cursor: "pointer", color: "var(--muted)" }}
+                      style={{ flex: 1, background: "var(--v2-surface-2)", border: "1px solid var(--v2-hairline)", borderRadius: "2px", padding: "0.4rem", fontSize: "0.7rem", fontWeight: 700, cursor: "pointer", color: "var(--v2-text-dim)" }}
                     >
                       CANCEL
                     </button>
@@ -341,7 +341,7 @@ export default function JourneyList({
           );
         })}
         {(journeys || []).length === 0 && (
-          <div style={{ textAlign: "center", color: "var(--muted)", fontSize: "0.9rem", padding: "2rem 0" }}>
+          <div style={{ textAlign: "center", color: "var(--v2-text-dim)", fontSize: "0.9rem", padding: "2rem 0" }}>
             No journeys yet. Create one or add a memory pin to the globe!
           </div>
         )}
