@@ -73,14 +73,14 @@ function tripFraming(points) {
   return { n: c, fit };
 }
 
-function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend }) {
+function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false }) {
   const { gl, size, camera } = useThree();
-  const t = tiers[tier];
+  const t = cheap ? { ...tiers.phoneLow, globeSeg: [64, 32], maskW: 1024 } : tiers[tier];
   const { material, atmo, coast, tex } = useMemo(() => {
     const max = gl.capabilities.maxTextureSize || 4096;
     const tx = buildLandTexture(geo, Math.min(t.maskW, max));
-    return { tex: tx, material: createGlobeMaterial(tx), atmo: createAtmosphereMaterial(), coast: buildCoastGeometry(geo) };
-  }, [geo, gl, t.maskW]);
+    return { tex: tx, material: createGlobeMaterial(tx, { cheap }), atmo: createAtmosphereMaterial(), coast: buildCoastGeometry(geo) };
+  }, [geo, gl, t.maskW, cheap]);
   useEffect(() => () => { material.dispose(); atmo.dispose(); coast.dispose(); tex.dispose(); }, [material, atmo, coast, tex]);
   useFrame(() => {
     material.uniforms.uDpr.value = gl.getPixelRatio();
@@ -101,9 +101,11 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend }) {
       >
         <sphereGeometry args={[GLOBE_R, t.globeSeg[0], t.globeSeg[1]]} />
       </mesh>
-      <mesh material={atmo} scale={1.015} raycast={() => null}>
-        <sphereGeometry args={[GLOBE_R, 64, 32]} />
-      </mesh>
+      {!cheap && (
+        <mesh material={atmo} scale={1.015} raycast={() => null}>
+          <sphereGeometry args={[GLOBE_R, 64, 32]} />
+        </mesh>
+      )}
       <lineSegments geometry={coast} raycast={() => null}>
         <lineBasicMaterial color={C.coast} transparent opacity={C.coastOpacity} />
       </lineSegments>
@@ -741,8 +743,18 @@ export default function GlobeScene({
   onFallback,
 }) {
   const reducedMotion = usePrefersReducedMotion();
+  // Hidden ?force3d=1 flag: always run the live scene (skips the software WebGL and
+  // low fps fallbacks). Read on the client only, same as the render tier probe.
+  const [force3d] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const on = new URLSearchParams(window.location.search).get("force3d") === "1";
+    if (on) console.info("[globe] force3d is on: static globe fallback disabled");
+    return on;
+  });
   const [tier, setTier] = useState(() => pickTier());
-  const t = tiers[tier];
+  // force3d runs the cheapest live path: DPR 0.5, no bloom or postprocessing, no hatch,
+  // light geometry. Normal users are unaffected.
+  const t = force3d ? { ...tiers.phoneLow, dpr: [0.5, 0.5], msaa: false, bloom: null, globeSeg: [64, 32], maskW: 1024 } : tiers[tier];
   const controlsRef = useRef(null);
   const labelEls = useRef([]);
   const lastRegionRef = useRef(null);
@@ -952,14 +964,6 @@ export default function GlobeScene({
 
   // Lowest tier: no WebGL, software rendering, or sustained fps under ~20 shows a static image.
   const [renderTier] = useState(() => detectRenderTier());
-  // Hidden ?force3d=1 flag: always run the live scene (skips the software WebGL and
-  // low fps fallbacks). Read on the client only, same as the render tier probe.
-  const [force3d] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const on = new URLSearchParams(window.location.search).get("force3d") === "1";
-    if (on) console.info("[globe] force3d is on: static globe fallback disabled");
-    return on;
-  });
   const [lowFps, setLowFps] = useState(false);
   const onLowFps = useCallback((fps) => {
     if (force3d) return;
@@ -1029,10 +1033,10 @@ export default function GlobeScene({
         style={{ position: "absolute", inset: 0 }}
         aria-hidden="true"
       >
-        <PerformanceMonitor onDecline={dropTier} />
+        {!force3d && <PerformanceMonitor onDecline={dropTier} />}
         <FpsGuard minFps={20} onLow={onLowFps} />
         <color attach="background" args={[C.bg]} />
-        {geo && <Globe geo={geo} tier={tier} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
+        {geo && <Globe geo={geo} tier={tier} cheap={force3d} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
         <Stops
           beamHeightRef={beamHeightRef}
           items={items}

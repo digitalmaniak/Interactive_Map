@@ -6,9 +6,11 @@ const C = tokens.color;
 // One material for the whole globe. Land: baked relief from the mask texture
 // (R = land, G = relief). Ocean: fill darkening to the limb plus a screen space
 // diagonal hatch at 35 degrees, computed from gl_FragCoord so it stays crisp at any zoom.
-export function createGlobeMaterial(landTex) {
+// opts.cheap: no ocean hatch (force3d on software graphics).
+export function createGlobeMaterial(landTex, opts = {}) {
   const a = THREE.MathUtils.degToRad(tokens.hatch.angleDeg);
   return new THREE.ShaderMaterial({
+    defines: opts.cheap ? { CHEAP: "" } : {},
     uniforms: {
       uLand: { value: landTex },
       uLow: { value: new THREE.Color(C.land.low) },
@@ -55,6 +57,7 @@ export function createGlobeMaterial(landTex) {
         float facing = clamp(dot(normalize(vNormalW), viewDir), 0.0, 1.0);
         // Ocean darkens toward the limb.
         vec3 ocean = mix(uLimb, uOcean, smoothstep(0.0, 0.6, facing));
+        #ifndef CHEAP
         // Screen space hatch, 1 px lines with a 0.75 px edge.
         float s = dot(gl_FragCoord.xy / uDpr, uHatchDir);
         float h = abs(fract(s / uHatchSpacing) - 0.5) * uHatchSpacing;
@@ -65,6 +68,7 @@ export function createGlobeMaterial(landTex) {
         float limbFade = smoothstep(0.0, 0.15, facing);
         float nearCoast = mix(0.08, 0.14, smoothstep(0.0, 0.25, 1.0 - m.b)) / 0.14;
         ocean = mix(ocean, uHatch, line * uHatchOpacity * limbFade * nearCoast);
+        #endif
         // Baked relief: low to high, ridge used sparingly at the top of the range.
         vec3 ground = mix(uLow, uHigh, smoothstep(0.0, 0.8, relief));
         ground = mix(ground, uRidge, smoothstep(0.85, 1.0, relief) * 0.6);
