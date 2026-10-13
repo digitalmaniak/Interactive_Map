@@ -18,6 +18,8 @@ import {
   stopSharingJourney as stopSharingJourneyRow,
   movePinToJourney,
 } from "../lib/journeys/api";
+import QuickAdd from "./quickadd/QuickAdd";
+import { placeLine } from "../lib/geocode/quickAdd";
 import { useAuthSession } from "../hooks/useAuthSession";
 import { flyoverActive } from "./map/scene/flyover/flyoverState";
 import { useTravelData } from "../hooks/useTravelData";
@@ -39,6 +41,7 @@ export default function MapCanvas() {
   const [newPinName, setNewPinName] = useState("");
   const [newPinCity, setNewPinCity] = useState("");
   const [newPinDetails, setNewPinDetails] = useState("");
+  const [newPinCountryCode, setNewPinCountryCode] = useState(""); // set only by quick add
   const [newPinStartDate, setNewPinStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [newPinEndDate, setNewPinEndDate] = useState(new Date().toISOString().split("T")[0]);
   const [isAddingLog, setIsAddingLog] = useState(false);
@@ -186,6 +189,7 @@ export default function MapCanvas() {
     if (offGlobe) return;
     if (isLand) {
       setClickedCoords({ lat: parseFloat(lat.toFixed(4)), lon: parseFloat(lon.toFixed(4)) });
+      setNewPinCountryCode("");
       setActiveTab("Journals");
       setIsAddingEntry(true);
     }
@@ -212,6 +216,21 @@ export default function MapCanvas() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  // Quick add pick: fly to the place and open the existing add form prefilled. The open
+  // trip (if any) stays selected, so the form's confirm attaches the pin to it.
+  const handleQuickAddPick = (r) => {
+    const lat = parseFloat(Number(r.lat).toFixed(4));
+    const lon = parseFloat(Number(r.lng).toFixed(4));
+    setClickedCoords({ lat, lon });
+    setNewPinName(r.name);
+    setNewPinCity(placeLine(r) || r.name);
+    setNewPinCountryCode(String(r.countryCode || "").toUpperCase());
+    setActivePin(null);
+    setIsAddingLog(false);
+    setActiveTab("Journals");
+    setIsAddingEntry(true);
+    setFlyTo({ lat, lon, at: Date.now() });
+  };
 
   const handleHoverRegion = (name) => {
     setHoveredCountry(name || null);
@@ -242,8 +261,6 @@ export default function MapCanvas() {
     }
 
     try {
-      // If drilled into a real journey, attach the new pin; otherwise omit
-      // journey_id and let the Harbor Imported default trigger assign it.
       const pinFields = {
         user_id: userData.user.id,
         title: newPinName,
@@ -256,9 +273,18 @@ export default function MapCanvas() {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
+      // journey_id: the open trip if one is open, else the owner's existing "Imported"
+      // journey (looked up by name, never created here).
       if (activeJourneyId && !String(activeJourneyId).startsWith("__")) {
         pinFields.journey_id = activeJourneyId;
+      } else {
+        // If it is missing from the list, omit it: the DB trigger routes the pin to Imported.
+        const imported = journeys.find((j) => j.title === "Imported");
+        if (imported?.id) pinFields.journey_id = imported.id;
       }
+
+      // Quick add only: ISO 3166-1 alpha-2 from the geocoder (geohash fills in the DB).
+      if (/^[A-Z]{2}$/.test(newPinCountryCode)) pinFields.country_code = newPinCountryCode;
 
       const { data: insertedPin, error: pinError } = await insertPin(pinFields);
 
@@ -284,6 +310,7 @@ export default function MapCanvas() {
       setNewPinName("");
       setNewPinCity("");
       setNewPinDetails("");
+      setNewPinCountryCode("");
       setNewPinStartDate(new Date().toISOString().split("T")[0]);
       setNewPinEndDate(new Date().toISOString().split("T")[0]);
 
@@ -595,6 +622,10 @@ export default function MapCanvas() {
         )}
       </div>
 
+      {session && (
+        <QuickAdd onPick={handleQuickAddPick} inTrip={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection} />
+      )}
+
       <AppShell
         activeTab={activeTab}
         setActiveTab={(tab) => (tab === "Map" ? closeJournalPanel() : setActiveTab(tab))}
@@ -607,6 +638,7 @@ export default function MapCanvas() {
         onSignOut={() => supabase.auth.signOut()}
         onAddEntry={() => {
           setClickedCoords({ lat: 40.7128, lon: -74.0060 });
+          setNewPinCountryCode("");
           setActivePin(null);
           setActiveTab("Journals");
           setIsAddingEntry(true);

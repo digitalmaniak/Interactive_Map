@@ -317,3 +317,17 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 .v2-trip-title h2 { margin: 0; font-family: "Inter Display", Inter, var(--font-inter, system-ui), system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .v2-trip-title p { margin: 10px 0 0; font-family: var(--v2-mono); letter-spacing: 0.14em; color: var(--v2-text-dim); white-space: pre; }
 @media (prefers-reduced-motion: reduce) { .v2-trip-title { transition: none !important; } }
+
+/* Quick add search: top left under the wordmark, in the dark chrome. */
+.v2-quickadd { position: absolute; top: 72px; left: 24px; width: 300px; z-index: 30; pointer-events: auto; }
+.v2-quickadd-input { width: 100%; box-sizing: border-box; padding: 9px 12px; font: 400 12px/1.4 var(--v2-mono); letter-spacing: 0.04em; color: var(--v2-text); background: rgba(14, 18, 21, 0.72); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--v2-radius); outline: none; }
+.v2-quickadd-input:focus { border-color: var(--v2-route); }
+.v2-quickadd-input::placeholder { color: var(--v2-text-dim); }
+.v2-quickadd-busy { position: absolute; right: 10px; top: 14px; width: 6px; height: 6px; border-radius: 50%; background: var(--v2-route); animation: v2-skeleton-pulse 1s ease-in-out infinite; }
+.v2-quickadd-list { list-style: none; margin: 6px 0 0; padding: 4px; background: rgba(14, 18, 21, 0.92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--v2-radius); max-height: 320px; overflow-y: auto; }
+.v2-quickadd-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 3px; cursor: pointer; }
+.v2-quickadd-item.is-sel { background: rgba(92, 200, 228, 0.14); }
+.v2-quickadd-name { font: 500 12px/1.3 var(--v2-sans, system-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--v2-text); }
+.v2-quickadd-meta { font: 400 11px/1.3 var(--v2-mono); color: var(--v2-text-dim); }
+.v2-quickadd-note { padding: 8px 10px; font: 400 11px/1.4 var(--v2-mono); color: var(--v2-text-dim); }
+@media (prefers-reduced-motion: reduce) { .v2-quickadd-busy { animation: none; } }
