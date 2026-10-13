@@ -302,6 +302,33 @@ function CameraDirector({ controlsRef, moveRef, reducedMotion, tripView, onArriv
     }
 
     const goal = a.req;
+    if (goal.kind === "zoom") {
+      // Cluster tap: ease in only. Keep the current tilt and heading by carrying the
+      // camera offset from its look target over to the cluster, shortening it.
+      if (!a.zoom) {
+        const fromT = a.fromTarget.lengthSq() > 1e-6 ? a.fromTarget.clone() : a.fromN.clone().multiplyScalar(GLOBE_R);
+        const off = a.fromPos.clone().sub(fromT);
+        const toT = goal.n.clone().multiplyScalar(GLOBE_R);
+        const q = new THREE.Quaternion().setFromUnitVectors(fromT.clone().normalize(), goal.n);
+        const len = off.length();
+        const toLen = Math.min(len, Math.max(TRIP_MIN_DIST - GLOBE_R, len * goal.factor));
+        a.zoom = { fromT, toT, q, offDir: off.clone().normalize(), len, toLen };
+      }
+      const z = a.zoom;
+      const raw = Math.min(1, (performance.now() - a.t0) / CAM.open.ms);
+      const e = easeOpen(raw);
+      const qi = new THREE.Quaternion().slerp(z.q, e);
+      const tgt = z.fromT.clone().normalize().applyQuaternion(qi).multiplyScalar(GLOBE_R);
+      const len = Math.exp(THREE.MathUtils.lerp(Math.log(z.len), Math.log(z.toLen), e));
+      camera.position.copy(tgt).addScaledVector(z.offDir.clone().applyQuaternion(qi), len);
+      if (controls) { controls.target.copy(tgt); controls.update(); }
+      else camera.lookAt(tgt);
+      if (raw >= 1) {
+        anim.current = null;
+        if (controls) controls.enabled = true;
+      }
+      return;
+    }
     const open = goal.kind === "open";
     const dur = open ? CAM.open.ms : CAM.close.ms;
     const elapsed = performance.now() - a.t0;
@@ -635,14 +662,13 @@ export default function GlobeScene({
     c.normalize();
     let spread = 0;
     for (const p of pts) for (const q of pts) spread = Math.max(spread, p.pos.distanceTo(q.pos));
-    const alt = cam.position.length() - GLOBE_R;
+    const alt = cam.position.distanceTo(controlsRef.current.target.lengthSq() > 1e-6 ? controlsRef.current.target : c.clone().multiplyScalar(GLOBE_R));
     // Screen separation scales roughly with 1 / altitude; aim for about 2x the merge radius.
     const h = Math.max(window.innerHeight || 800, 1);
     const pxPerUnit = h / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * Math.max(alt, 1e-3));
     const curPx = spread * pxPerUnit;
     const factor = curPx > 1 ? THREE.MathUtils.clamp(curPx / (CLUSTER_PX * 2), 0.15, 0.85) : 0.4;
-    const nextAlt = Math.max(TRIP_MIN_DIST - GLOBE_R, alt * factor);
-    moveRef.current = { kind: "open", n: c, fit: GLOBE_R + nextAlt };
+    moveRef.current = { kind: "zoom", n: c, factor };
   }, [items]);
 
   // Opening a trip eases into mock C's tilted close view. Closing eases back out.
