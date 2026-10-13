@@ -112,9 +112,12 @@ export default function JournalsPanel({
       gap: "1rem",
       borderRadius: "0px",
       transform: activeTab === "Journals" ? "translateX(0)" : "translateX(100%)",
-      transition: "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+      // Closed: off screen, hidden after the slide and inert, so the closed panel is never
+      // a hit target, never matched by text lookups, and never steals focus or clicks.
+      transition: activeTab === "Journals" ? "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s" : "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.35s",
+      visibility: activeTab === "Journals" ? "visible" : "hidden",
       pointerEvents: activeTab === "Journals" ? "auto" : "none"
-    }}>
+    }} inert={activeTab === "Journals" ? undefined : true} aria-hidden={activeTab === "Journals" ? undefined : true}>
       {isAddingEntry ? (
         <AddMemoryForm
           newPinName={newPinName}
