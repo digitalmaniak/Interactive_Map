@@ -364,7 +364,7 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
   .app-container.is-sheet-open .v2-quickadd { display: none; }
   .app-container.is-sheet-open .ui-layer .bottom-left-group { display: none; }
   .app-container.is-sheet-open .ui-layer .bottom-right-group { bottom: calc(50% + 12px); right: 1rem; transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 101; }
-  .app-container.is-sheet-open.is-sheet-collapsed .ui-layer .bottom-right-group { bottom: calc(96px + env(safe-area-inset-bottom, 0px) + 12px); }
+  .app-container.is-sheet-open.is-sheet-collapsed .ui-layer .bottom-right-group { bottom: calc(var(--sheet-min, 96px) + env(safe-area-inset-bottom, 0px) + 12px); }
   .ui-layer .bottom-left-group, .ui-layer .bottom-right-group { margin-bottom: env(safe-area-inset-bottom, 0px); }
   .app-container.is-sheet-open .ui-layer .bottom-right-group { margin-bottom: 0; }
 }

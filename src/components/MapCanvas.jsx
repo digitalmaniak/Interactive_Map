@@ -143,11 +143,12 @@ export default function MapCanvas() {
   // handle collapses it to its header. Reopening the panel always starts at 50%.
   const viewport = useMobileViewport();
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
+  const [sheetHeaderPx, setSheetHeaderPx] = useState(SHEET_HEADER_PX); // measured by the panel
   const panelIsOpen = Boolean(session) && activeTab === "Journals";
   const [sheetFor, setSheetFor] = useState(panelIsOpen);
   if (sheetFor !== panelIsOpen) { setSheetFor(panelIsOpen); if (panelIsOpen) setSheetCollapsed(false); }
   const sheetOpen = viewport.mobile && panelIsOpen;
-  const sheetInset = sheetOpen ? (sheetCollapsed ? SHEET_HEADER_PX : Math.round(viewport.h * 0.5)) : 0;
+  const sheetInset = sheetOpen ? (sheetCollapsed ? sheetHeaderPx : Math.round(viewport.h * 0.5)) : 0;
 
   const timelineProps = {
     // Stop dates first (journey_stats_v2 derives them from stops only), then the trip's own
@@ -668,7 +669,7 @@ export default function MapCanvas() {
   };
 
   return (
-    <div className={`app-container${sheetOpen ? ` is-sheet-open${sheetCollapsed ? " is-sheet-collapsed" : ""}` : ""}`}>
+    <div className={`app-container${sheetOpen ? ` is-sheet-open${sheetCollapsed ? " is-sheet-collapsed" : ""}` : ""}`} style={sheetOpen ? { "--sheet-min": `${sheetHeaderPx}px` } : undefined}>
       <AuthGate
         authLoading={authLoading}
         authBusy={authBusy}
@@ -735,7 +736,7 @@ export default function MapCanvas() {
       >
         {session && (
           <JournalsPanel
-            sheet={viewport.mobile ? { collapsed: sheetCollapsed, setCollapsed: setSheetCollapsed } : null}
+            sheet={viewport.mobile ? { collapsed: sheetCollapsed, setCollapsed: setSheetCollapsed, headerPx: sheetHeaderPx, setHeaderPx: setSheetHeaderPx } : null}
             journeysLoading={!journeysLoaded}
             activeTab={activeTab}
             isAddingEntry={isAddingEntry}

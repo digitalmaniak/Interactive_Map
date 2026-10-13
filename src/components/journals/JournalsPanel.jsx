@@ -118,9 +118,34 @@ export default function JournalsPanel({
     else if (dy < -30) sheet.setCollapsed(false);
     else sheet.setCollapsed(!sheet.collapsed);
   };
+  // Collapsed height: measured from the panel top to the bottom of the current view's header
+  // (the first heading and anything on its row, so a wrapped trip title fits), plus padding.
+  const panelRef = useRef(null);
+  const setHeaderPx = sheet?.setHeaderPx;
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el || !setHeaderPx || typeof ResizeObserver === "undefined") return undefined;
+    const measure = () => {
+      const h = el.querySelector("h2, h3");
+      if (!h) return;
+      const top = el.getBoundingClientRect().top;
+      const hr = h.getBoundingClientRect();
+      let bottom = hr.bottom;
+      for (const sib of h.parentElement && h.parentElement !== el ? h.parentElement.children : []) {
+        const r = sib.getBoundingClientRect();
+        if (r.height > 0 && r.top < hr.bottom) bottom = Math.max(bottom, r.bottom);
+      }
+      const px = Math.round(Math.min(window.innerHeight * 0.5, Math.max(72, bottom - top + 12)));
+      setHeaderPx((cur) => (Math.abs(cur - px) > 1 ? px : cur));
+    };
+    measure();
+    const ro = new ResizeObserver(measure); ro.observe(el);
+    const mo = new MutationObserver(measure); mo.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => { ro.disconnect(); mo.disconnect(); };
+  }, [setHeaderPx]);
   const sheetStyle = sheet ? {
     position: "absolute", left: 0, right: 0, bottom: 0, top: "auto", width: "auto",
-    height: sheet.collapsed ? `calc(${SHEET_HEADER_PX}px + env(safe-area-inset-bottom, 0px))` : "50%",
+    height: sheet.collapsed ? `calc(${sheet.headerPx || SHEET_HEADER_PX}px + env(safe-area-inset-bottom, 0px))` : "50%",
     display: "flex", flexDirection: "column", padding: "0 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px))",
     zIndex: 100, overflow: "hidden", gap: "0.75rem", borderRadius: "12px 12px 0 0",
     borderLeft: "none", borderTop: "1px solid var(--v2-hairline)",
@@ -131,7 +156,7 @@ export default function JournalsPanel({
   } : null;
 
   return (
-    <div className={`journals-panel${sheet ? " is-sheet" : ""}`} data-collapsed={sheet ? String(sheet.collapsed) : undefined} style={sheetStyle || {
+    <div ref={panelRef} className={`journals-panel${sheet ? " is-sheet" : ""}`} data-collapsed={sheet ? String(sheet.collapsed) : undefined} style={sheetStyle || {
       position: "absolute",
       top: "0px",
       right: "0px",
