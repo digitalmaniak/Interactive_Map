@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QUICK_ADD, debounce, geocode, makeRateGate, nextIndex, shouldSearch } from "../../lib/geocode/quickAdd";
 
-export default function QuickAdd({ onPick, inTrip = false }) {
+export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCancel }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -39,8 +39,12 @@ export default function QuickAdd({ onPick, inTrip = false }) {
     return () => { d.cancel(); ctl.current?.abort(); };
   }, [gate]);
 
+  // Dialog mode (Add entry): focus on open.
+  useEffect(() => { if (dialog) input.current?.focus(); }, [dialog]);
+
   // '/' focuses the search from anywhere except while typing in a field.
   useEffect(() => {
+    if (dialog) return undefined;
     const onKey = (e) => {
       if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target;
@@ -51,7 +55,7 @@ export default function QuickAdd({ onPick, inTrip = false }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [dialog]);
 
   const onChange = (e) => {
     const v = e.target.value;
@@ -76,14 +80,15 @@ export default function QuickAdd({ onPick, inTrip = false }) {
       if (open && sel >= 0) { e.preventDefault(); pick(results[sel]); }
     } else if (e.key === "Escape") {
       if (open) { e.preventDefault(); e.stopPropagation(); setOpen(false); }
+      else if (dialog) { e.preventDefault(); e.stopPropagation(); onCancel?.(); }
       else input.current?.blur();
     }
   };
 
   const listId = "v2-quickadd-list";
   const showList = open && (results.length > 0 || error || (!busy && shouldSearch(q)));
-  return (
-    <div className="v2-quickadd" onPointerDown={(e) => e.stopPropagation()}>
+  const box = (
+    <div className={dialog ? "v2-quickadd v2-quickadd-dialog" : "v2-quickadd"} onPointerDown={(e) => e.stopPropagation()}>
       <input
         ref={input}
         type="search"
@@ -99,7 +104,7 @@ export default function QuickAdd({ onPick, inTrip = false }) {
         onChange={onChange}
         onKeyDown={onKeyDown}
         onFocus={() => { if (results.length) setOpen(true); }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onBlur={() => { if (!dialog) setTimeout(() => setOpen(false), 150); }}
         autoComplete="off"
         spellCheck={false}
       />
@@ -124,6 +129,17 @@ export default function QuickAdd({ onPick, inTrip = false }) {
           ))}
         </ul>
       )}
+      {dialog && (
+        <button type="button" className="v2-btn v2-quickadd-cancel" onClick={() => onCancel?.()}>Cancel</button>
+      )}
+    </div>
+  );
+  if (!dialog) return box;
+  // Add entry: the same search in a modal. Nothing is created until a place is picked.
+  return (
+    <div className="v2-quickadd-backdrop" role="dialog" aria-modal="true" aria-label="Pick a place for the new entry" onPointerDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onCancel?.(); }}>
+      <p className="v2-quickadd-title">Where was this?</p>
+      {box}
     </div>
   );
 }

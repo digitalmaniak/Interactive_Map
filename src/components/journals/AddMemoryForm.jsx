@@ -45,11 +45,11 @@ export default function AddMemoryForm({
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <div style={{ flex: 1 }}>
             <label className="panel-label">Latitude</label>
-            <input type="number" step="0.0001" className="panel-input" value={clickedCoords.lat} onChange={(e) => setClickedCoords({ ...clickedCoords, lat: e.target.value })} />
+            <input type="number" step="0.0001" className="panel-input" value={clickedCoords?.lat ?? ""} onChange={(e) => setClickedCoords({ ...clickedCoords, lat: e.target.value })} />
           </div>
           <div style={{ flex: 1 }}>
             <label className="panel-label">Longitude</label>
-            <input type="number" step="0.0001" className="panel-input" value={clickedCoords.lon} onChange={(e) => setClickedCoords({ ...clickedCoords, lon: e.target.value })} />
+            <input type="number" step="0.0001" className="panel-input" value={clickedCoords?.lon ?? ""} onChange={(e) => setClickedCoords({ ...clickedCoords, lon: e.target.value })} />
           </div>
         </div>
         <label className="panel-label">Initial Log</label>

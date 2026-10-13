@@ -85,7 +85,9 @@ export default function MapCanvas() {
 
   // Interactive HUD States
   const [hoveredCountry, setHoveredCountry] = useState(null);
-  const [clickedCoords, setClickedCoords] = useState({ lat: 0, lon: 0 });
+  // Null until the user picks a place (search pick or a land click). No default coordinates.
+  const [clickedCoords, setClickedCoords] = useState(null);
+  const [addSearchOpen, setAddSearchOpen] = useState(false); // Add entry: place search first
   const [activePin, setActivePin] = useState(null);
   const [isAddingEntry, setIsAddingEntry] = useState(false);
   const [flyTo, setFlyTo] = useState(null);
@@ -302,6 +304,7 @@ export default function MapCanvas() {
   // ----------------------------------------------------
   const handleAddPin = async () => {
     if (!newPinName || !newPinCity) return; // Basic validation
+    if (!clickedCoords) return; // no place picked, nothing to create
     const lat = parseFloat(clickedCoords.lat);
     const lon = parseFloat(clickedCoords.lon);
     if (Number.isNaN(lat) || Number.isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
@@ -367,6 +370,7 @@ export default function MapCanvas() {
       setNewPinCountryCode("");
       setNewPinStartDate(new Date().toISOString().split("T")[0]);
       setNewPinEndDate(new Date().toISOString().split("T")[0]);
+      setClickedCoords(null);
 
     } catch (err) {
       console.error(err);
@@ -715,6 +719,15 @@ export default function MapCanvas() {
         <QuickAdd onPick={handleQuickAddPick} inTrip={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection} />
       )}
 
+      {session && addSearchOpen && (
+        <QuickAdd
+          dialog
+          inTrip={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection}
+          onPick={(r) => { setAddSearchOpen(false); handleQuickAddPick(r); }}
+          onCancel={() => setAddSearchOpen(false)}
+        />
+      )}
+
       <AppShell
         activeTab={activeTab}
         setActiveTab={(tab) => (tab === "Map" ? closeJournalPanel() : setActiveTab(tab))}
@@ -725,13 +738,7 @@ export default function MapCanvas() {
         setShowFlightPaths={setShowFlightPaths}
         sessionEmail={session?.user?.email}
         onSignOut={() => supabase.auth.signOut()}
-        onAddEntry={() => {
-          setClickedCoords({ lat: 40.7128, lon: -74.0060 });
-          setNewPinCountryCode("");
-          setActivePin(null);
-          setActiveTab("Journals");
-          setIsAddingEntry(true);
-        }}
+        onAddEntry={() => setAddSearchOpen(true)}
         onOpenJournalsTab={() => { setReviewOpen(false); setClusterPins(null); setActivePin(null); setActiveJourneyId(null); setActiveTab("Journals"); }}
       >
         {session && (
