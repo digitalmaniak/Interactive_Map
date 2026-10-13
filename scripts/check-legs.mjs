@@ -83,3 +83,31 @@ if (failed) process.exit(1);
   console.log(`${okk ? "PASS" : "FAIL"} pair offset scales: EWR pair ${legs[0].offsetDeg} deg, Tokyo-Niseko ${legs[1].offsetDeg.toFixed(3)} deg (leg ${ang.toFixed(2)} deg)`);
   if (!okk) process.exit(1);
 }
+
+{
+  // Tokyo to Niseko apex must project inside the tripFit frame (visible area left of the panel).
+  const { flyArc, flyScaleFor, flyHeight } = await import("../src/components/map/scene/legs/legGeometry.js");
+  const { solveTripFit, makeFitCamera, placeCamera, projectPx, estimateLabelBox } = await import("../src/components/map/scene/tripFit.js");
+  const u = (lat, lon) => { const phi = THREE.MathUtils.degToRad(90 - lat), th = THREE.MathUtils.degToRad(lon + 180); return new THREE.Vector3(-Math.sin(phi) * Math.cos(th), Math.cos(phi), Math.sin(phi) * Math.sin(th)); };
+  const tk = u(35.6762, 139.6503), hk = u(42.8048, 140.6874);
+  const labels = [estimateLabelBox("Tokyo", "35.68°N 139.65°E"), estimateLabelBox("Hokkaido", "42.80°N 140.69°E")];
+  const TILT = THREE.MathUtils.degToRad(48), PANEL = 350;
+  const PAD = { top: 158, right: 80, bottom: 148, left: 104 };
+  let bad = 0;
+  for (const [W, H] of [[1440, 900], [1280, 800], [1280, 742]]) {
+    const { n, D } = solveTripFit([tk, hk], { W, H, offset: PANEL / 2, fov: 28, tilt: TILT, pad: PAD, labels });
+    const cam = placeCamera(makeFitCamera(28, W, H, PANEL / 2), n, D, TILT, 0);
+    for (const off of [0, 0.358, -0.358]) {
+      const arc = flyArc(tk, hk, { offsetDeg: off, scale: flyScaleFor(D - 1) });
+      let top = Infinity, l = Infinity, r = -Infinity;
+      for (const p of arc.points) { const s = projectPx(cam, p, W, H); top = Math.min(top, s.y); l = Math.min(l, s.x); r = Math.max(r, s.x); }
+      const ok = top >= 0 && l >= 0 && r <= W - PANEL;
+      if (!ok) bad++;
+      console.log(`${ok ? "PASS" : "FAIL"} Tokyo-Niseko arc ${W}x${H} offset ${off}: apex at ${top.toFixed(0)}px (H ${(arc.H ?? flyHeight(tk.angleTo(hk))).toFixed(4)}R)`);
+    }
+  }
+  const ewr = flyHeight(u(40.69, -74.17).angleTo(tk)), ewrOld = THREE.MathUtils.clamp(0.08 + 0.35 * u(40.69, -74.17).angleTo(tk), 0.04, 0.55);
+  const same = Math.abs(ewr - ewrOld) / ewrOld < 0.001;
+  console.log(`${same ? "PASS" : "FAIL"} EWR-Tokyo height unchanged (${ewr.toFixed(4)} vs ${ewrOld.toFixed(4)})`);
+  if (bad || !same) process.exit(1);
+}
