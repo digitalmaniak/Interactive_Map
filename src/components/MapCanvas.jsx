@@ -223,6 +223,19 @@ export default function MapCanvas() {
   useEffect(() => {
     escRef.current = () => {
       if (activeTab !== "Journals") return;
+      // Inside a journal (or a place, cluster or the review screen): back to the journal
+      // list. From the list itself (or the add form): close the panel as before.
+      if (!isAddingEntry && (activeJourneyId != null || activePin || clusterPins || reviewOpen)) {
+        setActivePin(null);
+        setClusterPins(null);
+        setReviewOpen(false);
+        setActiveJourneyId(null);
+        setIsConfirmingDelete(false);
+        setIsEditingPin(false);
+        setIsAddingLog(false);
+        setEditingLogId(null);
+        return;
+      }
       closeJournalPanel();
     };
   });
