@@ -350,3 +350,21 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 .v2-tl-more { position: absolute; left: 50%; bottom: calc(100% + 3px); transform: translateX(-50%); padding: 0 3px; font: 500 9px/12px var(--v2-mono); letter-spacing: 0.04em; color: var(--v2-text); background: rgba(7, 9, 11, 0.8); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 2px; white-space: nowrap; pointer-events: none; }
 .v2-tl-tip.is-stop { top: 44px; width: 160px; }
 .v2-tl-trip .v2-tl-more { bottom: calc(100% + 2px); }
+
+/* Mobile bottom sheet (under 768 px). Desktop is untouched. */
+.v2-sheet-handle { flex-shrink: 0; align-self: stretch; height: 24px; margin: 0 -1rem; padding: 0; border: 0; background: transparent; cursor: grab; touch-action: none; display: grid; place-items: center; }
+.v2-sheet-handle span { width: 40px; height: 4px; border-radius: 2px; background: rgba(230, 237, 240, 0.35); }
+.v2-sheet-handle:focus-visible { outline: 2px solid var(--v2-route); outline-offset: -4px; }
+@media (max-width: 767px) {
+  .journals-panel.is-sheet { border-left: none; }
+  .journals-panel.is-sheet .journeys-head { padding-right: 0 !important; flex-wrap: wrap; min-width: 0; }
+  .journals-panel.is-sheet .journeys-head h2 { flex: 1 1 auto; min-width: 0; }
+  .journals-panel.is-sheet .journeys-head button { padding: 0.35rem 0.6rem !important; }
+  /* While the sheet is open: quick add and the user chip step aside; Add entry rides the sheet's top edge. */
+  .app-container.is-sheet-open .v2-quickadd { display: none; }
+  .app-container.is-sheet-open .ui-layer .bottom-left-group { display: none; }
+  .app-container.is-sheet-open .ui-layer .bottom-right-group { bottom: calc(50% + 12px); right: 1rem; transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 101; }
+  .app-container.is-sheet-open.is-sheet-collapsed .ui-layer .bottom-right-group { bottom: calc(96px + env(safe-area-inset-bottom, 0px) + 12px); }
+  .ui-layer .bottom-left-group, .ui-layer .bottom-right-group { margin-bottom: env(safe-area-inset-bottom, 0px); }
+  .app-container.is-sheet-open .ui-layer .bottom-right-group { margin-bottom: 0; }
+}

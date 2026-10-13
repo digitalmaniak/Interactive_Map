@@ -302,6 +302,7 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
 // Journals panel offset: shift the projection centre (not the canvas) so the globe
 // or the framed trip sits centred in the space left of the panel. No offset when the
 // panel would cover most of the screen (narrow / mobile).
+const SHEET_EASE_MS = 300;
 export const panelOffsetFor = (open, width, panelWidth) =>
   open && width > panelWidth * 1.6 ? panelWidth / 2 : 0;
 
@@ -388,18 +389,19 @@ function blendStates(a, b, w) {
   };
 }
 
-function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDragStart, onDragEndAt, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef }) {
+function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDragStart, onDragEndAt, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef, sheetInset = 0 }) {
   const { camera, size, gl } = useThree();
-  const st = useRef({ tw: null, prev: null, seen: null, offset: 0, offsetKey: null, heading: 0, panelTarget: null, applied: null, fade: null });
+  const st = useRef({ tw: null, prev: null, seen: null, offset: 0, offsetKey: null, heading: 0, panelTarget: null, applied: null, fade: null, voff: 0, vFrom: 0, vTo: null, vT0: 0 });
   const idleUntil = useRef(0);
 
   const applyOffset = (off) => {
     const s = st.current;
     s.offset = off;
-    const key = `${off.toFixed(2)}|${size.width}|${size.height}`;
+    const key = `${off.toFixed(2)}|${s.voff.toFixed(2)}|${size.width}|${size.height}`;
     if (key === s.applied) return;
     s.applied = key;
-    if (off > 0.01) camera.setViewOffset(size.width, size.height, off, 0, size.width, size.height);
+    // Vertical part: the mobile bottom sheet (visible area y in [0, H - 2 * voff]).
+    if (off > 0.01 || s.voff > 0.01) camera.setViewOffset(size.width, size.height, off, s.voff, size.width, size.height);
     else camera.clearViewOffset();
     camera.updateProjectionMatrix();
   };
@@ -436,7 +438,17 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
     if (Math.abs(near - camera.near) > camera.near * 0.05) { camera.near = near; camera.updateProjectionMatrix(); }
 
     const panelTarget = panelOffsetFor(panelOpen, size.width, panelWidth);
-    viewRef.current = { width: size.width, height: size.height, offset: panelTarget };
+    // Mobile bottom sheet: the canvas stays full screen; the projection centre eases (300 ms)
+    // to the middle of the area above the sheet.
+    const vTarget = Math.max(0, Math.min(size.height * 0.45, sheetInset / 2));
+    if (s.vTo === null) { s.vTo = vTarget; s.voff = vTarget; s.vFrom = vTarget; }
+    else if (vTarget !== s.vTo) { s.vFrom = s.voff; s.vTo = vTarget; s.vT0 = now; }
+    if (s.voff !== s.vTo) {
+      const k = reducedMotion ? 1 : Math.min(1, (now - s.vT0) / SHEET_EASE_MS);
+      s.voff = k >= 1 ? s.vTo : s.vFrom + (s.vTo - s.vFrom) * easeMove(k);
+      applyOffset(s.offset);
+    }
+    viewRef.current = { width: size.width, height: size.height, offset: panelTarget, offsetY: s.voff, offsetYTarget: s.vTo };
 
     // New goal, or a panel change while idle or mid-move: one tween from the live state.
     const req = moveRef.current;
@@ -887,7 +899,12 @@ export default function GlobeScene({
   onFirstFrame,
   onFallback,
   timeline = null,
+  sheetInset = 0,
 }) {
+  // Mobile bottom sheet height in px (0 on desktop or when closed): the camera centres
+  // the globe or the trip in the area above it.
+  const sheetInsetRef = useRef(sheetInset);
+  useEffect(() => { sheetInsetRef.current = sheetInset; }, [sheetInset]);
   const reducedMotion = usePrefersReducedMotion();
   // Hidden ?force3d=1 flag: always run the live scene (skips the software WebGL and
   // low fps fallbacks). Read on the client only, same as the render tier probe.
@@ -1055,7 +1072,7 @@ export default function GlobeScene({
     let n = fr.n, D = fr.fit;
     if (view && view.width && view.height) {
       const sol = solveTripFit(stops.map((it) => it.pos.clone().normalize()), {
-        W: view.width, H: view.height, offset: panelOffsetFor(panelOpen, view.width, panelWidth),
+        W: view.width, H: view.height, offset: panelOffsetFor(panelOpen, view.width, panelWidth), offsetY: Math.max(0, Math.min(view.height * 0.45, sheetInsetRef.current / 2)),
         fov: TRIP_KEY.fov, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0,
         pad: tripPads(view.width, view.height), labels: stops.map((it) => estimateLabelBox(it.text, it.coord)),
         minAlt: TRIP_MIN_ALT,
@@ -1364,7 +1381,7 @@ export default function GlobeScene({
           maxDistance={MAX_DIST}
           onStart={() => { moveRef.current = null; }}
         />
-        <CameraController pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
+        <CameraController sheetInset={sheetInset} pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={shownActivePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>
@@ -1386,11 +1403,14 @@ export default function GlobeScene({
           </svg>
         ))}
         {tripStops.length > 0 && focusTitle && (
-          <TripTitle key={String(focusJourneyId)} title={focusTitle} sub={tripSub} tripBlend={tripBlend} instant={force3d || reducedMotion} lift={stripOn ? STRIP.heightPx : 0} />
+          <TripTitle key={String(focusJourneyId)} title={focusTitle} sub={tripSub} tripBlend={tripBlend} instant={force3d || reducedMotion} lift={stripOn ? STRIP.heightPx : 0} sheetBottom={sheetInset ? sheetInset + 68 : 0} />
         )}
       </div>
       {flyEnabled && (
-        <div className="v2-flyover" style={{ right: (panelOpen ? panelWidth : 0) + 48, bottom: stripOn ? STRIP.insetPx + STRIP.heightPx + STRIP.gapPx : undefined }}>
+        <div className="v2-flyover" style={sheetInset
+          // Mobile sheet: left of the Add entry button, on the sheet's top edge.
+          ? { left: 16, right: "auto", bottom: sheetInset + 12 }
+          : { right: (panelOpen ? panelWidth : 0) + 48, bottom: stripOn ? STRIP.insetPx + STRIP.heightPx + STRIP.gapPx : undefined }}>
           <button
             type="button"
             className="v2-flyover-btn"
@@ -1447,7 +1467,7 @@ export default function GlobeScene({
 
 // Huge trip title, bottom left of the visible map. Fades in once the camera lands in trip
 // view (tripBlend reaches 1). Font size fits the width left of the flyover controls.
-function TripTitle({ title, sub, tripBlend, instant = false, lift = 0 }) {
+function TripTitle({ title, sub, tripBlend, instant = false, lift = 0, sheetBottom = 0 }) {
   const el = useRef(null);
   const [box, setBox] = useState({ w: 930, h: 800 });
   useEffect(() => {
@@ -1486,7 +1506,8 @@ function TripTitle({ title, sub, tripBlend, instant = false, lift = 0 }) {
   }, [tripBlend, instant]);
   const text = String(title).toUpperCase();
   const cap = H < 600 ? TRIP_TITLE.phonePx : TRIP_TITLE.maxPx;
-  const room = Math.max(120, visW - TRIP_TITLE.left - TRIP_TITLE.reserveRight);
+  // Mobile sheet: the flyover controls sit below the title, so it can use the full width.
+  const room = sheetBottom ? Math.max(120, visW - TRIP_TITLE.left - 24) : Math.max(120, visW - TRIP_TITLE.left - TRIP_TITLE.reserveRight);
   const fit = (len) => room / (Math.max(1, len) * TRIP_TITLE.charW);
   // One line at up to the hero size; if that would drop below about half the hero size,
   // break into two balanced lines at half the hero size so the block height is unchanged.
@@ -1503,9 +1524,9 @@ function TripTitle({ title, sub, tripBlend, instant = false, lift = 0 }) {
     lines = best.l;
     px = Math.min(cap / 2, fit(best.m));
   }
-  px = Math.max(TRIP_TITLE.minPx * (lines.length > 1 ? 0.7 : 1), px);
+  px = Math.max((sheetBottom ? 20 : TRIP_TITLE.minPx) * (lines.length > 1 ? 0.7 : 1), px);
   return (
-    <div ref={el} className="v2-trip-title" style={{ left: TRIP_TITLE.left, bottom: titleBottomPx(chipPx) + lift, maxWidth: `min(${room}px, calc(100vw - ${Math.round(chipW)}px - 48px))`, opacity: 0, transition: `opacity ${TRIP_TITLE.fadeMs}ms ease` }}>
+    <div ref={el} className="v2-trip-title" style={{ left: TRIP_TITLE.left, bottom: sheetBottom || titleBottomPx(chipPx) + lift, maxWidth: sheetBottom ? `${room}px` : `min(${room}px, calc(100vw - ${Math.round(chipW)}px - 48px))`, opacity: 0, transition: `opacity ${TRIP_TITLE.fadeMs}ms ease` }}>
       <h2 style={{ fontSize: px, lineHeight: TRIP_TITLE.lineHeight, fontWeight: TRIP_TITLE.weight, letterSpacing: TRIP_TITLE.tracking }}>{lines.map((l, i) => <span key={i} style={{ display: "block" }}>{l}</span>)}</h2>
       {sub && (sub.base || sub.km) && (
         <p style={{ fontSize: TRIP_TITLE.subPx, maxWidth: "100%" }}>

@@ -23,6 +23,7 @@ import { placeLine } from "../lib/geocode/quickAdd";
 import { useAuthSession } from "../hooks/useAuthSession";
 import { flyoverActive } from "./map/scene/flyover/flyoverState";
 import { useTravelData } from "../hooks/useTravelData";
+import { useMobileViewport, SHEET_HEADER_PX } from "../hooks/useMobileSheet";
 import AuthGate from "./shell/AuthGate";
 import AppShell from "./shell/AppShell";
 import JournalsPanel from "./journals/JournalsPanel";
@@ -137,6 +138,16 @@ export default function MapCanvas() {
   useEffect(() => {
     activeTabRef.current = activeTab;
   }, [activeTab]);
+
+  // Mobile bottom sheet (under 768 px): open whenever the journals panel is; swiping the
+  // handle collapses it to its header. Reopening the panel always starts at 50%.
+  const viewport = useMobileViewport();
+  const [sheetCollapsed, setSheetCollapsed] = useState(false);
+  const panelIsOpen = Boolean(session) && activeTab === "Journals";
+  const [sheetFor, setSheetFor] = useState(panelIsOpen);
+  if (sheetFor !== panelIsOpen) { setSheetFor(panelIsOpen); if (panelIsOpen) setSheetCollapsed(false); }
+  const sheetOpen = viewport.mobile && panelIsOpen;
+  const sheetInset = sheetOpen ? (sheetCollapsed ? SHEET_HEADER_PX : Math.round(viewport.h * 0.5)) : 0;
 
   const timelineProps = {
     // Stop dates first (journey_stats_v2 derives them from stops only), then the trip's own
@@ -657,7 +668,7 @@ export default function MapCanvas() {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container${sheetOpen ? ` is-sheet-open${sheetCollapsed ? " is-sheet-collapsed" : ""}` : ""}`}>
       <AuthGate
         authLoading={authLoading}
         authBusy={authBusy}
@@ -692,7 +703,8 @@ export default function MapCanvas() {
             onMapClick={handleMapClick}
             onHoverRegion={handleHoverRegion}
             panelOpen={Boolean(session) && activeTab === "Journals"}
-            panelWidth={350}
+            panelWidth={viewport.mobile ? 0 : 350}
+            sheetInset={sheetInset}
             timeline={session ? timelineProps : null}
           />
         )}
@@ -723,6 +735,7 @@ export default function MapCanvas() {
       >
         {session && (
           <JournalsPanel
+            sheet={viewport.mobile ? { collapsed: sheetCollapsed, setCollapsed: setSheetCollapsed } : null}
             journeysLoading={!journeysLoaded}
             activeTab={activeTab}
             isAddingEntry={isAddingEntry}

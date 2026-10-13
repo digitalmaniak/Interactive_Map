@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SHEET_HEADER_PX } from "../../hooks/useMobileSheet";
 import ReviewItems from "./ReviewItems";
 import JourneyLegsReview from "./JourneyLegsReview";
 import { fetchDraftLegCounts } from "../../lib/journeys/legs";
@@ -16,6 +17,7 @@ import PinDetail from "./PinDetail";
  * State and callbacks owned by MapCanvas; this component only switches views.
  */
 export default function JournalsPanel({
+  sheet = null,
   activeTab,
   isAddingEntry,
   activePin,
@@ -103,8 +105,33 @@ export default function JournalsPanel({
     return map;
   }, [journeys]);
 
+  const open = activeTab === "Journals";
+  // Mobile bottom sheet: grab handle swipes (down collapses to the header, up restores 50%),
+  // a tap toggles. Desktop keeps the side panel exactly as before.
+  const swipe = useRef(null);
+  const onHandleDown = (e) => { swipe.current = { y: e.clientY }; e.currentTarget.setPointerCapture?.(e.pointerId); };
+  const onHandleUp = (e) => {
+    const st = swipe.current; swipe.current = null;
+    if (!st || !sheet) return;
+    const dy = e.clientY - st.y;
+    if (dy > 30) sheet.setCollapsed(true);
+    else if (dy < -30) sheet.setCollapsed(false);
+    else sheet.setCollapsed(!sheet.collapsed);
+  };
+  const sheetStyle = sheet ? {
+    position: "absolute", left: 0, right: 0, bottom: 0, top: "auto", width: "auto",
+    height: sheet.collapsed ? `calc(${SHEET_HEADER_PX}px + env(safe-area-inset-bottom, 0px))` : "50%",
+    display: "flex", flexDirection: "column", padding: "0 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px))",
+    zIndex: 100, overflow: "hidden", gap: "0.75rem", borderRadius: "12px 12px 0 0",
+    borderLeft: "none", borderTop: "1px solid var(--v2-hairline)",
+    transform: open ? "translateY(0)" : "translateY(100%)",
+    transition: open ? "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s" : "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.35s",
+    visibility: open ? "visible" : "hidden",
+    pointerEvents: open ? "auto" : "none",
+  } : null;
+
   return (
-    <div className="journals-panel" style={{
+    <div className={`journals-panel${sheet ? " is-sheet" : ""}`} data-collapsed={sheet ? String(sheet.collapsed) : undefined} style={sheetStyle || {
       position: "absolute",
       top: "0px",
       right: "0px",
@@ -124,6 +151,13 @@ export default function JournalsPanel({
       visibility: activeTab === "Journals" ? "visible" : "hidden",
       pointerEvents: activeTab === "Journals" ? "auto" : "none"
     }} inert={activeTab === "Journals" ? undefined : true} aria-hidden={activeTab === "Journals" ? undefined : true}>
+      {sheet && (
+        <button type="button" className="v2-sheet-handle" aria-label={sheet.collapsed ? "Expand panel" : "Collapse panel"} aria-expanded={!sheet.collapsed}
+          onPointerDown={onHandleDown} onPointerUp={onHandleUp} onPointerCancel={() => { swipe.current = null; }}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sheet.setCollapsed(!sheet.collapsed); } }}>
+          <span aria-hidden="true" />
+        </button>
+      )}
       {isAddingEntry ? (
         <AddMemoryForm
           newPinName={newPinName}

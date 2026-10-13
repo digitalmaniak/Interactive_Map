@@ -35,10 +35,11 @@ export function raySphere(ray, out = new THREE.Vector3()) {
 }
 
 // Camera matching the live one: full canvas W x H, projection centre shifted by
-// `offset` px so the visible area is x in [0, W - 2 * offset].
-export function makeFitCamera(fov, W, H, offset) {
+// `offset` px so the visible area is x in [0, W - 2 * offset], and down by `offsetY` px
+// (mobile bottom sheet) so the visible area is y in [0, H - 2 * offsetY].
+export function makeFitCamera(fov, W, H, offset, offsetY = 0) {
   const cam = new THREE.PerspectiveCamera(fov, W / H, 0.0001, 100);
-  if (offset > 0.01) cam.setViewOffset(W, H, offset, 0, W, H);
+  if (offset > 0.01 || offsetY > 0.01) cam.setViewOffset(W, H, offset, offsetY, W, H);
   cam.updateProjectionMatrix();
   return cam;
 }
@@ -78,17 +79,17 @@ export function estimateLabelBox(name = "", coord = "") {
 // pad: number or { top, right, bottom, left } (chrome already added by the caller).
 // labels: optional array of { w, h } per point, in screen px.
 // Returns { n, D, box }.
-export function solveTripFit(points, { W, H, offset = 0, fov, tilt, heading = 0, pad = 80, labels = null, minAlt = 0.00125, maxAlt = 2.2 }) {
+export function solveTripFit(points, { W, H, offset = 0, offsetY = 0, fov, tilt, heading = 0, pad = 80, labels = null, minAlt = 0.00125, maxAlt = 2.2 }) {
   const P = typeof pad === "number" ? { top: pad, right: pad, bottom: pad, left: pad } : pad;
   const n = new THREE.Vector3();
   for (const p of points) n.add(p);
   if (n.lengthSq() < 1e-9) n.set(0, 0, 1);
   n.normalize();
   let alt = 0.3;
-  const visW = W - 2 * offset;
-  const availW = Math.max(visW - P.left - P.right, 40), availH = Math.max(H - P.top - P.bottom, 40);
+  const visW = W - 2 * offset, visH = H - 2 * offsetY;
+  const availW = Math.max(visW - P.left - P.right, 40), availH = Math.max(visH - P.top - P.bottom, 40);
   const cx = P.left + availW / 2, cy = P.top + availH / 2;
-  const cam = makeFitCamera(fov, W, H, offset);
+  const cam = makeFitCamera(fov, W, H, offset, offsetY);
   const measure = () => {
     placeCamera(cam, n, 1 + alt, tilt, heading);
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -121,7 +122,7 @@ export function solveTripFit(points, { W, H, offset = 0, fov, tilt, heading = 0,
   }
   // Final guard through the exact returned pose: everything must sit inside the usable
   // area. Re-centre and lift a little until it does.
-  const inside = (b) => b.x0 >= P.left - 0.5 && b.x1 <= visW - P.right + 0.5 && b.y0 >= P.top - 0.5 && b.y1 <= H - P.bottom + 0.5;
+  const inside = (b) => b.x0 >= P.left - 0.5 && b.x1 <= visW - P.right + 0.5 && b.y0 >= P.top - 0.5 && b.y1 <= visH - P.bottom + 0.5;
   box = measure();
   for (let k = 0; k < 80 && !inside(box) && alt < maxAlt; k++) {
     recentre(box);
