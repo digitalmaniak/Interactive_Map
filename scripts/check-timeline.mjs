@@ -48,4 +48,9 @@ ok(dots.every((d) => { const a = an2.filter((x) => x.stop)[["s1", "s2", "s3"].in
 const gr = overlapGroups(dots, 8);
 ok(gr.get("s1").size === 2 && gr.get("s2") === gr.get("s1") && gr.get("s3").size === 1, `same day stops overlap (+1), others alone`);
 ok(nearestStop(dots, dots[1].x + 0.5).id === "s2" && nearestStop(dots, dots[0].x - 0.5).id === "s1", "click picks the dot nearest the cursor");
+const real = tripTimeline({ mode: "tripRange", from: "2025-08-18", to: "2025-08-25", stops: [{ id: "a" }, { id: "b" }, { id: "c" }], legs: [
+  { sort: 0, departAt: "2025-08-18 15:15:00+00", arriveAt: "2025-08-18 20:06:00+00" }, { sort: 1 }, { sort: 2 }, { sort: 3 }, { sort: 4 },
+  { sort: 5, departAt: "2025-08-25 21:23:00+00", arriveAt: "2025-08-26 02:24:00+00" }] });
+const rd = ["a", "b", "c"].map((k) => toMs(real.pinDates[k].start)); const lo = toMs("2025-08-18 20:06:00+00"), hi = toMs("2025-08-25 21:23:00+00");
+ok(rd.every((d, i) => Math.abs(d - (lo + ((i + 0.5) / 3) * (hi - lo))) < 1), "Acatenango: stops spread evenly between the first flight's arrival and the last flight's departure");
 process.exit(failed ? 1 : 0);

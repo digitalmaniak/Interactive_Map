@@ -138,9 +138,21 @@ export function tripTimeline(trip) {
   }
   const undated = !trip.from;
   const range = undated ? { t0: 0, t1: Math.max(1, n) * DAY } : { t0: toMs(trip.from), t1: toMs(trip.to || trip.from) + DAY };
-  const step = (range.t1 - range.t0) / Math.max(1, n);
+  // Window for the stops: with dated legs, from the first dated leg's arrival to the last
+  // dated leg's departure (in leg order), so dated flights never push stops to one end.
+  let w0 = range.t0, w1 = range.t1;
+  if (!undated) {
+    const dated = [...(trip.legs || [])].sort((x, y) => (x.sort ?? 0) - (y.sort ?? 0)).filter((l) => Number.isFinite(toMs(l.departAt)));
+    if (dated.length >= 2) {
+      const f = dated[0], l = dated[dated.length - 1];
+      const a = toMs(f.arriveAt), b = toMs(l.departAt);
+      const lo = Number.isFinite(a) ? a : toMs(f.departAt);
+      if (lo < b) { w0 = Math.max(range.t0, lo); w1 = Math.min(range.t1, b); }
+    }
+  }
+  const step = (w1 - w0) / Math.max(1, n);
   const iso = (t) => new Date(t).toISOString();
-  const pinDates = Object.fromEntries(trip.stops.map((s, i) => [s.id, { start: iso(range.t0 + (i + 0.5) * step), end: iso(range.t0 + (i + 0.5) * step) }]));
+  const pinDates = Object.fromEntries(trip.stops.map((s, i) => [s.id, { start: iso(w0 + (i + 0.5) * step), end: iso(w0 + (i + 0.5) * step) }]));
   return { range, pinDates, undated, spread: true };
 }
 

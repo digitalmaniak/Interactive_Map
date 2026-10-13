@@ -112,7 +112,9 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
   const cy = 38;
   const current = currentPinId;
   // Stop dots sit where the playhead lands for that stop (anchors), else at their date.
-  const dots = tr ? stopPositions(trip.stops, tr.pinDates, anchors, plan, scale) : [];
+  // Stops spread by order (no stop dated) sit at their even slot in the trip range; leg dates
+  // and flyover timing never move them.
+  const dots = tr ? stopPositions(trip.stops, tr.pinDates, tr.spread ? [] : anchors, plan, scale) : [];
   const groups = overlapGroups(dots, STRIP.currentPx);
   // All time: trip dots that overlap pick the nearest on click and carry a "+N" badge.
   const marks = tr ? [] : tripMarks(trips, scale).filter((m) => m.x1 >= x0 && m.x0 <= x1);
