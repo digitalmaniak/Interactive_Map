@@ -19,6 +19,7 @@ import {
   movePinToJourney,
 } from "../lib/journeys/api";
 import { useAuthSession } from "../hooks/useAuthSession";
+import { flyoverActive } from "./map/scene/flyover/flyoverState";
 import { useTravelData } from "../hooks/useTravelData";
 import AuthGate from "./shell/AuthGate";
 import AppShell from "./shell/AppShell";
@@ -189,6 +190,28 @@ export default function MapCanvas() {
       setIsAddingEntry(true);
     }
   };
+
+  // Esc closes the journal panel. While a flyover is active Esc belongs to the flyover
+  // (it stops it), so this handler bails on the shared flag as well as on propagation.
+  const escRef = useRef(null);
+  useEffect(() => {
+    escRef.current = () => {
+      if (activeTab !== "Journals") return;
+      closeJournalPanel();
+    };
+  });
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (flyoverActive.current) return;
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (document.querySelector("[role=dialog][aria-modal=true]")) return;
+      escRef.current?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const handleHoverRegion = (name) => {
     setHoveredCountry(name || null);

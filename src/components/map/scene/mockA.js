@@ -13,6 +13,7 @@ export const TRIP_TITLE = {
   reserveRight: 280, // keep clear of the flyover controls at the bottom right
   subPx: 11, // mono subline
   fadeMs: 400,
+  fallbackMs: 1200, // show anyway this long after the trip fit starts
 };
 // Vertical space the title block takes, reserved in the trip fit so pins are never covered.
 export const titleReservePx = (H) => TRIP_TITLE.bottom + (H < 600 ? TRIP_TITLE.phonePx : TRIP_TITLE.maxPx) * TRIP_TITLE.lineHeight + 30;

@@ -15,7 +15,7 @@ import { supabase } from "../../../lib/supabase/client";
 import FpsGuard from "./FpsGuard";
 import LegsLayer from "./legs/LegsLayer";
 import { resolveLegs } from "./legs/legGeometry";
-import { fetchJourneyLegs } from "../../../lib/journeys/legs";
+import { sharedJourneyLegs } from "../../../lib/journeys/legs";
 import { tripZoomK } from "./legs/legGeometry";
 import useFlyover from "./flyover/useFlyover";
 import { TRIP_TITLE, titleReservePx, CROSSHAIR, HOME_RINGS, pickHomeBase } from "./mockA";
@@ -934,22 +934,24 @@ export default function GlobeScene({
   useEffect(() => {
     if (!focusing) return undefined;
     let cancelled = false;
+    const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const sig = (q) => (ac && typeof q.abortSignal === "function" ? q.abortSignal(ac.signal) : q);
     (async () => {
       try {
-        const { data: stops } = await supabase
+        const { data: stops } = await sig(supabase
           .from("journey_route_stops")
           .select("pin_id, stop_index")
           .eq("journey_id", focusJourneyId)
-          .order("stop_index", { ascending: true });
+          .order("stop_index", { ascending: true }));
         const ids = (stops || []).map((r) => r.pin_id).filter(Boolean);
         const ends = new Set(ids.length ? [ids[0], ids[ids.length - 1]] : []);
         let notes = new Set();
         if (ids.length) {
-          const { data: blocks } = await supabase
+          const { data: blocks } = await sig(supabase
             .from("journal_blocks")
             .select("parent_id")
             .eq("parent_type", "place")
-            .in("parent_id", ids);
+            .in("parent_id", ids));
           notes = new Set((blocks || []).map((b) => b.parent_id));
         }
         if (!cancelled) setLabelMeta({ ends, notes });
@@ -957,7 +959,7 @@ export default function GlobeScene({
         // Priority falls back to the default tier; labels still render.
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; ac?.abort(); };
   }, [focusing, focusJourneyId]);
 
   // Cluster tap: ease the camera in over the cluster until its pins separate.
@@ -989,10 +991,11 @@ export default function GlobeScene({
   useEffect(() => {
     if (!tripKeyForLegs) return undefined;
     let cancelled = false;
-    fetchJourneyLegs(tripKeyForLegs)
+    const req = sharedJourneyLegs(tripKeyForLegs);
+    req.promise
       .then((rows) => { if (!cancelled) setLegRows({ key: tripKeyForLegs, rows: rows || [] }); })
       .catch((err) => { if (!cancelled) { console.warn("[globe] legs not loaded", err?.message || err); setLegRows({ key: tripKeyForLegs, rows: [] }); } });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; req.release(); };
   }, [tripKeyForLegs]);
   const legs = useMemo(() => {
     if (!tripKeyForLegs || legRows.key !== tripKeyForLegs) return [];
@@ -1104,11 +1107,13 @@ export default function GlobeScene({
   // Trip flyover: stop to stop in leg order through the same CameraController.
   const flyEnabled = focusing && !focusIsCollection && legs.length > 0;
   const flyEndGoal = useCallback(() => tripFitGoal(items.filter((it) => !it.dimmed)), [tripFitGoal, items]);
-  const fly = useFlyover({ legs, enabled: flyEnabled, reducedMotion, moveRef, fov: TRIP_KEY.fov, endGoal: flyEndGoal });
+  const fly = useFlyover({ legs, enabled: flyEnabled, tripKey: tripKeyForLegs, reducedMotion, moveRef, fov: TRIP_KEY.fov, endGoal: flyEndGoal });
   const flyOn = fly.state.playing || fly.state.paused;
   const shownActivePinId = flyOn ? fly.state.pinId : activePinId;
   const activeLegId = flyOn ? fly.state.legId : undefined;
-  const flyToggle = fly.toggle, flyStop = fly.stop;
+  const flyToggle = fly.toggle, flyStop = fly.stop, flyPause = fly.pause;
+  const flyOnRef = useRef(false);
+  useEffect(() => { flyOnRef.current = flyOn; }, [flyOn]);
   useEffect(() => {
     if (!flyEnabled) return undefined;
     const onKey = (e) => {
@@ -1155,8 +1160,10 @@ export default function GlobeScene({
   const onPointerMissed = useCallback((e) => {
     const d = downRef.current;
     if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) >= DRAG_PX) return;
+    // During a flyover an empty click only pauses it; it never exits the trip.
+    if (flyOnRef.current) { flyPause(); return; }
     onMapClick?.({ offGlobe: true });
-  }, [onMapClick]);
+  }, [onMapClick, flyPause]);
 
   const countryAt = useCallback(
     (ll) => (ll && geo ? geo.features.find((f) => geoContains(f, [ll.lon, ll.lat])) || null : null),
@@ -1165,11 +1172,12 @@ export default function GlobeScene({
 
   const handleGlobeClick = useCallback(
     (point) => {
+      if (flyOnRef.current) { flyPause(); return; }
       const ll = vec3ToLonLat(point);
       const feature = countryAt(ll);
       onMapClick?.({ ...ll, isLand: !!feature, country: feature?.properties?.name });
     },
-    [countryAt, onMapClick]
+    [countryAt, onMapClick, flyPause]
   );
 
   const itemsRef = useRef(items);
@@ -1328,7 +1336,7 @@ export default function GlobeScene({
           </svg>
         ))}
         {tripStops.length > 0 && focusTitle && (
-          <TripTitle title={focusTitle} sub={tripSub} tripBlend={tripBlend} />
+          <TripTitle key={String(focusJourneyId)} title={focusTitle} sub={tripSub} tripBlend={tripBlend} instant={force3d || reducedMotion} />
         )}
       </div>
       {flyEnabled && (
@@ -1373,7 +1381,7 @@ export default function GlobeScene({
 
 // Huge trip title, bottom left of the visible map. Fades in once the camera lands in trip
 // view (tripBlend reaches 1). Font size fits the width left of the flyover controls.
-function TripTitle({ title, sub, tripBlend }) {
+function TripTitle({ title, sub, tripBlend, instant = false }) {
   const el = useRef(null);
   const [box, setBox] = useState({ w: 930, h: 800 });
   useEffect(() => {
@@ -1386,13 +1394,16 @@ function TripTitle({ title, sub, tripBlend }) {
   const visW = box.w, H = box.h;
   useEffect(() => {
     let raf = 0;
+    const t0 = performance.now();
     const tick = () => {
-      if (el.current) el.current.style.opacity = tripBlend.current >= 0.999 ? "1" : "0";
+      // Show when the camera lands in trip view (tripBlend 1 at the end of the move) or
+      // 1.2 s after the fit starts, whichever is first. Lite and reduced motion: at once.
+      if (el.current) el.current.style.opacity = instant || tripBlend.current >= 0.999 || performance.now() - t0 > TRIP_TITLE.fallbackMs ? "1" : "0";
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [tripBlend]);
+  }, [tripBlend, instant]);
   const text = String(title).toUpperCase();
   const cap = H < 600 ? TRIP_TITLE.phonePx : TRIP_TITLE.maxPx;
   const room = Math.max(120, visW - TRIP_TITLE.left - TRIP_TITLE.reserveRight);

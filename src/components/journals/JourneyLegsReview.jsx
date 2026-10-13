@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LEG_MODES, fetchJourneyLegs, updateLegMode, confirmJourneyLegs } from "../../lib/journeys/legs";
+import { LEG_MODES, fetchJourneyLegs, sharedJourneyLegs, updateLegMode, confirmJourneyLegs } from "../../lib/journeys/legs";
 
 const MODE_LABEL = { fly: "Fly", drive: "Drive", train: "Train", boat: "Boat", cruise: "Cruise", walk: "Walk", other: "Other" };
 
@@ -50,10 +50,11 @@ export default function JourneyLegsReview({ journey, pinsById, onBack, onConfirm
 
   useEffect(() => {
     let alive = true;
-    fetchJourneyLegs(journey.id)
+    const req = sharedJourneyLegs(journey.id); // same request as the globe, not a second one
+    req.promise
       .then((rows) => { if (alive) setLegs(rows); })
-      .catch((err) => { if (alive) { setLoadError(err?.message || "Could not load legs"); setLegs([]); } });
-    return () => { alive = false; };
+      .catch((err) => { if (alive && err?.name !== "AbortError") { setLoadError(err?.message || "Could not load legs"); setLegs([]); } });
+    return () => { alive = false; req.release(); };
   }, [journey.id]);
 
   const placeName = useCallback(

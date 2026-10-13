@@ -7,22 +7,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { buildFlyoverPlan } from "./flyoverPlan";
 import { FLYOVER, easeInOutCubic } from "./flyoverTiming";
+import { flyoverActive } from "./flyoverState";
 
 const IDLE = { playing: false, paused: false, done: false, legIndex: -1, stopIndex: -1, pinId: null, legId: null };
 
-export default function useFlyover({ legs, enabled, reducedMotion, moveRef, fov, endGoal }) {
-  const [state, setState] = useState(IDLE);
+export default function useFlyover({ legs, enabled, tripKey, reducedMotion, moveRef, fov, endGoal }) {
+  // State is tagged with the trip it belongs to; another trip (or none) always reads as
+  // idle, so a flyover can never carry over into the next journal.
+  const [state, setState] = useState({ ...IDLE, key: null });
   const r = useRef({ plan: null, i: 0, t0: 0, elapsed: 0, issued: null, playing: false, raf: 0 });
 
   const publish = useCallback((patch) => {
     setState((prev) => {
-      const next = { ...prev, ...patch };
+      const next = { ...prev, ...patch, key: tripKey };
       if (typeof window !== "undefined") {
         window.__flyoverDebug = { playing: next.playing, paused: next.paused, legIndex: next.legIndex, stopIndex: next.stopIndex, done: next.done };
       }
       return next;
     });
-  }, []);
+  }, [tripKey]);
 
   const issue = useCallback((step, msLeft) => {
     const f = r.current;
@@ -73,7 +76,8 @@ export default function useFlyover({ legs, enabled, reducedMotion, moveRef, fov,
   const play = useCallback(() => {
     const f = r.current;
     if (!enabled || f.playing) return;
-    if (!f.plan || state.done || !state.paused) {
+    const cur = state.key === tripKey ? state : IDLE;
+    if (!f.plan || cur.done || !cur.paused) {
       f.plan = buildFlyoverPlan(legs, { reducedMotion });
       if (!f.plan.steps.length) return;
       f.playing = true;
@@ -89,7 +93,7 @@ export default function useFlyover({ legs, enabled, reducedMotion, moveRef, fov,
     }
     cancelAnimationFrame(f.raf);
     f.raf = requestAnimationFrame(() => r.current.tickRef());
-  }, [enabled, legs, reducedMotion, state.done, state.paused, enter, publish]);
+  }, [enabled, legs, reducedMotion, state, tripKey, enter, publish]);
 
   const pause = useCallback(() => {
     const f = r.current;
@@ -105,24 +109,30 @@ export default function useFlyover({ legs, enabled, reducedMotion, moveRef, fov,
 
   const stop = useCallback(() => {
     const f = r.current;
-    const was = f.playing || state.paused;
-    f.playing = false; cancelAnimationFrame(f.raf);
+    const was = f.playing || (state.key === tripKey && state.paused);
+    f.playing = false; cancelAnimationFrame(f.raf); f.raf = 0;
     f.plan = null; f.issued = null;
     publish({ ...IDLE });
     if (was && enabled) moveRef.current = { ...endGoal() };
-  }, [enabled, endGoal, moveRef, publish, state.paused]);
+  }, [enabled, endGoal, moveRef, publish, state, tripKey]);
 
   const toggle = useCallback(() => { if (r.current.playing) pause(); else play(); }, [pause, play]);
 
-  // Leaving trip view or changing trips resets the flyover.
+  // Changing trips, leaving trip view or unmounting: cancel the timer, drop the plan and
+  // release the camera if our goal is still the active request. Never starts anything.
   useEffect(() => {
-    if (enabled) return undefined;
     const f = r.current;
-    f.playing = false; cancelAnimationFrame(f.raf); f.plan = null; f.issued = null;
-    return undefined;
-  }, [enabled, legs, publish]);
-  useEffect(() => () => cancelAnimationFrame(r.current.raf), []);
+    return () => {
+      f.playing = false; cancelAnimationFrame(f.raf); f.raf = 0; f.plan = null;
+      if (f.issued && moveRef.current === f.issued) moveRef.current = null;
+      f.issued = null;
+      flyoverActive.current = false;
+      if (typeof window !== "undefined") window.__flyoverDebug = { playing: false, paused: false, legIndex: -1, stopIndex: -1, done: false };
+    };
+  }, [enabled, tripKey, moveRef]);
 
   // Outside trip view the flyover always reads as idle (refs were reset above).
-  return { state: enabled ? state : IDLE, play, pause, stop, toggle };
+  const live = enabled && state.key === tripKey ? state : IDLE;
+  useEffect(() => { flyoverActive.current = !!(live.playing || live.paused); }, [live.playing, live.paused]);
+  return { state: live, play, pause, stop, toggle };
 }

@@ -20,15 +20,48 @@ export async function fetchDraftLegCounts() {
   return counts;
 }
 
-export async function fetchJourneyLegs(journeyId) {
-  const { data, error } = await supabase
+export async function fetchJourneyLegs(journeyId, signal) {
+  let q = supabase
     .from("journey_legs")
     .select(LEG_COLUMNS)
     .eq("journey_id", journeyId)
     .is("deleted_at", null)
     .order("sort_order", { ascending: true });
+  if (signal && typeof q.abortSignal === "function") q = q.abortSignal(signal);
+  const { data, error } = await q;
   if (error) throw error;
   return data || [];
+}
+
+// One in-flight legs request per journey, shared by the globe and the Journals legs
+// review. Each caller gets { promise, release }; when the last caller releases before the
+// request settles (journal switch, unmount) the request is aborted.
+const inflight = new Map();
+export function sharedJourneyLegs(journeyId) {
+  let e = inflight.get(journeyId);
+  if (!e) {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    e = { users: 0, settled: false, controller };
+    e.promise = fetchJourneyLegs(journeyId, controller?.signal).finally(() => {
+      e.settled = true;
+      if (inflight.get(journeyId) === e) inflight.delete(journeyId);
+    });
+    inflight.set(journeyId, e);
+  }
+  e.users++;
+  let released = false;
+  return {
+    promise: e.promise,
+    release() {
+      if (released) return;
+      released = true;
+      e.users--;
+      if (e.users <= 0 && !e.settled) {
+        e.controller?.abort();
+        if (inflight.get(journeyId) === e) inflight.delete(journeyId);
+      }
+    },
+  };
 }
 
 export async function updateLegMode(legId, mode) {
