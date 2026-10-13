@@ -28,9 +28,8 @@ const TRIP_MIN_DIST = GLOBE_R + (MIN_DIST - GLOBE_R) / 3;
 const MAX_DIST = 6;
 const LABEL_DIST = 1.9;
 const DRAG_PX = 5;
-const easeOpen = bezier(CAM.open.ease);
-const easeLag = bezier(CAM.open.fovTiltEase);
-const easeClose = bezier(CAM.close.ease);
+const easeMove = bezier([0.65, 0, 0.35, 1]);
+const TRIP_KEY = CAM.keyframes[CAM.keyframes.length - 1];
 const easeGrow = bezier([0.16, 1, 0.3, 1]);
 
 function usePrefersReducedMotion() {
@@ -54,34 +53,6 @@ function pickTier() {
   const cores = navigator.hardwareConcurrency || 4;
   const mem = navigator.deviceMemory || 4;
   return cores >= 6 && mem >= 4 ? "phoneHigh" : "phoneLow";
-}
-
-// Keyframe lookup with distance interpolated in log space.
-function sampleKeys(t, fitDist) {
-  const ks = CAM.keyframes;
-  let i = 0;
-  while (i < ks.length - 2 && t > ks[i + 1].t) i++;
-  const a = ks[i], b = ks[i + 1];
-  const u = THREE.MathUtils.clamp((t - a.t) / (b.t - a.t), 0, 1);
-  const da = a.distR === "fit" ? fitDist : a.distR;
-  const db = b.distR === "fit" ? fitDist : b.distR;
-  return {
-    fov: THREE.MathUtils.lerp(a.fov, b.fov, u),
-    dist: Math.exp(THREE.MathUtils.lerp(Math.log(da), Math.log(db), u)),
-    tilt: THREE.MathUtils.degToRad(THREE.MathUtils.lerp(a.tiltDeg, b.tiltDeg, u)),
-  };
-}
-
-// Camera pose for a surface target n (unit), centre distance D and tilt from the normal.
-// Tilt leans the camera toward the south along the local meridian (mock C framing).
-function poseFor(n, D, tilt, outPos) {
-  const north = new THREE.Vector3(0, 1, 0).addScaledVector(n, -n.y);
-  if (north.lengthSq() < 1e-6) north.set(0, 0, -1);
-  north.normalize();
-  const u = n.clone().multiplyScalar(Math.cos(tilt)).addScaledVector(north, -Math.sin(tilt));
-  const tu = n.dot(u);
-  const s = -tu + Math.sqrt(Math.max(tu * tu - 1 + D * D, 0));
-  return outPos.copy(n).multiplyScalar(GLOBE_R).addScaledVector(u, s);
 }
 
 function tripFraming(points) {
@@ -213,41 +184,11 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
   );
 }
 
-// Globe to trip and back (DESIGN.md camera table). Controls are disabled while tweening
-// and re-enabled after the settle. Reduced motion: instant cut to the end keyframe.
 // Journals panel offset: shift the projection centre (not the canvas) so the globe
-// or the framed trip sits centred in the space left of the panel. Eased with the
-// camera move tokens (1600 ms open, 1200 ms close). No offset when the panel would
-// cover most of the screen (narrow / mobile).
+// or the framed trip sits centred in the space left of the panel. No offset when the
+// panel would cover most of the screen (narrow / mobile).
 export const panelOffsetFor = (open, width, panelWidth) =>
   open && width > panelWidth * 1.6 ? panelWidth / 2 : 0;
-
-function ViewOffset({ panelOpen, panelWidth, reducedMotion, viewRef }) {
-  const { camera, size } = useThree();
-  const st = useRef({ cur: 0, from: 0, to: 0, t0: 0, open: true, w: 0, h: 0, applied: null });
-  useFrame(() => {
-    const s = st.current;
-    const target = panelOffsetFor(panelOpen, size.width, panelWidth);
-    viewRef.current = { width: size.width, height: size.height, offset: target };
-    const now = performance.now();
-    if (target !== s.to) {
-      s.from = s.cur; s.to = target; s.t0 = now; s.open = target > s.from;
-    }
-    if (s.cur !== s.to) {
-      const dur = s.open ? CAM.open.ms : CAM.close.ms;
-      const raw = reducedMotion ? 1 : Math.min(1, (now - s.t0) / dur);
-      const e = s.open ? easeOpen(raw) : easeClose(raw);
-      s.cur = raw >= 1 ? s.to : s.from + (s.to - s.from) * e;
-    }
-    const key = `${s.cur.toFixed(2)}|${size.width}|${size.height}`;
-    if (key === s.applied) return;
-    s.applied = key;
-    if (s.cur > 0.01) camera.setViewOffset(size.width, size.height, s.cur, 0, size.width, size.height);
-    else camera.clearViewOffset();
-    camera.updateProjectionMatrix();
-  });
-  return null;
-}
 
 // Trip fit for the visible area left of the panel: a narrower view needs more altitude.
 function fitForView(fit, view) {
@@ -258,14 +199,136 @@ function fitForView(fit, view) {
   return 1 + (fit - 1) * scale;
 }
 
-function CameraDirector({ controlsRef, moveRef, reducedMotion, tripView, onArrive }) {
-  const { camera } = useThree();
-  const anim = useRef(null);
-  const seen = useRef(null);
+// One camera controller (DESIGN.md, Camera motion spec v1). Live state:
+// n (unit look target), D (camera distance from the centre, in R), tilt, heading,
+// fov and panel offset. Every view change runs one tween from the live state to the
+// goal. Mid-move goals restart from the live pose and blend over 120 ms. A user drag
+// or zoom cancels instantly. Reduced motion: 180 ms crossfade, no flight.
+const BLEND_MS = 120;
+const FADE_MS = 180;
+const LIFT_CAP = HOME_DIST;
+const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const lerp = THREE.MathUtils.lerp;
+
+function localFrame(n) {
+  const north = new THREE.Vector3(0, 1, 0).addScaledVector(n, -n.y);
+  if (north.lengthSq() < 1e-6) north.set(0, 0, -1);
+  north.normalize();
+  const east = new THREE.Vector3().crossVectors(north, n).normalize();
+  return { north, east };
+}
+
+// Heading 0 leans the camera toward the south (looking north), as in mock C.
+function poseFor(n, D, tilt, heading, outPos) {
+  const { north, east } = localFrame(n);
+  const lean = north.multiplyScalar(-Math.cos(heading)).addScaledVector(east, -Math.sin(heading));
+  const u = n.clone().multiplyScalar(Math.cos(tilt)).addScaledVector(lean, Math.sin(tilt));
+  const tu = n.dot(u);
+  const s = -tu + Math.sqrt(Math.max(tu * tu - GLOBE_R * GLOBE_R + D * D, 0));
+  return outPos.copy(n).multiplyScalar(GLOBE_R).addScaledVector(u, s);
+}
+
+function readLive(camera, controls, lastHeading) {
+  const t = controls && controls.target.lengthSq() > 1e-6 ? controls.target.clone() : null;
+  const D = camera.position.length();
+  if (!t) return { n: camera.position.clone().normalize(), D, tilt: 0, heading: lastHeading, fov: camera.fov };
+  const n = t.normalize();
+  const u = camera.position.clone().addScaledVector(n, -GLOBE_R).normalize();
+  const c = THREE.MathUtils.clamp(u.dot(n), -1, 1);
+  const tilt = Math.acos(c);
+  let heading = lastHeading;
+  if (tilt > 1e-3) {
+    const { north, east } = localFrame(n);
+    heading = Math.atan2(-u.dot(east), -u.dot(north));
+  }
+  return { n, D, tilt, heading, fov: camera.fov };
+}
+
+function sampleTween(tw, now) {
+  const raw = THREE.MathUtils.clamp((now - tw.t0) / tw.ms, 0, 1);
+  const e = easeMove(raw);
+  const a = tw.from, b = tw.to;
+  const n = new THREE.Vector3().copy(a.n);
+  if (tw.d > 1e-6) {
+    const q = new THREE.Quaternion().slerp(tw.q, e);
+    n.applyQuaternion(q);
+  }
+  let D = lerp(a.D, b.D, e) + tw.bump * Math.sin(Math.PI * raw);
+  let tilt;
+  if (tw.bump > 0) tilt = raw < 0.5 ? lerp(a.tilt, 0, easeMove(raw * 2)) : lerp(0, b.tilt, easeMove(raw * 2 - 1));
+  else tilt = lerp(a.tilt, b.tilt, e);
+  if (tw.zoomOnly) D = Math.min(D, a.D);
+  return {
+    n, D, tilt,
+    heading: a.heading + tw.dh * e,
+    fov: lerp(a.fov, b.fov, e),
+    offset: lerp(a.offset, b.offset, e),
+    raw,
+  };
+}
+
+function makeTween(from, goal, now, reducedMotion) {
+  const to = {
+    n: goal.n.clone().normalize(),
+    D: goal.D ?? from.D,
+    tilt: goal.tilt ?? from.tilt,
+    heading: goal.heading ?? from.heading,
+    fov: goal.fov ?? from.fov,
+    offset: goal.offset,
+  };
+  if (goal.zoomOnly) to.D = Math.min(to.D, from.D);
+  const d = from.n.angleTo(to.n);
+  const hPeak = Math.min(LIFT_CAP, Math.max(from.D, to.D, from.D + 1.2 * d));
+  const bump = reducedMotion || d < 0.05 || goal.zoomOnly ? 0 : Math.max(0, hPeak - Math.max(from.D, to.D));
+  const ms = THREE.MathUtils.clamp(700 + 900 * Math.sqrt(d / Math.PI) + 250 * Math.abs(Math.log2(to.D / from.D)), 600, 2200);
+  return {
+    from, to, d, bump, ms, t0: now,
+    q: new THREE.Quaternion().setFromUnitVectors(from.n, to.n),
+    dh: wrapPi(to.heading - from.heading),
+    zoomOnly: !!goal.zoomOnly,
+    goal,
+  };
+}
+
+function blendStates(a, b, w) {
+  const n = a.n.clone().lerp(b.n, w).normalize();
+  return {
+    n, D: lerp(a.D, b.D, w), tilt: lerp(a.tilt, b.tilt, w),
+    heading: a.heading + wrapPi(b.heading - a.heading) * w,
+    fov: lerp(a.fov, b.fov, w), offset: lerp(a.offset, b.offset, w), raw: b.raw,
+  };
+}
+
+function CameraController({ controlsRef, moveRef, reducedMotion, tripView, panelOpen, panelWidth, viewRef }) {
+  const { camera, size, gl } = useThree();
+  const st = useRef({ tw: null, prev: null, seen: null, offset: 0, offsetKey: null, heading: 0, panelTarget: null, applied: null, fade: null });
   const idleUntil = useRef(0);
 
+  const applyOffset = (off) => {
+    const s = st.current;
+    s.offset = off;
+    const key = `${off.toFixed(2)}|${size.width}|${size.height}`;
+    if (key === s.applied) return;
+    s.applied = key;
+    if (off > 0.01) camera.setViewOffset(size.width, size.height, off, 0, size.width, size.height);
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+  };
+
+  const applyState = (x, controls) => {
+    const look = x.n.clone().multiplyScalar(GLOBE_R);
+    poseFor(x.n, x.D, x.tilt, x.heading, camera.position);
+    if (Math.abs(camera.fov - x.fov) > 1e-4) { camera.fov = x.fov; camera.updateProjectionMatrix(); }
+    applyOffset(x.offset);
+    st.current.heading = x.heading;
+    if (controls) { controls.target.copy(look); controls.update(); }
+    else camera.lookAt(look);
+  };
+
   useFrame((_, delta) => {
+    const s = st.current;
     const controls = controlsRef.current;
+    const now = performance.now();
     const alt = camera.position.length() - GLOBE_R;
     if (controls) {
       controls.rotateSpeed = THREE.MathUtils.clamp(alt * 0.35, 0.03, 0.5);
@@ -273,27 +336,59 @@ function CameraDirector({ controlsRef, moveRef, reducedMotion, tripView, onArriv
     }
     // Near plane follows altitude (about 0.1 x altitude) so near ground lines keep depth precision.
     const near = THREE.MathUtils.clamp(alt * 0.1, 0.0005, 0.05);
-    if (Math.abs(near - camera.near) > camera.near * 0.05) {
-      camera.near = near;
-      camera.updateProjectionMatrix();
-    }
+    if (Math.abs(near - camera.near) > camera.near * 0.05) { camera.near = near; camera.updateProjectionMatrix(); }
+
+    const panelTarget = panelOffsetFor(panelOpen, size.width, panelWidth);
+    viewRef.current = { width: size.width, height: size.height, offset: panelTarget };
+
+    // New goal, or a panel change while idle or mid-move: one tween from the live state.
     const req = moveRef.current;
-    if (req !== seen.current) {
-      seen.current = req;
-      anim.current = null;
-      if (req) {
-        const fromN = (controls && controls.target.lengthSq() > 1e-6 ? controls.target : camera.position).clone().normalize();
-        const a = { req, fromN, fromPos: camera.position.clone(), fromTarget: controls ? controls.target.clone() : new THREE.Vector3(), fromFov: camera.fov, t0: performance.now() };
-        if (reducedMotion) a.t0 = -Infinity;
-        anim.current = a;
-        if (controls) controls.enabled = false;
+    const panelChanged = s.panelTarget !== null && panelTarget !== s.panelTarget;
+    const first = s.panelTarget === null;
+    s.panelTarget = panelTarget;
+    if (first) applyOffset(panelTarget);
+    if (req !== s.seen || panelChanged) {
+      const fresh = req !== s.seen;
+      s.seen = req;
+      if (!req && fresh) {
+        // User drag or zoom: cancel instantly; the live pose is the drag's start.
+        s.tw = null; s.prev = null;
+        if (s.fade) { gl.domElement.style.opacity = "1"; s.fade = null; }
+      } else {
+        const live = s.tw ? sampleTween(s.tw, now) : { ...readLive(camera, controls, s.heading), offset: s.offset };
+        const goal = req && (fresh || s.tw) ? (fresh ? req : s.tw.goal) : { n: live.n, D: live.D, tilt: live.tilt, heading: live.heading, fov: live.fov };
+        const g = { ...goal, offset: panelTarget };
+        if (s.tw && !reducedMotion) s.prev = { tw: s.tw, t: now };
+        if (reducedMotion) {
+          s.fade = { t0: now, goal: g };
+          s.tw = null;
+        } else {
+          s.tw = makeTween(live, g, now, false);
+        }
+        if (g.trip !== undefined) tripView.current = g.trip;
       }
     }
 
-    const a = anim.current;
-    if (!a) {
+    if (s.fade) {
+      // Reduced motion: fade out, cut to the final state, fade back in (180 ms total).
+      const k = (now - s.fade.t0) / FADE_MS;
+      if (k >= 0.5 && !s.fade.cut) {
+        const f = s.fade.goal;
+        const live = readLive(camera, controls, s.heading);
+        applyState({
+          n: f.n.clone().normalize(), D: f.zoomOnly ? Math.min(f.D ?? live.D, live.D) : (f.D ?? live.D),
+          tilt: f.tilt ?? live.tilt, heading: f.heading ?? live.heading, fov: f.fov ?? live.fov, offset: f.offset,
+        }, controls);
+        s.fade.cut = true;
+      }
+      gl.domElement.style.opacity = String(Math.min(1, Math.abs(1 - 2 * Math.min(k, 1))));
+      if (k >= 1) { gl.domElement.style.opacity = "1"; s.fade = null; finish(s, controls); }
+      return;
+    }
+
+    if (!s.tw) {
       // Idle drift on the globe view, paused while the user interacts.
-      if (controls && !tripView.current && !reducedMotion && performance.now() > idleUntil.current && controls.enabled) {
+      if (controls && !tripView.current && !reducedMotion && now > idleUntil.current) {
         const yaw = THREE.MathUtils.degToRad(CAM.idleYawDegPerSec) * delta;
         camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
         controls.update();
@@ -301,77 +396,23 @@ function CameraDirector({ controlsRef, moveRef, reducedMotion, tripView, onArriv
       return;
     }
 
-    const goal = a.req;
-    if (goal.kind === "zoom") {
-      // Cluster tap: ease in only. Keep the current tilt and heading by carrying the
-      // camera offset from its look target over to the cluster, shortening it.
-      if (!a.zoom) {
-        const fromT = a.fromTarget.lengthSq() > 1e-6 ? a.fromTarget.clone() : a.fromN.clone().multiplyScalar(GLOBE_R);
-        const off = a.fromPos.clone().sub(fromT);
-        const toT = goal.n.clone().multiplyScalar(GLOBE_R);
-        const q = new THREE.Quaternion().setFromUnitVectors(fromT.clone().normalize(), goal.n);
-        const len = off.length();
-        const toLen = Math.min(len, Math.max(TRIP_MIN_DIST - GLOBE_R, len * goal.factor));
-        a.zoom = { fromT, toT, q, offDir: off.clone().normalize(), len, toLen };
-      }
-      const z = a.zoom;
-      const raw = Math.min(1, (performance.now() - a.t0) / CAM.open.ms);
-      const e = easeOpen(raw);
-      const qi = new THREE.Quaternion().slerp(z.q, e);
-      const tgt = z.fromT.clone().normalize().applyQuaternion(qi).multiplyScalar(GLOBE_R);
-      const len = Math.exp(THREE.MathUtils.lerp(Math.log(z.len), Math.log(z.toLen), e));
-      camera.position.copy(tgt).addScaledVector(z.offDir.clone().applyQuaternion(qi), len);
-      if (controls) { controls.target.copy(tgt); controls.update(); }
-      else camera.lookAt(tgt);
-      if (raw >= 1) {
-        anim.current = null;
-        if (controls) controls.enabled = true;
-      }
-      return;
+    let x = sampleTween(s.tw, now);
+    if (s.prev) {
+      const w = (now - s.prev.t) / BLEND_MS;
+      if (w >= 1) s.prev = null;
+      else x = blendStates(sampleTween(s.prev.tw, now), x, easeMove(w));
     }
-    const open = goal.kind === "open";
-    const dur = open ? CAM.open.ms : CAM.close.ms;
-    const elapsed = performance.now() - a.t0;
-    const raw = Math.min(1, elapsed / dur);
-    const rawLag = Math.min(1, Math.max(0, (elapsed - (open ? CAM.open.fovTiltLagMs : 0)) / dur));
-    const e = open ? easeOpen(raw) : easeClose(raw);
-    const eLag = open ? easeLag(rawLag) : easeClose(raw);
-
-    // Keyframe parameter: open runs 0 to 1, close runs 1 to 0 (tilt reaches 0 by 60 percent).
-    const k = open ? e : 1 - e;
-    const kLag = open ? eLag : 1 - Math.min(1, raw / 0.6);
-    const key = sampleKeys(k, goal.fit);
-    const tiltKey = sampleKeys(kLag, goal.fit);
-
-    // Slerp the surface target, then build the pose.
-    const n = new THREE.Vector3().copy(a.fromN).lerp(goal.n, e).normalize();
-    if (n.lengthSq() < 1e-6) n.copy(goal.n);
-    let dist = key.dist;
-    if (raw >= 1 && open) {
-      // Settle: 1.5 percent overshoot damped back over 400 ms.
-      const st = Math.min(1, (elapsed - dur) / CAM.settle.ms);
-      dist *= 1 + CAM.settle.overshoot * Math.sin(Math.PI * st) * (1 - st);
-    }
-    const pos = poseFor(n, dist, tiltKey.tilt, new THREE.Vector3());
-    camera.position.copy(pos);
-    camera.fov = open ? THREE.MathUtils.lerp(a.fromFov, tiltKey.fov, eLag) : key.fov;
-    camera.updateProjectionMatrix();
-    // Look target moves from the globe centre to the surface point as tilt grows.
-    const look = n.clone().multiplyScalar(GLOBE_R * THREE.MathUtils.clamp(k * 1.4, 0, 1));
-    if (controls) { controls.target.copy(look); controls.update(); }
-    else camera.lookAt(look);
-
-    const settleDone = !open || elapsed >= dur + CAM.settle.ms || reducedMotion;
-    if (raw >= 1 && settleDone) {
-      anim.current = null;
-      tripView.current = open;
-      if (controls) {
-        controls.enabled = true;
-        if (!open) { controls.target.set(0, 0, 0); controls.update(); }
-      }
-      onArrive?.(open);
-    }
+    applyState(x, controls);
+    if (x.raw >= 1 && !s.prev) { s.tw = null; finish(s, controls); }
   });
+
+  // Globe view (tilt 0) orbits the globe centre again once the move lands.
+  function finish(s, controls) {
+    if (controls && camera.position.clone().normalize().angleTo(controls.target.clone().normalize()) < 1e-3 && !tripView.current) {
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+  }
 
   useEffect(() => {
     const c = controlsRef.current;
@@ -668,7 +709,7 @@ export default function GlobeScene({
     const pxPerUnit = h / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * Math.max(alt, 1e-3));
     const curPx = spread * pxPerUnit;
     const factor = curPx > 1 ? THREE.MathUtils.clamp(curPx / (CLUSTER_PX * 2), 0.15, 0.85) : 0.4;
-    moveRef.current = { kind: "zoom", n: c, factor };
+    moveRef.current = { n: c, D: GLOBE_R + (cam.position.length() - GLOBE_R) * factor, zoomOnly: true };
   }, [items]);
 
   // Opening a trip eases into mock C's tilted close view. Closing eases back out.
@@ -682,11 +723,11 @@ export default function GlobeScene({
     focusKeyRef.current = key;
     if (key != null) {
       const fr = tripFraming(stops);
-      moveRef.current = { kind: "open", n: fr.n, fit: fitForView(fr.fit, viewRef.current) };
+      moveRef.current = { n: fr.n, D: fitForView(fr.fit, viewRef.current), tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true };
     } else if (prev != null) {
       const cam = controlsRef.current?.object.position;
       const n = cam ? cam.clone().normalize() : new THREE.Vector3(0, 0, 1);
-      moveRef.current = { kind: "close", n, fit: HOME_DIST };
+      moveRef.current = { n, D: HOME_DIST, tilt: 0, fov: CAM.keyframes[0].fov, trip: false };
     }
   }, [focusing, focusJourneyId, items]);
 
@@ -694,7 +735,7 @@ export default function GlobeScene({
     if (!flyTo) return;
     const lon = Number(flyTo.lon), lat = Number(flyTo.lat);
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-    moveRef.current = { kind: "open", n: lonLatToVec3(lon, lat).normalize(), fit: 1.12 };
+    moveRef.current = { n: lonLatToVec3(lon, lat).normalize(), D: 1.12, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), fov: TRIP_KEY.fov, trip: true };
   }, [flyTo]);
 
   const countryAt = useCallback(
@@ -801,8 +842,7 @@ export default function GlobeScene({
           maxDistance={MAX_DIST}
           onStart={() => { moveRef.current = null; }}
         />
-        <ViewOffset panelOpen={panelOpen} panelWidth={panelWidth} reducedMotion={reducedMotion} viewRef={viewRef} />
-        <CameraDirector controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} />
+        <CameraController controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={activePinId} meta={labelMeta} clusterRef={clusterRef} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>
