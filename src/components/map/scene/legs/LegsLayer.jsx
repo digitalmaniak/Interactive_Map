@@ -47,7 +47,7 @@ function makeSegs(px) {
 }
 
 export default function LegsLayer({ legs, activePinId, tripBlend, reducedMotion, lite = false }) {
-  const { camera, size } = useThree();
+  const { camera, size, gl } = useThree();
   const surfaceGroup = useRef();
   const flyGroup = useRef();
   const fxGroup = useRef();
@@ -130,6 +130,10 @@ export default function LegsLayer({ legs, activePinId, tripBlend, reducedMotion,
 
     for (const b of built) {
       b.line.material.resolution.set(size.width, size.height);
+      // At DPR below 1 (force3d lite renders at 0.5) a 1.5 px line is under one device pixel
+      // and breaks into dashes without MSAA. Keep every line at least 1 device pixel wide.
+      if (b.line.material.userData.px == null) b.line.material.userData.px = b.line.material.linewidth;
+      b.line.material.linewidth = Math.max(b.line.material.userData.px, 1 / Math.min(1, gl.getPixelRatio()));
       const n = b.points.length - 1;
       b.line.geometry.instanceCount = Math.max(0, Math.round(progress * n));
       if (b.s.dash) {
@@ -139,7 +143,11 @@ export default function LegsLayer({ legs, activePinId, tripBlend, reducedMotion,
         b.line.material.gapSize = b.s.dash[1] * w;
       }
     }
-    for (const d of Object.values(deco)) d.material.resolution.set(size.width, size.height);
+    for (const d of Object.values(deco)) {
+      d.material.resolution.set(size.width, size.height);
+      if (d.material.userData.px == null) d.material.userData.px = d.material.linewidth;
+      d.material.linewidth = Math.max(d.material.userData.px, 1 / Math.min(1, gl.getPixelRatio()));
+    }
 
     // Chevrons (drive) and sleeper ticks (train), spaced in screen px. Rebuilt at most
     // every 100 ms, and only when the camera moved or the draw-in is running.
