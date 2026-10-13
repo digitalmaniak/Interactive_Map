@@ -10,6 +10,9 @@ import { geoContains } from "d3-geo";
 import { GLOBE_R, rewindGeo, lonLatToVec3, vec3ToLonLat, buildLandTexture, buildCoastGeometry } from "./geometry";
 import { createGlobeMaterial, createAtmosphereMaterial, createBeamMaterial } from "./GlobeMaterial";
 import { tokens, tiers, bezier } from "./tokens";
+import { detectRenderTier } from "./renderTier";
+import FpsGuard from "./FpsGuard";
+import StaticGlobe from "./StaticGlobe";
 
 // v2 main view (DESIGN.md v2: mock A globe, mock C trip framing).
 // One perspective camera orbiting a sphere. Draw calls stay tiny for phones:
@@ -429,6 +432,12 @@ export default function GlobeScene({
 
   const dropTier = useCallback(() => setTier((cur) => (cur === "desktop" ? "phoneHigh" : "phoneLow")), []);
 
+  // Lowest tier: no WebGL, software rendering, or sustained fps under ~20 shows a static image.
+  const [renderTier] = useState(() => detectRenderTier());
+  const [lowFps, setLowFps] = useState(false);
+  const onLowFps = useCallback(() => setLowFps(true), []);
+  if (renderTier === "static" || lowFps) return <StaticGlobe />;
+
   return (
     <div className="v2-map">
       <Canvas
@@ -439,6 +448,7 @@ export default function GlobeScene({
         aria-hidden="true"
       >
         <PerformanceMonitor onDecline={dropTier} />
+        <FpsGuard minFps={20} onLow={onLowFps} />
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} tripView={tripView} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
         <Stops
