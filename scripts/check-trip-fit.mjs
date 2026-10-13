@@ -4,6 +4,7 @@
 // Chrome is the measured CSS layout: tab bar bottom at about 78 px, profile block about
 // 68 px tall at the bottom left. Run: node scripts/check-trip-fit.mjs
 import * as THREE from "three";
+import { titleReservePx } from "../src/components/map/scene/mockA.js";
 import { solveTripFit, makeFitCamera, placeCamera, projectPx, estimateLabelBox, LABEL_GAP_PX } from "../src/components/map/scene/tripFit.js";
 
 const v = (lat, lon) => {
@@ -17,13 +18,16 @@ const trips = {
 };
 const PANEL = 350, FOV = 28, TILT = THREE.MathUtils.degToRad(48);
 const CHROME_TOP = 78, CHROME_BOTTOM = 68;
-const PAD = { top: 80 + CHROME_TOP, right: 80, bottom: 80 + CHROME_BOTTOM, left: 104 };
+// Bottom chrome is the larger of the profile block and the trip title block.
+const padFor = (H) => ({ top: 80 + CHROME_TOP, right: 80, bottom: 80 + Math.max(CHROME_BOTTOM, titleReservePx(H)), left: 104 });
+let PAD;
 let failed = 0;
 for (const [name, pins] of Object.entries(trips)) {
   const pts = pins.map(([, a, b]) => v(a, b));
   const labels = pins.map(([t, a, b]) => estimateLabelBox(t, fmt(a, b)));
   for (const [W, H] of [[1440, 900], [1280, 800], [1280, 742]]) {
     const off = PANEL / 2;
+    PAD = padFor(H);
     const { n, D } = solveTripFit(pts, { W, H, offset: off, fov: FOV, tilt: TILT, pad: PAD, labels });
     const cam = placeCamera(makeFitCamera(FOV, W, H, off), n, D, TILT, 0);
     let l = Infinity, r = -Infinity, t = Infinity, b = -Infinity, pinTop = Infinity;

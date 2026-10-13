@@ -92,9 +92,10 @@ if (failed) process.exit(1);
   const tk = u(35.6762, 139.6503), hk = u(42.8048, 140.6874);
   const labels = [estimateLabelBox("Tokyo", "35.68°N 139.65°E"), estimateLabelBox("Hokkaido", "42.80°N 140.69°E")];
   const TILT = THREE.MathUtils.degToRad(48), PANEL = 350;
-  const PAD = { top: 158, right: 80, bottom: 148, left: 104 };
+  const { titleReservePx } = await import("../src/components/map/scene/mockA.js");
   let bad = 0;
   for (const [W, H] of [[1440, 900], [1280, 800], [1280, 742]]) {
+    const PAD = { top: 158, right: 80, bottom: 80 + Math.max(68, titleReservePx(H)), left: 104 };
     const { n, D } = solveTripFit([tk, hk], { W, H, offset: PANEL / 2, fov: 28, tilt: TILT, pad: PAD, labels });
     const cam = placeCamera(makeFitCamera(28, W, H, PANEL / 2), n, D, TILT, 0);
     for (const off of [0, 0.358, -0.358]) {

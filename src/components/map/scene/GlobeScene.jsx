@@ -18,6 +18,8 @@ import { resolveLegs } from "./legs/legGeometry";
 import { fetchJourneyLegs } from "../../../lib/journeys/legs";
 import { tripZoomK } from "./legs/legGeometry";
 import useFlyover from "./flyover/useFlyover";
+import { TRIP_TITLE, titleReservePx, CROSSHAIR, HOME_RINGS, pickHomeBase } from "./mockA";
+import { fetchHomeBases } from "../../../lib/homeBases";
 import { poseFor, localFrame, raySphere, solveTripFit, estimateLabelBox } from "./tripFit";
 
 // Trip framing margins: 80 px plus the overlay chrome measured from the DOM (tab bar and
@@ -36,6 +38,8 @@ function tripPads(W, H) {
     }
   }
   void W;
+  // The trip title block sits bottom left in trip view; pins must stay above it.
+  bottom = Math.max(bottom, titleReservePx(H));
   return { top: TRIP_PAD + top, right: TRIP_PAD, bottom: TRIP_PAD + bottom, left: TRIP_PAD + 24 };
 }
 import StaticGlobe from "./StaticGlobe";
@@ -152,6 +156,40 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
       </lineSegments>
     </group>
   );
+}
+
+// Home range rings: thin concentric rings on the surface around the dated home base.
+// Pulse gently; static on reduced motion and in force3d lite mode.
+function HomeRings({ home, still }) {
+  const group = useRef();
+  const rings = useMemo(() => {
+    if (!home) return [];
+    const n = lonLatToVec3(home.lng, home.lat, 1).normalize();
+    const { north, east } = localFrame(n);
+    return HOME_RINGS.radiiR.map((rad) => {
+      const pts = [];
+      for (let k = 0; k < HOME_RINGS.segments; k++) {
+        const a = (k / HOME_RINGS.segments) * Math.PI * 2;
+        const p = n.clone().addScaledVector(north, Math.cos(a) * rad).addScaledVector(east, Math.sin(a) * rad).normalize().multiplyScalar(GLOBE_R * HOME_RINGS.lift);
+        pts.push(p);
+      }
+      const g = new THREE.BufferGeometry().setFromPoints(pts);
+      const m = new THREE.LineBasicMaterial({ color: HOME_RINGS.color, transparent: true, opacity: HOME_RINGS.opacity, depthWrite: false });
+      return new THREE.LineLoop(g, m);
+    });
+  }, [home]);
+  useEffect(() => () => rings.forEach((r) => { r.geometry.dispose(); r.material.dispose(); }), [rings]);
+  useFrame(() => {
+    if (still || !rings.length) return;
+    const t = (performance.now() % HOME_RINGS.pulseMs) / HOME_RINGS.pulseMs;
+    rings.forEach((r, i) => {
+      // A soft brightness wave travels outward through the rings.
+      const ph = (t - i / rings.length + 1) % 1;
+      r.material.opacity = HOME_RINGS.opacity * (1 - HOME_RINGS.pulseAmp + HOME_RINGS.pulseAmp * 2 * Math.max(0, Math.sin(Math.PI * ph)));
+    });
+  });
+  if (!rings.length) return null;
+  return <group ref={group}>{rings.map((r, i) => <primitive key={i} object={r} raycast={() => null} />)}</group>;
 }
 
 // Stop dots (one InstancedMesh) and stop beams (one InstancedMesh).
@@ -830,6 +868,7 @@ export default function GlobeScene({
   focusJourneyId = null,
   flyTo = null,
   focusIsCollection = false,
+  focusTitle = null,
   onPinClick,
   onMapClick,
   onHoverRegion,
@@ -993,7 +1032,13 @@ export default function GlobeScene({
     // Frame the pins' ground points so their projected bbox is centred in the visible
     // area left of the panel with 80 px padding, at the trip tilt (iterative solve).
     const fr = tripFraming(stops);
-    const view = viewRef.current;
+    let view = viewRef.current;
+    // The canvas may not have rendered a frame yet (pins already loaded): measure the
+    // map container so the fit still uses the real viewport and panel offset.
+    if ((!view || !view.width) && typeof document !== "undefined") {
+      const r = document.querySelector(".v2-map")?.getBoundingClientRect();
+      if (r && r.width && r.height) view = { width: r.width, height: r.height };
+    }
     let n = fr.n, D = fr.fit;
     if (view && view.width && view.height) {
       const sol = solveTripFit(stops.map((it) => it.pos.clone().normalize()), {
@@ -1030,6 +1075,31 @@ export default function GlobeScene({
     if (!(eng && eng.kind === "trip" && eng.key === focusKeyRef.current)) engagedRef.current = { kind: "point", n };
     moveRef.current = { n, D: 1.12, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), fov: TRIP_KEY.fov, trip: true };
   }, [flyTo]);
+
+  // Dated home bases (owner only, read only). Trip view uses the base whose range holds
+  // the trip's first date; globe view uses the current base.
+  const [homeBases, setHomeBases] = useState([]);
+  useEffect(() => {
+    let off = false;
+    fetchHomeBases().then((b) => { if (!off) setHomeBases(b); }).catch((err) => console.warn("[globe] home bases not loaded", err?.message || err));
+    return () => { off = true; };
+  }, []);
+  const tripStops = useMemo(() => (focusing && !focusIsCollection ? items.filter((it) => !it.dimmed) : []), [focusing, focusIsCollection, items]);
+  const tripDates = useMemo(() => {
+    const ds = tripStops.flatMap((it) => [it.pin.start_date, it.pin.end_date]).filter(Boolean).map((d) => String(d).slice(0, 10)).sort();
+    return ds.length ? { from: ds[0], to: ds[ds.length - 1] } : null;
+  }, [tripStops]);
+  const home = useMemo(() => pickHomeBase(homeBases, tripStops.length ? tripDates?.from : null), [homeBases, tripStops, tripDates]);
+  const tripSub = useMemo(() => {
+    if (!tripStops.length) return "";
+    const fmt = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }).toUpperCase();
+    const parts = [];
+    if (tripDates) parts.push(tripDates.from.slice(0, 7) === tripDates.to.slice(0, 7) ? fmt(tripDates.from) : `${fmt(tripDates.from)} TO ${fmt(tripDates.to)}`);
+    parts.push(`${tripStops.length} ${tripStops.length === 1 ? "STOP" : "STOPS"}`);
+    const km = legs.reduce((a, l) => a + (Number(l.distanceKm) || l.a.v.angleTo(l.b.v) * 6371), 0);
+    if (legs.length && km > 0) parts.push(`${Math.round(km).toLocaleString("en-US")} KM`);
+    return parts.join("   ");
+  }, [tripStops, tripDates, legs]);
 
   // Trip flyover: stop to stop in leg order through the same CameraController.
   const flyEnabled = focusing && !focusIsCollection && legs.length > 0;
@@ -1211,6 +1281,7 @@ export default function GlobeScene({
         <FpsGuard minFps={20} onLow={onLowFps} />
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} cheap={force3d} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
+        <HomeRings home={home} still={reducedMotion || force3d} />
         <LegsLayer legs={legs} activePinId={shownActivePinId} activeLegId={activeLegId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
         <Stops
           beamHeightRef={beamHeightRef}
@@ -1250,8 +1321,18 @@ export default function GlobeScene({
         )}
       </Canvas>
 
+      <div className="v2-frame" style={{ right: panelOpen ? panelWidth : 0 }} aria-hidden={!(tripStops.length && focusTitle)}>
+        {["tl", "tr", "bl", "br"].map((c) => (
+          <svg key={c} className={`v2-cross is-${c}`} width={CROSSHAIR.armPx} height={CROSSHAIR.armPx} viewBox={`0 0 ${CROSSHAIR.armPx} ${CROSSHAIR.armPx}`} style={{ opacity: CROSSHAIR.opacity, margin: CROSSHAIR.inset }} aria-hidden="true">
+            <path d={`M${CROSSHAIR.armPx / 2} 0V${CROSSHAIR.armPx}M0 ${CROSSHAIR.armPx / 2}H${CROSSHAIR.armPx}`} stroke={CROSSHAIR.color} strokeWidth={CROSSHAIR.strokePx} fill="none" />
+          </svg>
+        ))}
+        {tripStops.length > 0 && focusTitle && (
+          <TripTitle title={focusTitle} sub={tripSub} tripBlend={tripBlend} />
+        )}
+      </div>
       {flyEnabled && (
-        <div className="v2-flyover" style={{ right: panelOpen ? panelWidth + 16 : 16 }}>
+        <div className="v2-flyover" style={{ right: (panelOpen ? panelWidth : 0) + 48 }}>
           <button
             type="button"
             className="v2-flyover-btn"
@@ -1286,6 +1367,56 @@ export default function GlobeScene({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Huge trip title, bottom left of the visible map. Fades in once the camera lands in trip
+// view (tripBlend reaches 1). Font size fits the width left of the flyover controls.
+function TripTitle({ title, sub, tripBlend }) {
+  const el = useRef(null);
+  const [box, setBox] = useState({ w: 930, h: 800 });
+  useEffect(() => {
+    const parent = el.current?.parentElement;
+    if (!parent || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(([e]) => setBox({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(parent);
+    return () => ro.disconnect();
+  }, []);
+  const visW = box.w, H = box.h;
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      if (el.current) el.current.style.opacity = tripBlend.current >= 0.999 ? "1" : "0";
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [tripBlend]);
+  const text = String(title).toUpperCase();
+  const cap = H < 600 ? TRIP_TITLE.phonePx : TRIP_TITLE.maxPx;
+  const room = Math.max(120, visW - TRIP_TITLE.left - TRIP_TITLE.reserveRight);
+  const fit = (len) => room / (Math.max(1, len) * TRIP_TITLE.charW);
+  // One line at up to the hero size; if that would drop below about half the hero size,
+  // break into two balanced lines at half the hero size so the block height is unchanged.
+  let lines = [text];
+  let px = Math.min(cap, fit(text.length));
+  const words = text.split(/\s+/);
+  if (px < cap / 2 && words.length > 1) {
+    let best = null;
+    for (let k = 1; k < words.length; k++) {
+      const a = words.slice(0, k).join(" "), b = words.slice(k).join(" ");
+      const m = Math.max(a.length, b.length);
+      if (!best || m < best.m) best = { m, l: [a, b] };
+    }
+    lines = best.l;
+    px = Math.min(cap / 2, fit(best.m));
+  }
+  px = Math.max(TRIP_TITLE.minPx * (lines.length > 1 ? 0.7 : 1), px);
+  return (
+    <div ref={el} className="v2-trip-title" style={{ left: TRIP_TITLE.left, bottom: TRIP_TITLE.bottom, maxWidth: room, opacity: 0, transition: `opacity ${TRIP_TITLE.fadeMs}ms ease` }}>
+      <h2 style={{ fontSize: px, lineHeight: TRIP_TITLE.lineHeight, fontWeight: TRIP_TITLE.weight, letterSpacing: TRIP_TITLE.tracking }}>{lines.map((l, i) => <span key={i} style={{ display: "block" }}>{l}</span>)}</h2>
+      {sub && <p style={{ fontSize: TRIP_TITLE.subPx }}>{sub}</p>}
     </div>
   );
 }

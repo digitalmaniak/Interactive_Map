@@ -299,9 +299,21 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 .v2-globe-notice { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 6px 10px; border-radius: 4px; background: rgba(7, 9, 11, 0.8); border: 1px solid var(--v2-hairline); font: 400 11px/1.4 var(--v2-mono); color: var(--v2-text-dim); z-index: 2; }
 
 /* Trip flyover control: bottom right of the visible map, left of the panel. */
-.v2-flyover { position: absolute; bottom: 24px; display: flex; align-items: center; gap: 8px; z-index: 3; pointer-events: auto; }
+.v2-flyover { position: absolute; bottom: 48px; display: flex; align-items: center; gap: 8px; z-index: 3; pointer-events: auto; }
 .v2-flyover-btn { font: 500 11px/1 var(--v2-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-text); padding: 9px 12px; border: 1px solid var(--v2-route); border-radius: var(--v2-radius); background: rgba(7, 9, 11, 0.8); cursor: pointer; }
 .v2-flyover-btn.is-dim { border-color: var(--v2-hairline); color: var(--v2-text-dim); }
 .v2-flyover-btn:focus-visible { outline: 2px solid var(--v2-route); outline-offset: 2px; }
 .v2-flyover-status { font: 400 10px/1.4 var(--v2-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--v2-text-dim); }
 .v2-pin-label.is-flyover { transform-origin: center bottom; scale: 1.15; z-index: 2; }
+
+/* Mock A frame: corner crosshairs and the trip title, over the visible map (left of panel). */
+.v2-frame { position: absolute; top: 0; left: 0; bottom: 0; pointer-events: none; z-index: 2; }
+.v2-cross { position: absolute; }
+.v2-cross.is-tl { top: 0; left: 0; }
+.v2-cross.is-tr { top: 0; right: 0; }
+.v2-cross.is-bl { bottom: 0; left: 0; }
+.v2-cross.is-br { bottom: 0; right: 0; }
+.v2-trip-title { position: absolute; pointer-events: none; color: #FFFFFF; }
+.v2-trip-title h2 { margin: 0; font-family: "Inter Display", Inter, var(--font-inter, system-ui), system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-trip-title p { margin: 10px 0 0; font-family: var(--v2-mono); letter-spacing: 0.14em; color: var(--v2-text-dim); white-space: pre; }
+@media (prefers-reduced-motion: reduce) { .v2-trip-title { transition: none !important; } }

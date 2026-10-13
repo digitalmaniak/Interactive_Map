@@ -562,6 +562,7 @@ export default function MapCanvas() {
             focusJourneyId={activeJourneyId}
             flyTo={flyTo}
             focusIsCollection={activeJourneyIsCollection}
+            focusTitle={activeJourney?.title || null}
             onPinClick={handlePinClick}
             onMapClick={handleMapClick}
             onHoverRegion={handleHoverRegion}
