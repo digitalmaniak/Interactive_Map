@@ -43,25 +43,56 @@ export function vec3ToLonLat(v) {
   return { lon, lat };
 }
 
-// Equirectangular land mask with baked soft relief. Red = land amount, green = relief shade.
+// Equirectangular land mask with baked soft relief.
+// R = land, G = relief (soft inland rise), B = ocean distance from coast (0 at coast).
 export function buildLandTexture(fc, width) {
   const w = width, h = width / 2;
-  const canvas = document.createElement("canvas");
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext("2d");
   const proj = geoEquirectangular().fitExtent([[0, 0], [w, h]], { type: "Sphere" });
-  const path = geoPath(proj, ctx);
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, w, h);
-  // Soft relief: a blurred inner glow so coasts read slightly raised and interiors settle.
-  ctx.save();
-  ctx.shadowColor = "rgba(0,255,0,1)";
-  ctx.shadowBlur = w / 220;
-  ctx.fillStyle = "rgb(255,120,0)";
-  for (const f of fc.features) { ctx.beginPath(); path(f); ctx.fill(); }
-  ctx.restore();
-  const tex = new THREE.CanvasTexture(canvas);
+  const layer = (draw) => {
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d");
+    const path = geoPath(proj, ctx);
+    draw(ctx, path);
+    return ctx.getImageData(0, 0, w, h).data;
+  };
+  const blur = Math.max(2, w / 300);
+  // Land mask.
+  const mask = layer((ctx, path) => {
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#fff";
+    for (const f of fc.features) { ctx.beginPath(); path(f); ctx.fill(); }
+  });
+  // Relief: blurred land, so interiors rise and coasts sit low. Pre-shaded, no elevation data.
+  const relief = layer((ctx, path) => {
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, w, h);
+    ctx.filter = `blur(${blur * 3}px)`;
+    ctx.fillStyle = "#fff";
+    for (const f of fc.features) { ctx.beginPath(); path(f); ctx.fill(); }
+  });
+  // Coast proximity on water: blurred land seen from the ocean side.
+  const near = layer((ctx, path) => {
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, w, h);
+    ctx.filter = `blur(${blur}px)`;
+    ctx.fillStyle = "#fff";
+    for (const f of fc.features) { ctx.beginPath(); path(f); ctx.fill(); }
+  });
+  const out = new Uint8Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    const j = i * 4;
+    // Canvas row 0 is north. Texture v = 0 is south, so flip rows.
+    const y = Math.floor(i / w), x = i % w;
+    const k = ((h - 1 - y) * w + x) * 4;
+    out[k] = mask[j];
+    out[k + 1] = relief[j];
+    out[k + 2] = 255 - near[j];
+    out[k + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(out, w, h, THREE.RGBAFormat);
   tex.colorSpace = THREE.NoColorSpace;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
   tex.anisotropy = 4;
   tex.needsUpdate = true;
   return tex;

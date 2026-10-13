@@ -768,19 +768,36 @@ body:has(.share-page) {
   background: rgba(0, 0, 0, 0.3);
 }
 
-/* v2 globe scene (DESIGN.md v2 Anduril direction) */
+/* v2 globe scene (DESIGN.md v2 tokens) */
 :root {
+  --v2-bg: #07090B;
   --v2-land: #24262A;
   --v2-ocean: #2D3A42;
   --v2-ocean-hatch: #5CC8E4;
+  --v2-route: #5CC8E4;
   --v2-accent: #FF3311;
+  --v2-text: #FFFFFF;
+  --v2-text-dim: #9AA3A8;
+  --v2-sans: "Inter Display", var(--font-inter), Inter, system-ui, sans-serif;
+  --v2-mono: "JetBrains Mono", var(--font-jetbrains-mono), "IBM Plex Mono", ui-monospace, monospace;
 }
-.v2-map { position: absolute; inset: 0; overflow: hidden; background: #15171A; touch-action: none; }
+.v2-map { position: absolute; inset: 0; overflow: hidden; background: var(--v2-bg); touch-action: none; }
 .v2-map-overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .v2-pin-label {
   position: absolute; left: 0; top: 0; will-change: transform, opacity;
-  font: 500 10px/1 Inter, system-ui, sans-serif; letter-spacing: 0.14em; text-transform: uppercase;
-  color: #FFFFFF; white-space: nowrap; padding: 3px 5px; background: rgba(20, 22, 24, 0.5);
-  border-bottom: 1px solid rgba(92, 200, 228, 0.6);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  transition: opacity 250ms ease;
 }
-.v2-pin-label.is-active { border-bottom-color: #FF3311; }
+.v2-pin-label.no-motion { transition: none; }
+.v2-pin-label-place {
+  font: 500 11px/1 var(--v2-sans); letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--v2-text); white-space: nowrap;
+}
+.v2-pin-label-coord {
+  font: 400 10px/1.4 var(--v2-mono); letter-spacing: 0.02em; color: var(--v2-text-dim); white-space: nowrap;
+}
+.v2-pin-label.is-active .v2-pin-label-place { color: var(--v2-accent); }
+@media (max-width: 640px) {
+  .v2-pin-label-place { font-size: 10px; }
+  .v2-pin-label-coord { font-size: 9px; }
+}
