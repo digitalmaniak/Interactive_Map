@@ -332,7 +332,7 @@ function blendStates(a, b, w) {
   };
 }
 
-function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDragStart, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef }) {
+function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDragStart, onDragEndAt, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef }) {
   const { camera, size, gl } = useThree();
   const st = useRef({ tw: null, prev: null, seen: null, offset: 0, offsetKey: null, heading: 0, panelTarget: null, applied: null, fade: null });
   const idleUntil = useRef(0);
@@ -557,7 +557,17 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
     if (!c) return;
     // Drag start clears the region readout and suppresses it until the drag ends.
     const pause = () => { idleUntil.current = Infinity; draggingRef.current = true; onDragStart?.(); };
-    const resume = () => { idleUntil.current = performance.now() + CAM.idleResumeMs; draggingRef.current = false; };
+    const resume = () => {
+      idleUntil.current = performance.now() + CAM.idleResumeMs;
+      draggingRef.current = false;
+      // Refill the region readout once at the last cursor position, no mouse move needed.
+      const ptr = pointerRef.current;
+      if (!ptr || !ptr.inside || !onDragEndAt) return;
+      const rect = gl.domElement.getBoundingClientRect();
+      const rc = new THREE.Raycaster();
+      rc.setFromCamera(new THREE.Vector2(((ptr.x - rect.left) / rect.width) * 2 - 1, -((ptr.y - rect.top) / rect.height) * 2 + 1), camera);
+      onDragEndAt(raySphere(rc.ray));
+    };
     c.addEventListener("start", pause);
     c.addEventListener("end", resume);
     return () => { c.removeEventListener("start", pause); c.removeEventListener("end", resume); };
@@ -1145,7 +1155,7 @@ export default function GlobeScene({
           maxDistance={MAX_DIST}
           onStart={() => { moveRef.current = null; }}
         />
-        <CameraController pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
+        <CameraController pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={activePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>
