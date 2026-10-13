@@ -42,4 +42,30 @@ ok(aBack.points[0].distanceTo(out.b.v) < 1e-9, "return runs the opposite directi
 const sp = surfacePath(GVA && llToUnitWrap(GVA), llToUnitWrap({ lat: 45.9776, lng: 6.9356 }));
 ok(sp.every((p) => Math.abs(p.length() - 1) < 1e-9), `drive path stays on the unit sphere (${sp.length} points)`);
 function llToUnitWrap(p) { return resolveLegs([{ id: "x", mode: "drive", from_lat: p.lat, from_lng: p.lng, to_lat: 0, to_lng: 0 }], {})[0].a.v; }
-process.exit(failed ? 1 : 0);
+if (failed) process.exit(1);
+
+// Buffer sanity for both test trips (coordinates as read from journey_legs and pins).
+{
+  const { resolveLegs: R, flyArc: F, surfacePath: S, flyScaleFor } = await import("../src/components/map/scene/legs/legGeometry.js");
+  const P = (id, latitude, longitude) => ({ id, latitude, longitude });
+  const pins = [P("gm", 45.98, 6.94), P("co", 45.79, 6.97), P("ve", 46.10, 7.23), P("an", 46.64, 8.59), P("so", 46.96, 11.01), P("sa", 47.13, 10.27), P("tk", 35.68, 139.69), P("hk", 42.80, 140.69)];
+  const L = (id, mode, f, t, extra = {}) => ({ id, mode, from_pin_id: f, to_pin_id: t, ...extra });
+  const rows = [
+    L(1, "fly", null, "gm", { from_lat: 40.69, from_lng: -74.17 }), L(2, "drive", "gm", "co"), L(3, "drive", "co", "ve"), L(4, "drive", "ve", "an"),
+    L(5, "drive", "an", "so"), L(6, "drive", "so", "sa"), L(7, "fly", "sa", null, { to_lat: 40.80, to_lng: -74.01 }),
+    L(8, "fly", null, "tk", { from_lat: 40.69, from_lng: -74.17 }), L(9, "fly", "tk", "hk"), L(10, "fly", "hk", "tk"), L(11, "fly", "tk", null, { to_lat: 40.69, to_lng: -74.17 }),
+  ];
+  const legs = R(rows, Object.fromEntries(pins.map((p) => [p.id, p])));
+  let bad = 0;
+  const ok = (c, m) => { console.log(`${c ? "PASS" : "FAIL"} ${m}`); if (!c) bad++; };
+  ok(legs.filter((l) => l.mode === "fly").length === 6 && legs.filter((l) => l.mode === "drive").length === 5, "legs classified by mode (6 fly, 5 drive)");
+  ok(legs.filter((l) => l.offsetDeg).length === 4 && !legs.some((l) => l.offsetDeg && l.mode !== "fly"), "only the two Japan fly pairs are offset (EWR-Tokyo, Tokyo-Hokkaido); no Euro leg");
+  for (const sc of [0.5, flyScaleFor(0.8), 1]) for (const l of legs) {
+    const pts = l.mode === "fly" ? F(l.a.v, l.b.v, { offsetDeg: l.offsetDeg, scale: sc }).points : S(l.a.v, l.b.v);
+    const flat = pts.flatMap((p) => [p.x, p.y, p.z]);
+    ok(flat.every(Number.isFinite) && pts.every((p) => p.length() > 0.99), `leg ${l.id} scale ${sc.toFixed(2)}: no NaN or zero vectors`);
+    ok(pts[0].distanceTo(l.a.v) < 1e-3 && pts[pts.length - 1].distanceTo(l.b.v) < 1e-3, `leg ${l.id}: ends within 1e-3R of endpoints`);
+    ok(flat.length === pts.length * 3 && (l.mode !== "fly" || pts.length === 97), `leg ${l.id}: segment count matches buffer (${pts.length - 1} segs)`);
+  }
+  if (bad) process.exit(1);
+}

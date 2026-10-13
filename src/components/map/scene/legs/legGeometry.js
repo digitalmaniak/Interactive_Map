@@ -12,7 +12,7 @@ export const FLY_END_ALPHA = 0.4;
 export const PAIR_OFFSET_DEG = 4;
 export const FLY_TRIP_SCALE = 0.5; // trip view halves H so arcs stay in frame at 48 deg tilt
 const SURFACE_STEP_RAD = THREE.MathUtils.degToRad(0.25);
-const PAIR_MATCH_RAD = THREE.MathUtils.degToRad(0.5); // about 55 km
+const PAIR_MATCH_RAD = THREE.MathUtils.degToRad(0.45); // about 50 km
 
 export function llToUnit(lat, lon, out = new THREE.Vector3()) {
   const phi = THREE.MathUtils.degToRad(90 - lat);
@@ -20,6 +20,10 @@ export function llToUnit(lat, lon, out = new THREE.Vector3()) {
   return out.set(-Math.sin(phi) * Math.cos(th), Math.cos(phi), Math.sin(phi) * Math.sin(th));
 }
 
+// Shared trip zoom value: 0 at trip height, 1 by about 1.5R altitude. Drives trip tilt
+// and the fly arc height multiplier (0.5x at trip height, 1.0x by 1.5R).
+export const tripZoomK = (alt) => THREE.MathUtils.smoothstep(alt, 0.15, 1.5);
+export const flyScaleFor = (alt) => FLY_TRIP_SCALE + (1 - FLY_TRIP_SCALE) * tripZoomK(alt);
 export const flyHeight = (d) => THREE.MathUtils.clamp(0.08 + 0.35 * d, 0.04, 0.55);
 
 function slerpUnit(a, b, ang, t, out) {

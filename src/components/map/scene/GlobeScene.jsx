@@ -16,6 +16,7 @@ import FpsGuard from "./FpsGuard";
 import LegsLayer from "./legs/LegsLayer";
 import { resolveLegs } from "./legs/legGeometry";
 import { fetchJourneyLegs } from "../../../lib/journeys/legs";
+import { tripZoomK } from "./legs/legGeometry";
 import { poseFor, localFrame, raySphere, solveTripFit, estimateLabelBox } from "./tripFit";
 
 // Trip framing margins: 80 px plus the overlay chrome measured from the DOM (tab bar and
@@ -58,6 +59,9 @@ const DRAG_PX = 5;
 const PIN_HOVER_PX = 16; // screen radius that counts as hovering a pin
 const easeMove = bezier([0.65, 0, 0.35, 1]);
 const TRIP_KEY = CAM.keyframes[CAM.keyframes.length - 1];
+// Trip view pull back limit, measured from the surface target: about a whole hemisphere.
+const TRIP_MAX_D = 2.2;
+
 const easeGrow = bezier([0.16, 1, 0.3, 1]);
 
 function usePrefersReducedMotion() {
@@ -376,6 +380,7 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       controls.zoomSpeed = THREE.MathUtils.clamp(0.7 + (0.4 - alt) * 4, 0.7, 2.2);
       // Trip view zooms toward the cursor or pinch centre (handled below), not the target.
       controls.enableZoom = !tripView.current;
+      controls.maxDistance = surfaceTarget && tripView.current ? TRIP_MAX_D : MAX_DIST;
     }
     // Near plane follows altitude (about 0.1 x altitude) so near ground lines keep depth precision.
     const near = THREE.MathUtils.clamp(alt * 0.1, 0.0001, 0.05);
@@ -493,30 +498,33 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
     }
   }
 
-  // Zoom toward a screen point in trip view: scale the camera and look target about the
-  // ground point under the cursor, so that point stays put and stops never drift behind
-  // the panel. Wheel uses the cursor, pinch uses the midpoint of the two touches.
+  // Trip view wheel and pinch ignore the cursor: dolly along the camera to target axis.
+  // The target is the trip framing centre and the panel view offset is untouched, so the
+  // trip stays centred left of the panel. Tilt eases toward top down as the camera pulls
+  // back (full trip tilt up close, flat by the hemisphere limit).
   useEffect(() => {
     const el = gl.domElement;
-    const rc = new THREE.Raycaster();
-    const zoomAt = (clientX, clientY, scale) => {
+    const zoomAt = (_x, _y, scale) => {
       const controls = controlsRef.current;
       if (!controls || !tripView.current) return false;
-      const rect = el.getBoundingClientRect();
-      rc.setFromCamera(new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1), camera);
-      const P = raySphere(rc.ray);
-      if (!P) return false;
-      const alt = camera.position.length() - GLOBE_R;
-      const camToP = camera.position.distanceTo(P);
-      let sc = scale;
-      // Keep altitude within [TRIP_MIN_ALT, MAX_DIST - R] (altitude scales about P).
-      if (alt * sc < TRIP_MIN_ALT) sc = TRIP_MIN_ALT / Math.max(alt, 1e-6);
-      if (camToP * sc > MAX_DIST - GLOBE_R) sc = (MAX_DIST - GLOBE_R) / camToP;
-      if (Math.abs(sc - 1) < 1e-5) return true;
+      const T = controls.target;
+      if (T.lengthSq() < 0.25) return false;
+      const off = camera.position.clone().sub(T);
+      const d0 = off.length();
+      if (d0 < 1e-9) return false;
+      const d = THREE.MathUtils.clamp(d0 * scale, TRIP_MIN_ALT, TRIP_MAX_D);
+      if (Math.abs(d - d0) < 1e-9) return true;
       moveRef.current = null; // user zoom cancels any tween
-      camera.position.sub(P).multiplyScalar(sc).add(P);
-      const t = controls.target.clone().sub(P).multiplyScalar(sc).add(P);
-      controls.target.copy(t.normalize().multiplyScalar(GLOBE_R));
+      const n = T.clone().normalize();
+      const dir = off.divideScalar(d0);
+      const cur = Math.acos(THREE.MathUtils.clamp(dir.dot(n), -1, 1));
+      // Tilt: 48 deg framing tilt at trip height easing to 0 (straight down) by about 1.5R.
+      const tilt = THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg) * (1 - tripZoomK(d));
+      if (cur > 1e-4) {
+        const side = dir.clone().sub(n.clone().multiplyScalar(Math.cos(cur))).normalize();
+        dir.copy(n).multiplyScalar(Math.cos(tilt)).addScaledVector(side, Math.sin(tilt));
+      }
+      camera.position.copy(T).addScaledVector(dir, d);
       controls.update();
       return true;
     };

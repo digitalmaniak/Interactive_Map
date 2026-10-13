@@ -7,7 +7,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 // three-stdlib's Line2 (the same one drei's <Line> uses) supports RGBA vertex colours,
 // needed for the fly end fade and the wake fade.
 import { Line2, LineGeometry, LineMaterial, LineSegments2, LineSegmentsGeometry } from "three-stdlib";
-import { flyArc, surfacePath, surfaceLiftScale } from "./legGeometry";
+import { flyArc, surfacePath, surfaceLiftScale, flyScaleFor, FLY_TRIP_SCALE } from "./legGeometry";
 
 // Journey legs on the globe (DESIGN.md "Leg mode styles", v1 build spec). All widths
 // are screen px (LineMaterial). Every leg is cyan; the active leg (arriving at the
@@ -66,7 +66,7 @@ export default function LegsLayer({ legs, activePinId, tripBlend, reducedMotion,
       path.points.forEach((_, i) => colors.push(ROUTE.r, ROUTE.g, ROUTE.b, path.alpha ? (active ? Math.max(path.alpha[i], 0.4) : path.alpha[i] * baseA) : baseA));
       const line = makeLine(path.points, colors, s.px * (active ? 1.5 : 1), !!s.dash);
       line.renderOrder = fly ? 6 : 4;
-      out.push({ leg, s, fly, active, line, points: path.points });
+      out.push({ leg, s, fly, active, line, points: path.points, arcScale: FLY_TRIP_SCALE });
     }
     return out;
   }, [legs, activePinId]);
@@ -103,12 +103,27 @@ export default function LegsLayer({ legs, activePinId, tripBlend, reducedMotion,
     if (surfaceGroup.current) surfaceGroup.current.visible = show;
     if (flyGroup.current) flyGroup.current.visible = show;
     if (fxGroup.current) fxGroup.current.visible = show;
-    if (!show) { s.start = null; return; }
+    if (!show) {
+      s.start = null;
+      if (typeof window !== "undefined") window.__legsDebug = { reducedMotion: !!reducedMotion, lite: !!lite, legCount: built.length, progress: 0, tripBlend: Number(blend.toFixed(3)), headRunning: false, heads: 0 };
+      return;
+    }
     // Draw-in starts once the camera has landed in trip view.
     if (s.start == null && blend >= 0.99) s.start = now;
     const progress = reducedMotion ? 1 : s.start == null ? 0 : Math.min(1, (now - s.start) / DRAW_MS);
 
     const alt = camera.position.length() - 1;
+    // Fly arc height follows trip zoom. Same point count every time, so the full buffer is
+    // rewritten in place (never resized) and instanceCount keeps driving the draw-in.
+    const arcScale = flyScaleFor(alt);
+    for (const b of built) {
+      if (!b.fly || Math.abs(b.arcScale - arcScale) < 0.01) continue;
+      const np = flyArc(b.leg.a.v, b.leg.b.v, { offsetDeg: b.leg.offsetDeg, scale: arcScale }).points;
+      if (np.length !== b.points.length) continue;
+      np.forEach((p, i) => b.points[i].copy(p));
+      b.line.geometry.setPositions(np.flatMap((p) => [p.x, p.y, p.z]));
+      b.arcScale = arcScale;
+    }
     if (surfaceGroup.current) surfaceGroup.current.scale.setScalar(surfaceLiftScale(alt));
     const fovK = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / size.height; // world per px per unit distance
     const pxw = (p) => camera.position.distanceTo(p) * fovK;
@@ -201,6 +216,9 @@ export default function LegsLayer({ legs, activePinId, tripBlend, reducedMotion,
       }
     }
     if (hm) { hm.count = h; hm.instanceMatrix.needsUpdate = true; }
+    if (typeof window !== "undefined") {
+      window.__legsDebug = { reducedMotion: !!reducedMotion, lite: !!lite, legCount: built.length, progress: Number(progress.toFixed(3)), tripBlend: Number(blend.toFixed(3)), headRunning: h > 0, heads: h };
+    }
     setSegs(deco.wakes, wake, wakeC);
 
     // Rings face the camera at a constant 4 px.
@@ -222,12 +240,12 @@ export default function LegsLayer({ legs, activePinId, tripBlend, reducedMotion,
   return (
     <group>
       <group ref={surfaceGroup}>
-        {built.filter((b) => !b.fly).map((b) => <primitive key={`l-${b.leg.id}`} object={b.line} />)}
+        {built.filter((b) => !b.fly).map((b) => <primitive key={b.line.uuid} object={b.line} />)}
         <primitive object={deco.chevrons} renderOrder={5} />
         <primitive object={deco.ticks} renderOrder={5} />
       </group>
       <group ref={flyGroup}>
-        {built.filter((b) => b.fly).map((b) => <primitive key={`l-${b.leg.id}`} object={b.line} />)}
+        {built.filter((b) => b.fly).map((b) => <primitive key={b.line.uuid} object={b.line} />)}
       </group>
       <group ref={fxGroup}>
       <primitive object={deco.wakes} renderOrder={6} />
