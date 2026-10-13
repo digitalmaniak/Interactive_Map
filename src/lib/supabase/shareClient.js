@@ -17,6 +17,8 @@ export function createShareClient(shareToken) {
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
+      // Own storage key, so this anon client never shares the signed-in client's auth lock.
+      storageKey: "sb-share-anon",
     },
   });
 }
