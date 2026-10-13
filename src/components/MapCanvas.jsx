@@ -172,7 +172,8 @@ export default function MapCanvas() {
   // Clicking the map closes the panel when open; clicking land (when closed)
   // starts a new memory at that spot; clicking open ocean does nothing.
   const handleMapClick = ({ lat, lon, isLand }) => {
-    if (activeTab === "Journals") {
+    // Empty globe or ocean while a trip is open (or the panel is open) exits back to the map.
+    if (activeTab === "Journals" || activeJourneyId != null) {
       closeJournalPanel();
       return;
     }
@@ -565,7 +566,7 @@ export default function MapCanvas() {
 
       <AppShell
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={(tab) => (tab === "Map" ? closeJournalPanel() : setActiveTab(tab))}
         hoveredCountry={hoveredCountry}
         showProfileMenu={showProfileMenu}
         setShowProfileMenu={setShowProfileMenu}

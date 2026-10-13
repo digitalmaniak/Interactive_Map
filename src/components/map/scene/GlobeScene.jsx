@@ -371,7 +371,17 @@ function CameraController({ controlsRef, moveRef, reducedMotion, tripView, tripB
       } else {
         const live = s.tw ? sampleTween(s.tw, now) : { ...readLive(camera, controls, s.heading), offset: s.offset };
         const goal = req && (fresh || s.tw) ? (fresh ? req : s.tw.goal) : { n: live.n, D: live.D, tilt: live.tilt, heading: live.heading, fov: live.fov };
-        const g = { ...goal, offset: panelTarget };
+        let g = { ...goal, offset: panelTarget };
+        // Remember the pose before a trip opens; leaving the trip glides back to it.
+        if (fresh && g.saveReturn && !s.returnPose && tripBlend.current < 0.5) {
+          s.returnPose = { n: live.n.clone(), D: live.D, tilt: live.tilt, heading: live.heading, fov: live.fov };
+        }
+        if (fresh && g.returnToSaved) {
+          if (s.returnPose) g = { ...g, ...s.returnPose, n: s.returnPose.n.clone() };
+          s.returnPose = null;
+        }
+        if (fresh) moveRef.current = g;
+        s.seen = moveRef.current;
         if (s.tw && !reducedMotion) s.prev = { tw: s.tw, t: now };
         if (reducedMotion) {
           s.fade = { t0: now, goal: g };
@@ -787,11 +797,11 @@ export default function GlobeScene({
     focusKeyRef.current = key;
     if (key != null) {
       const fr = tripFraming(stops);
-      moveRef.current = { n: fr.n, D: fitForView(fr.fit, viewRef.current), tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true };
+      moveRef.current = { saveReturn: true, n: fr.n, D: fitForView(fr.fit, viewRef.current), tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true };
     } else if (prev != null) {
       const cam = controlsRef.current?.object.position;
       const n = cam ? cam.clone().normalize() : new THREE.Vector3(0, 0, 1);
-      moveRef.current = { n, D: HOME_DIST, tilt: 0, fov: CAM.keyframes[0].fov, trip: false };
+      moveRef.current = { returnToSaved: true, n, D: HOME_DIST, tilt: 0, fov: CAM.keyframes[0].fov, trip: false };
     }
   }, [focusing, focusJourneyId, items]);
 
@@ -799,7 +809,7 @@ export default function GlobeScene({
     if (!flyTo) return;
     const lon = Number(flyTo.lon), lat = Number(flyTo.lat);
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-    moveRef.current = { n: lonLatToVec3(lon, lat).normalize(), D: 1.12, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), fov: TRIP_KEY.fov, trip: true };
+    moveRef.current = { saveReturn: true, n: lonLatToVec3(lon, lat).normalize(), D: 1.12, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), fov: TRIP_KEY.fov, trip: true };
   }, [flyTo]);
 
   const countryAt = useCallback(
