@@ -2,6 +2,7 @@
 /* eslint-disable react-hooks/immutability -- three.js objects (camera, controls, uniforms) are mutated imperatively inside useFrame by design */
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { makeTapGuard } from "./tapGuard";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerformanceMonitor } from "@react-three/drei";
@@ -910,6 +911,17 @@ export default function GlobeScene({
   // the globe or the trip in the area above it.
   const sheetInsetRef = useRef(sheetInset);
   useEffect(() => { sheetInsetRef.current = sheetInset; }, [sheetInset]);
+  // Globe taps: drags, long presses, pinches and taps during a sheet animation never count.
+  const tapGuard = useMemo(() => makeTapGuard(), []);
+  useEffect(() => { tapGuard.sheetChanged(); }, [sheetInset, tapGuard]);
+  useEffect(() => {
+    const mv = (e) => tapGuard.move(e.pointerId, e.clientX, e.clientY);
+    const up = (e) => tapGuard.up(e.pointerId, e.clientX, e.clientY);
+    window.addEventListener("pointermove", mv, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    return () => { window.removeEventListener("pointermove", mv, true); window.removeEventListener("pointerup", up, true); window.removeEventListener("pointercancel", up, true); };
+  }, [tapGuard]);
   const reducedMotion = usePrefersReducedMotion();
   // Hidden ?force3d=1 flag: always run the live scene (skips the software WebGL and
   // low fps fallbacks). Read on the client only, same as the render tier probe.
@@ -1236,14 +1248,15 @@ export default function GlobeScene({
   // Canvas level empty clicks (space, beams, anything that is not a pin): exit when the
   // pointer moved under 5 px between down and up.
   const downRef = useRef(null);
-  const onCanvasPointerDown = useCallback((e) => { downRef.current = { x: e.clientX, y: e.clientY }; }, []);
+  const onCanvasPointerDown = useCallback((e) => { downRef.current = { x: e.clientX, y: e.clientY }; tapGuard.down(e.pointerId, e.clientX, e.clientY); }, [tapGuard]);
   const onPointerMissed = useCallback((e) => {
     const d = downRef.current;
     if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) >= DRAG_PX) return;
+    if (!tapGuard.isTap()) return;
     // During a flyover an empty click only pauses it; it never exits the trip.
     if (flyOnRef.current) { flyPause(); return; }
     onMapClick?.({ offGlobe: true });
-  }, [onMapClick, flyPause]);
+  }, [onMapClick, flyPause, tapGuard]);
 
   const countryAt = useCallback(
     (ll) => (ll && geo ? geo.features.find((f) => geoContains(f, [ll.lon, ll.lat])) || null : null),
@@ -1252,12 +1265,13 @@ export default function GlobeScene({
 
   const handleGlobeClick = useCallback(
     (point) => {
+      if (!tapGuard.isTap()) return;
       if (flyOnRef.current) { flyPause(); return; }
       const ll = vec3ToLonLat(point);
       const feature = countryAt(ll);
       onMapClick?.({ ...ll, isLand: !!feature, country: feature?.properties?.name });
     },
-    [countryAt, onMapClick, flyPause]
+    [countryAt, onMapClick, flyPause, tapGuard]
   );
 
   const itemsRef = useRef(items);
