@@ -13,6 +13,9 @@ import { tokens, tiers, bezier } from "./tokens";
 import { detectRenderTier } from "./renderTier";
 import { supabase } from "../../../lib/supabase/client";
 import FpsGuard from "./FpsGuard";
+import LegsLayer from "./legs/LegsLayer";
+import { resolveLegs } from "./legs/legGeometry";
+import { fetchJourneyLegs } from "../../../lib/journeys/legs";
 import { poseFor, localFrame, raySphere, solveTripFit, estimateLabelBox } from "./tripFit";
 
 // Trip framing margins: 80 px plus the overlay chrome measured from the DOM (tab bar and
@@ -924,6 +927,25 @@ export default function GlobeScene({
   }, [items]);
 
   // Opening a trip eases into mock C's tilted close view. Closing eases back out.
+  // Journey legs for the open trip only (owner RLS, same client as the Journals legs
+  // review). Read only. Cleared when no real trip is open.
+  const tripKeyForLegs = focusing && !focusIsCollection ? String(focusJourneyId) : null;
+  const [legRows, setLegRows] = useState({ key: null, rows: [] });
+  useEffect(() => {
+    if (!tripKeyForLegs) return undefined;
+    let cancelled = false;
+    fetchJourneyLegs(tripKeyForLegs)
+      .then((rows) => { if (!cancelled) setLegRows({ key: tripKeyForLegs, rows: rows || [] }); })
+      .catch((err) => { if (!cancelled) { console.warn("[globe] legs not loaded", err?.message || err); setLegRows({ key: tripKeyForLegs, rows: [] }); } });
+    return () => { cancelled = true; };
+  }, [tripKeyForLegs]);
+  const legs = useMemo(() => {
+    if (!tripKeyForLegs || legRows.key !== tripKeyForLegs) return [];
+    const byId = {};
+    for (const p of pins) byId[p.id] = p;
+    return resolveLegs(legRows.rows, byId);
+  }, [tripKeyForLegs, legRows, pins]);
+
   // Trip engagement. `engaged` remembers what the camera framed: a trip (its journey key)
   // or a single point (a pin from the Imported bucket, or a pin with no trip). Exit is
   // driven only by this ref and the current props, so a click during the opening move
@@ -1134,6 +1156,7 @@ export default function GlobeScene({
         <FpsGuard minFps={20} onLow={onLowFps} />
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} cheap={force3d} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
+        <LegsLayer legs={legs} activePinId={activePinId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
         <Stops
           beamHeightRef={beamHeightRef}
           items={items}
