@@ -952,12 +952,21 @@ export default function GlobeScene({
 
   // Lowest tier: no WebGL, software rendering, or sustained fps under ~20 shows a static image.
   const [renderTier] = useState(() => detectRenderTier());
+  // Hidden ?force3d=1 flag: always run the live scene (skips the software WebGL and
+  // low fps fallbacks). Read on the client only, same as the render tier probe.
+  const [force3d] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const on = new URLSearchParams(window.location.search).get("force3d") === "1";
+    if (on) console.info("[globe] force3d is on: static globe fallback disabled");
+    return on;
+  });
   const [lowFps, setLowFps] = useState(false);
   const onLowFps = useCallback((fps) => {
+    if (force3d) return;
     console.warn(`[globe] sustained low frame rate (${Number(fps).toFixed(1)} fps), switching to the static globe`);
     setLowFps(true);
     onFallback?.();
-  }, [onFallback]);
+  }, [onFallback, force3d]);
   // Lost WebGL context: log it and show a quiet notice instead of a frozen canvas.
   const [contextLost, setContextLost] = useState(false);
   const onCreated = useCallback(({ gl }) => {
@@ -972,9 +981,9 @@ export default function GlobeScene({
       setContextLost(false);
     });
   }, []);
-  useEffect(() => { if (backdrop && renderTier === "static") onFallback?.(); }, [backdrop, renderTier, onFallback]);
+  useEffect(() => { if (backdrop && renderTier === "static" && !force3d) onFallback?.(); }, [backdrop, renderTier, onFallback, force3d]);
   // Backdrop: the parent owns the static image and its crossfade, so render nothing here.
-  if (renderTier === "static" || lowFps) {
+  if (!force3d && (renderTier === "static" || lowFps)) {
     if (typeof window !== "undefined" && !window.__globeStaticLogged) {
       window.__globeStaticLogged = true;
       console.info(`[globe] static globe shown (${lowFps ? "low frame rate" : "no hardware WebGL"}); pins and camera moves need the live scene`);
