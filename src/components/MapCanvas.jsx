@@ -655,6 +655,7 @@ export default function MapCanvas() {
             journeysLoading={!journeysLoaded}
             activeTab={activeTab}
             isAddingEntry={isAddingEntry}
+            savingTo={activeJourneyId && !String(activeJourneyId).startsWith("__") && activeJourney?.title ? activeJourney.title : "Imported"}
             activePin={activePin}
             activeJourney={activeJourney}
             clusterPins={clusterPins}

@@ -19,10 +19,14 @@ export default function AddMemoryForm({
   setNewPinDetails,
   onAddPin,
   onCancel,
+  savingTo = "Imported",
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <h2 style={{ fontSize: "1.25rem", margin: "0 0 1rem 0", fontWeight: 700, color: "var(--v2-text)", flexShrink: 0 }}>New Memory Point</h2>
+      <div className="v2-saving-to" role="note" style={{ margin: "-0.5rem 0 1rem", font: "400 11px/1.4 var(--v2-mono)", letterSpacing: "0.08em", color: "var(--v2-text-dim)", flexShrink: 0 }}>
+        Saving to: <span style={{ color: "var(--v2-text)" }}>{savingTo}</span>
+      </div>
       <div className="sidebar-scrollbar" style={{ overflowY: "auto", paddingRight: "0.5rem", flexGrow: 1 }}>
         <label className="panel-label">Title</label>
         <input type="text" placeholder="Title (e.g. Skiing)" className="panel-input" value={newPinName} onChange={(e) => setNewPinName(e.target.value)} />

@@ -36,6 +36,7 @@ export default function JournalsPanel({
   newPinDetails,
   setNewPinDetails,
   handleAddPin,
+  savingTo,
   closeJournalPanel,
   // Pin detail
   isConfirmingDelete,
@@ -126,6 +127,7 @@ export default function JournalsPanel({
           newPinDetails={newPinDetails}
           setNewPinDetails={setNewPinDetails}
           onAddPin={handleAddPin}
+          savingTo={savingTo}
           onCancel={closeJournalPanel}
         />
       ) : activePin ? (
