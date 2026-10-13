@@ -67,7 +67,7 @@ function tripFraming(points) {
   return { n: c, fit };
 }
 
-function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripView }) {
+function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend }) {
   const { gl, size } = useThree();
   const t = tiers[tier];
   const { material, atmo, coast, tex } = useMemo(() => {
@@ -78,8 +78,9 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripView }) {
   useEffect(() => () => { material.dispose(); atmo.dispose(); coast.dispose(); tex.dispose(); }, [material, atmo, coast, tex]);
   useFrame(() => {
     material.uniforms.uDpr.value = gl.getPixelRatio();
-    const target = tripView.current ? tokens.hatch.spacingPx.trip : tokens.hatch.spacingPx.globe;
-    material.uniforms.uHatchSpacing.value += (target - material.uniforms.uHatchSpacing.value) * 0.1;
+    // Trip only uniforms follow tripBlend (0 globe, 1 trip), driven by the camera tween.
+    const b = tripBlend ? tripBlend.current : 0;
+    material.uniforms.uHatchSpacing.value = THREE.MathUtils.lerp(tokens.hatch.spacingPx.globe, tokens.hatch.spacingPx.trip, b);
   });
   void size;
   return (
@@ -299,7 +300,7 @@ function blendStates(a, b, w) {
   };
 }
 
-function CameraController({ controlsRef, moveRef, reducedMotion, tripView, panelOpen, panelWidth, viewRef }) {
+function CameraController({ controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef }) {
   const { camera, size, gl } = useThree();
   const st = useRef({ tw: null, prev: null, seen: null, offset: 0, offsetKey: null, heading: 0, panelTarget: null, applied: null, fade: null });
   const idleUntil = useRef(0);
@@ -353,6 +354,9 @@ function CameraController({ controlsRef, moveRef, reducedMotion, tripView, panel
       if (!req && fresh) {
         // User drag or zoom: cancel instantly; the live pose is the drag's start.
         s.tw = null; s.prev = null;
+        // Settle the blend on the nearer end so a cancelled move never leaves a half state.
+        setBlend(tripBlend.current >= 0.5 ? 1 : 0);
+        labelMix.current = { active: false, p: 1 };
         if (s.fade) { gl.domElement.style.opacity = "1"; s.fade = null; }
       } else {
         const live = s.tw ? sampleTween(s.tw, now) : { ...readLive(camera, controls, s.heading), offset: s.offset };
@@ -365,7 +369,10 @@ function CameraController({ controlsRef, moveRef, reducedMotion, tripView, panel
         } else {
           s.tw = makeTween(live, g, now, false);
         }
-        if (g.trip !== undefined) tripView.current = g.trip;
+        // Trip blend continues from its current value toward the goal's trip state.
+        s.blendFrom = tripBlend.current;
+        s.blendTo = g.trip !== undefined ? (g.trip ? 1 : 0) : (s.tw ? s.blendTo ?? tripBlend.current : tripBlend.current);
+        labelMix.current = { active: s.blendFrom !== s.blendTo, p: 0 };
       }
     }
 
@@ -380,6 +387,8 @@ function CameraController({ controlsRef, moveRef, reducedMotion, tripView, panel
           tilt: f.tilt ?? live.tilt, heading: f.heading ?? live.heading, fov: f.fov ?? live.fov, offset: f.offset,
         }, controls);
         s.fade.cut = true;
+        setBlend(s.blendTo ?? tripBlend.current);
+        labelMix.current = { active: false, p: 1 };
       }
       gl.domElement.style.opacity = String(Math.min(1, Math.abs(1 - 2 * Math.min(k, 1))));
       if (k >= 1) { gl.domElement.style.opacity = "1"; s.fade = null; finish(s, controls); }
@@ -403,8 +412,17 @@ function CameraController({ controlsRef, moveRef, reducedMotion, tripView, panel
       else x = blendStates(sampleTween(s.prev.tw, now), x, easeMove(w));
     }
     applyState(x, controls);
+    // Trip blend ramps over 60 to 100 percent of the move (eased).
+    const w = easeMove(THREE.MathUtils.clamp((x.raw - 0.6) / 0.4, 0, 1));
+    if (s.blendTo !== undefined) setBlend(lerp(s.blendFrom, s.blendTo, w));
+    if (labelMix.current.active) labelMix.current = { active: w < 1, p: w };
     if (x.raw >= 1 && !s.prev) { s.tw = null; finish(s, controls); }
   });
+
+  function setBlend(b) {
+    tripBlend.current = b;
+    tripView.current = b >= 0.5;
+  }
 
   // Globe view (tilt 0) orbits the globe centre again once the move lands.
   function finish(s, controls) {
@@ -443,7 +461,7 @@ function labelPriority(it, activePinId, meta) {
   return 40;
 }
 
-function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, meta, clusterRef }) {
+function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, meta, clusterRef, labelMix }) {
   const { camera, size } = useThree();
   const v = useMemo(() => new THREE.Vector3(), []);
   const camDir = useMemo(() => new THREE.Vector3(), []);
@@ -457,6 +475,18 @@ function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, met
       .map((o) => o.i);
   }, [items, activePinId, meta]);
   useEffect(() => { st.current.dirty = true; }, [order, size.width, size.height, focusing, maxLabels]);
+  // Entering or leaving a trip: freeze the labels shown now (by pin id) and crossfade them
+  // against the new set over the trip blend window instead of swapping at move start.
+  useEffect(() => {
+    const s = st.current;
+    const old = new Set();
+    for (const [i] of s.heads) if (s.items && s.items[i]) old.add(s.items[i].pin.id);
+    s.items = items;
+    if (!old.size) return;
+    s.old = old;
+    s.xStart = performance.now();
+    s.dirty = true;
+  }, [items, focusing]);
 
   useFrame(() => {
     const s = st.current;
@@ -532,14 +562,36 @@ function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, met
         if (place && place.textContent !== want) place.textContent = want;
         el.classList.toggle("is-cluster", cluster);
         el.style.pointerEvents = cluster ? "auto" : "none";
-        el.style.opacity = show ? "1" : "0";
-        el.style.visibility = show ? "visible" : "hidden";
+        if (!s.old) {
+          el.style.opacity = show ? "1" : "0";
+          el.style.visibility = show ? "visible" : "hidden";
+        }
       }
       s.heads = heads;
       clusterRef.current = heads;
     }
+    // Crossfade pass: old labels fade out as new ones fade in, on the trip blend progress.
+    let oldIdx = [];
+    if (s.old) {
+      const mix = labelMix.current;
+      let w;
+      if (mix.active) w = mix.p;
+      else if (now - s.xStart < 120) w = 0; // the camera move has not picked up the goal yet
+      else w = 1;
+      items.forEach((it, i) => {
+        const el = labelEls.current[i];
+        if (!el) return;
+        const wasOld = s.old.has(it.pin.id) ? 1 : 0;
+        const isNew = s.heads.has(i) ? 1 : 0;
+        const op = w >= 1 ? isNew : Math.min(1, wasOld * (1 - w) + isNew * w);
+        el.style.opacity = String(op);
+        el.style.visibility = op > 0.001 ? "visible" : "hidden";
+        if (wasOld && !isNew && op > 0.001) oldIdx.push(i);
+      });
+      if (w >= 1) { s.old = null; oldIdx = []; }
+    }
     // Keep shown labels glued to their pins every frame.
-    for (const i of s.heads.keys()) {
+    for (const i of [...s.heads.keys(), ...oldIdx]) {
       const el = labelEls.current[i];
       if (!el) continue;
       v.copy(items[i].pos).project(camera);
@@ -633,6 +685,8 @@ export default function GlobeScene({
   const lastRegionRef = useRef(null);
   const hoverRafRef = useRef(null);
   const tripView = useRef(false);
+  const tripBlend = useRef(0);
+  const labelMix = useRef({ active: false, p: 1 });
   const moveRef = useRef(null);
   const viewRef = useRef(null);
   const [hoveredPinId, setHoveredPinId] = useState(null);
@@ -802,7 +856,7 @@ export default function GlobeScene({
           <FirstFrame onFirstFrame={onFirstFrame} />
           <FpsGuard minFps={20} onLow={onLowFps} />
           <BackdropSpin reducedMotion={reducedMotion}>
-            {geo && <Globe geo={geo} tier="phoneLow" tripView={tripView} onGlobeClick={() => {}} onGlobeHover={() => {}} />}
+            {geo && <Globe geo={geo} tier="phoneLow" tripBlend={null} onGlobeClick={() => {}} onGlobeHover={() => {}} />}
           </BackdropSpin>
         </Canvas>
       </div>
@@ -821,7 +875,7 @@ export default function GlobeScene({
         <PerformanceMonitor onDecline={dropTier} />
         <FpsGuard minFps={20} onLow={onLowFps} />
         <color attach="background" args={[C.bg]} />
-        {geo && <Globe geo={geo} tier={tier} tripView={tripView} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
+        {geo && <Globe geo={geo} tier={tier} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
         <Stops
           items={items}
           activePinId={activePinId}
@@ -842,8 +896,8 @@ export default function GlobeScene({
           maxDistance={MAX_DIST}
           onStart={() => { moveRef.current = null; }}
         />
-        <CameraController controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
-        <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={activePinId} meta={labelMeta} clusterRef={clusterRef} />
+        <CameraController controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
+        <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={activePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>
             <Bloom
