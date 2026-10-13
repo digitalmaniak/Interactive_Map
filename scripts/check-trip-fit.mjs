@@ -19,7 +19,7 @@ const trips = {
 const PANEL = 350, FOV = 28, TILT = THREE.MathUtils.degToRad(48);
 const CHROME_TOP = 78, CHROME_BOTTOM = 68;
 // Bottom chrome is the larger of the profile block and the trip title block.
-const padFor = (H) => ({ top: 80 + CHROME_TOP, right: 80, bottom: 80 + Math.max(CHROME_BOTTOM, titleReservePx(H)), left: 104 });
+const padFor = (H) => ({ top: 80 + CHROME_TOP, right: 80, bottom: 80 + titleReservePx(H, CHROME_BOTTOM), left: 104 });
 let PAD;
 let failed = 0;
 for (const [name, pins] of Object.entries(trips)) {

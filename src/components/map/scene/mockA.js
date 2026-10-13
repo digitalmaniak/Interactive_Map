@@ -13,10 +13,17 @@ export const TRIP_TITLE = {
   reserveRight: 280, // keep clear of the flyover controls at the bottom right
   subPx: 11, // mono subline
   fadeMs: 400,
+  chipGap: 12, // gap above the profile chip
+  narrowPx: 720, // below this visible width the subline drops the km figure
   fallbackMs: 1200, // show anyway this long after the trip fit starts
 };
 // Vertical space the title block takes, reserved in the trip fit so pins are never covered.
-export const titleReservePx = (H) => TRIP_TITLE.bottom + (H < 600 ? TRIP_TITLE.phonePx : TRIP_TITLE.maxPx) * TRIP_TITLE.lineHeight + 30;
+// The title sits above the bottom left profile chip (safe area: chip height plus a gap),
+// never on top of it. chipPx is the chip's distance from the bottom edge to its top.
+export const titleBottomPx = (chipPx = 0) => Math.max(TRIP_TITLE.bottom, chipPx > 0 ? chipPx + TRIP_TITLE.chipGap : 0);
+// Title block height: one hero line (or two half size lines) plus a subline that may wrap.
+export const titleBlockPx = (H) => (H < 600 ? TRIP_TITLE.phonePx : TRIP_TITLE.maxPx) * TRIP_TITLE.lineHeight + 30 + 16;
+export const titleReservePx = (H, chipPx = 0) => titleBottomPx(chipPx) + titleBlockPx(H);
 
 export const CROSSHAIR = { armPx: 16, strokePx: 1, inset: 20, opacity: 0.8, color: "#FFFFFF" };
 

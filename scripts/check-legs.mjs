@@ -95,7 +95,7 @@ if (failed) process.exit(1);
   const { titleReservePx } = await import("../src/components/map/scene/mockA.js");
   let bad = 0;
   for (const [W, H] of [[1440, 900], [1280, 800], [1280, 742]]) {
-    const PAD = { top: 158, right: 80, bottom: 80 + Math.max(68, titleReservePx(H)), left: 104 };
+    const PAD = { top: 158, right: 80, bottom: 80 + titleReservePx(H, 68), left: 104 };
     const { n, D } = solveTripFit([tk, hk], { W, H, offset: PANEL / 2, fov: 28, tilt: TILT, pad: PAD, labels });
     const cam = placeCamera(makeFitCamera(28, W, H, PANEL / 2), n, D, TILT, 0);
     for (const off of [0, 0.358, -0.358]) {

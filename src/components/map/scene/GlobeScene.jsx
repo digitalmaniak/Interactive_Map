@@ -18,7 +18,7 @@ import { resolveLegs } from "./legs/legGeometry";
 import { sharedJourneyLegs } from "../../../lib/journeys/legs";
 import { tripZoomK } from "./legs/legGeometry";
 import useFlyover from "./flyover/useFlyover";
-import { TRIP_TITLE, titleReservePx, CROSSHAIR, HOME_RINGS, pickHomeBase } from "./mockA";
+import { TRIP_TITLE, titleReservePx, titleBottomPx, CROSSHAIR, HOME_RINGS, pickHomeBase } from "./mockA";
 import { fetchHomeBases } from "../../../lib/homeBases";
 import { poseFor, localFrame, raySphere, solveTripFit, estimateLabelBox } from "./tripFit";
 
@@ -39,7 +39,7 @@ function tripPads(W, H) {
   }
   void W;
   // The trip title block sits bottom left in trip view; pins must stay above it.
-  bottom = Math.max(bottom, titleReservePx(H));
+  bottom = titleReservePx(H, bottom);
   return { top: TRIP_PAD + top, right: TRIP_PAD, bottom: TRIP_PAD + bottom, left: TRIP_PAD + 24 };
 }
 import StaticGlobe from "./StaticGlobe";
@@ -1100,8 +1100,8 @@ export default function GlobeScene({
     if (tripDates) parts.push(tripDates.from.slice(0, 7) === tripDates.to.slice(0, 7) ? fmt(tripDates.from) : `${fmt(tripDates.from)} TO ${fmt(tripDates.to)}`);
     parts.push(`${tripStops.length} ${tripStops.length === 1 ? "STOP" : "STOPS"}`);
     const km = legs.reduce((a, l) => a + (Number(l.distanceKm) || l.a.v.angleTo(l.b.v) * 6371), 0);
-    if (legs.length && km > 0) parts.push(`${Math.round(km).toLocaleString("en-US")} KM`);
-    return parts.join("   ");
+    const kmText = legs.length && km > 0 ? `${Math.round(km).toLocaleString("en-US")} KM` : "";
+    return { base: parts.join("   "), km: kmText };
   }, [tripStops, tripDates, legs]);
 
   // Trip flyover: stop to stop in leg order through the same CameraController.
@@ -1392,6 +1392,18 @@ function TripTitle({ title, sub, tripBlend, instant = false }) {
     return () => ro.disconnect();
   }, []);
   const visW = box.w, H = box.h;
+  // Safe area: measure the profile chip so the title block always sits above it.
+  const [chipPx, setChipPx] = useState(0);
+  useEffect(() => {
+    const measure = () => {
+      const chip = document.querySelector(".ui-layer .bottom-left-group");
+      const r = chip?.getBoundingClientRect();
+      setChipPx(r && r.height > 0 ? Math.max(0, window.innerHeight - r.top) : 0);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
   useEffect(() => {
     let raf = 0;
     const t0 = performance.now();
@@ -1425,9 +1437,13 @@ function TripTitle({ title, sub, tripBlend, instant = false }) {
   }
   px = Math.max(TRIP_TITLE.minPx * (lines.length > 1 ? 0.7 : 1), px);
   return (
-    <div ref={el} className="v2-trip-title" style={{ left: TRIP_TITLE.left, bottom: TRIP_TITLE.bottom, maxWidth: room, opacity: 0, transition: `opacity ${TRIP_TITLE.fadeMs}ms ease` }}>
+    <div ref={el} className="v2-trip-title" style={{ left: TRIP_TITLE.left, bottom: titleBottomPx(chipPx), maxWidth: room, opacity: 0, transition: `opacity ${TRIP_TITLE.fadeMs}ms ease` }}>
       <h2 style={{ fontSize: px, lineHeight: TRIP_TITLE.lineHeight, fontWeight: TRIP_TITLE.weight, letterSpacing: TRIP_TITLE.tracking }}>{lines.map((l, i) => <span key={i} style={{ display: "block" }}>{l}</span>)}</h2>
-      {sub && <p style={{ fontSize: TRIP_TITLE.subPx }}>{sub}</p>}
+      {sub && (sub.base || sub.km) && (
+        <p style={{ fontSize: TRIP_TITLE.subPx, maxWidth: room }}>
+          {[sub.base, visW >= TRIP_TITLE.narrowPx ? sub.km : ""].filter(Boolean).join("   ")}
+        </p>
+      )}
     </div>
   );
 }
