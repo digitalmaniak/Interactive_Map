@@ -37,12 +37,15 @@ function tripPads(W, H) {
       if (r.height > 0 && r.bottom > (2 * H) / 3) bottom = Math.max(bottom, H - r.top);
     }
   }
-  void W;
+  // The timeline strip (when shown) lifts the title block and the framing by its height.
+  const strip = typeof document !== "undefined" && W >= STRIP.hideBelowPx && document.querySelector(".v2-timeline") ? STRIP.heightPx : 0;
   // The trip title block sits bottom left in trip view; pins must stay above it.
-  bottom = titleReservePx(H, bottom);
+  bottom = titleReservePx(H, bottom) + strip;
   return { top: TRIP_PAD + top, right: TRIP_PAD, bottom: TRIP_PAD + bottom, left: TRIP_PAD + 24 };
 }
 import StaticGlobe from "./StaticGlobe";
+import TimelineStrip from "../../timeline/TimelineStrip";
+import { STRIP } from "../../timeline/timelineLogic";
 
 // v2 main view (DESIGN.md v2: mock A globe, mock C trip framing).
 // One perspective camera orbiting a sphere. Draw calls stay tiny for phones:
@@ -877,6 +880,7 @@ export default function GlobeScene({
   panelWidth = 350,
   onFirstFrame,
   onFallback,
+  timeline = null,
 }) {
   const reducedMotion = usePrefersReducedMotion();
   // Hidden ?force3d=1 flag: always run the live scene (skips the software WebGL and
@@ -1102,6 +1106,28 @@ export default function GlobeScene({
     const km = legs.reduce((a, l) => a + (Number(l.distanceKm) || l.a.v.angleTo(l.b.v) * 6371), 0);
     const kmText = legs.length && km > 0 ? `${Math.round(km).toLocaleString("en-US")} KM` : "";
     return { base: parts.join("   "), km: kmText };
+  }, [tripStops, tripDates, legs]);
+
+  // Timeline strip: shown at 600 px and wider, left of the panel, clear of the profile chip.
+  const [stripBox, setStripBox] = useState({ W: 0, chipRight: 0 });
+  useEffect(() => {
+    const measure = () => {
+      const r = document.querySelector(".ui-layer .bottom-left-group")?.getBoundingClientRect();
+      setStripBox({ W: window.innerWidth, chipRight: r && r.width > 0 ? r.right : 0 });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const t = setTimeout(measure, 500);
+    return () => { window.removeEventListener("resize", measure); clearTimeout(t); };
+  }, []);
+  const stripOn = !!timeline && stripBox.W >= STRIP.hideBelowPx;
+  const stripLeft = Math.max(STRIP.insetPx, stripBox.chipRight ? stripBox.chipRight + STRIP.gapPx : 0);
+  const stripTrip = useMemo(() => {
+    if (!tripStops.length || !tripDates) return null;
+    return {
+      from: tripDates.from, to: tripDates.to, legs,
+      stops: tripStops.map((it) => ({ id: it.pin.id, label: it.text, start: it.pin.start_date ? String(it.pin.start_date).slice(0, 10) : null, end: it.pin.end_date ? String(it.pin.end_date).slice(0, 10) : null })),
+    };
   }, [tripStops, tripDates, legs]);
 
   // Trip flyover: stop to stop in leg order through the same CameraController.
@@ -1336,11 +1362,11 @@ export default function GlobeScene({
           </svg>
         ))}
         {tripStops.length > 0 && focusTitle && (
-          <TripTitle key={String(focusJourneyId)} title={focusTitle} sub={tripSub} tripBlend={tripBlend} instant={force3d || reducedMotion} />
+          <TripTitle key={String(focusJourneyId)} title={focusTitle} sub={tripSub} tripBlend={tripBlend} instant={force3d || reducedMotion} lift={stripOn ? STRIP.heightPx : 0} />
         )}
       </div>
       {flyEnabled && (
-        <div className="v2-flyover" style={{ right: (panelOpen ? panelWidth : 0) + 48 }}>
+        <div className="v2-flyover" style={{ right: (panelOpen ? panelWidth : 0) + 48, bottom: stripOn ? STRIP.insetPx + STRIP.heightPx + STRIP.gapPx : undefined }}>
           <button
             type="button"
             className="v2-flyover-btn"
@@ -1357,6 +1383,22 @@ export default function GlobeScene({
             {flyOn && fly.state.legIndex >= 0 ? `Leg ${fly.state.legIndex + 1} of ${legs.length}` : ""}
           </span>
         </div>
+      )}
+      {stripOn && (
+        <TimelineStrip
+          left={stripLeft}
+          right={(panelOpen ? panelWidth : 0) + STRIP.insetPx}
+          lite={force3d}
+          reducedMotion={reducedMotion}
+          trips={timeline.trips}
+          undatedCount={timeline.undatedCount}
+          onOpenTrip={timeline.onOpenTrip}
+          onOpenReview={timeline.onOpenReview}
+          trip={stripTrip}
+          currentPinId={shownActivePinId}
+          fly={stripTrip && flyEnabled ? fly : null}
+          onStopClick={(id) => { const it = tripStops.find((x) => x.pin.id === id); if (it) onPinClick?.(it.pin); }}
+        />
       )}
       {contextLost && (
         <div className="v2-globe-notice" role="status">Globe paused. Graphics were interrupted, reload the page to restore it.</div>
@@ -1381,7 +1423,7 @@ export default function GlobeScene({
 
 // Huge trip title, bottom left of the visible map. Fades in once the camera lands in trip
 // view (tripBlend reaches 1). Font size fits the width left of the flyover controls.
-function TripTitle({ title, sub, tripBlend, instant = false }) {
+function TripTitle({ title, sub, tripBlend, instant = false, lift = 0 }) {
   const el = useRef(null);
   const [box, setBox] = useState({ w: 930, h: 800 });
   useEffect(() => {
@@ -1439,7 +1481,7 @@ function TripTitle({ title, sub, tripBlend, instant = false }) {
   }
   px = Math.max(TRIP_TITLE.minPx * (lines.length > 1 ? 0.7 : 1), px);
   return (
-    <div ref={el} className="v2-trip-title" style={{ left: TRIP_TITLE.left, bottom: titleBottomPx(chipPx), maxWidth: `min(${room}px, calc(100vw - ${Math.round(chipW)}px - 48px))`, opacity: 0, transition: `opacity ${TRIP_TITLE.fadeMs}ms ease` }}>
+    <div ref={el} className="v2-trip-title" style={{ left: TRIP_TITLE.left, bottom: titleBottomPx(chipPx) + lift, maxWidth: `min(${room}px, calc(100vw - ${Math.round(chipW)}px - 48px))`, opacity: 0, transition: `opacity ${TRIP_TITLE.fadeMs}ms ease` }}>
       <h2 style={{ fontSize: px, lineHeight: TRIP_TITLE.lineHeight, fontWeight: TRIP_TITLE.weight, letterSpacing: TRIP_TITLE.tracking }}>{lines.map((l, i) => <span key={i} style={{ display: "block" }}>{l}</span>)}</h2>
       {sub && (sub.base || sub.km) && (
         <p style={{ fontSize: TRIP_TITLE.subPx, maxWidth: "100%" }}>

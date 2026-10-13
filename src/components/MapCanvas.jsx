@@ -26,6 +26,7 @@ import { useTravelData } from "../hooks/useTravelData";
 import AuthGate from "./shell/AuthGate";
 import AppShell from "./shell/AppShell";
 import JournalsPanel from "./journals/JournalsPanel";
+import { fetchTripRanges, fetchUndatedCount } from "../lib/timeline/api";
 import GlobeScene from "./map/scene";
 import MapLoader from "./map/MapLoader";
 
@@ -108,6 +109,19 @@ export default function MapCanvas() {
 
   // React refs
 
+  // Timeline strip data: trip date ranges (journey_stats_v2) and the undated count
+  // (data_review_items). Read only, once per session and when the panel closes or opens.
+  const [tripRanges, setTripRanges] = useState([]);
+  const [undatedCount, setUndatedCount] = useState(0);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  useEffect(() => {
+    if (!session) return undefined;
+    const ctl = new AbortController();
+    fetchTripRanges(ctl.signal).then(({ rows, error }) => { if (!ctl.signal.aborted && !error) setTripRanges(rows); }).catch(() => {});
+    fetchUndatedCount(ctl.signal).then(({ count, error }) => { if (!ctl.signal.aborted && !error) setUndatedCount(count); }).catch(() => {});
+    return () => ctl.abort();
+  }, [session, reviewOpen]);
+
   const activePinRef = useRef(activePin);
   const isAddingEntryRef = useRef(isAddingEntry);
   const activeTabRef = useRef(activeTab);
@@ -124,9 +138,17 @@ export default function MapCanvas() {
     activeTabRef.current = activeTab;
   }, [activeTab]);
 
+  const timelineProps = {
+    trips: tripRanges.map((r) => ({ ...r, title: (journeys || []).find((j) => j.id === r.journey_id)?.title || "Journey" })),
+    undatedCount,
+    onOpenTrip: (id) => { setClusterPins(null); setActivePin(null); setIsAddingEntry(false); setReviewOpen(false); setActiveJourneyId(id); setActiveTab("Journals"); },
+    onOpenReview: () => { setClusterPins(null); setActivePin(null); setIsAddingEntry(false); setActiveJourneyId(null); setReviewOpen(true); setActiveTab("Journals"); },
+  };
+
   // Close the Journals panel and reset the nav to Map
   const closeJournalPanel = () => {
     setActiveTab("Map");
+    setReviewOpen(false);
     setActivePin(null);
     setClusterPins(null);
     setActiveJourneyId(null);
@@ -651,6 +673,7 @@ export default function MapCanvas() {
             onHoverRegion={handleHoverRegion}
             panelOpen={Boolean(session) && activeTab === "Journals"}
             panelWidth={350}
+            timeline={session ? timelineProps : null}
           />
         )}
       </div>
@@ -676,7 +699,7 @@ export default function MapCanvas() {
           setActiveTab("Journals");
           setIsAddingEntry(true);
         }}
-        onOpenJournalsTab={() => { setClusterPins(null); setActivePin(null); setActiveJourneyId(null); setActiveTab("Journals"); }}
+        onOpenJournalsTab={() => { setReviewOpen(false); setClusterPins(null); setActivePin(null); setActiveJourneyId(null); setActiveTab("Journals"); }}
       >
         {session && (
           <JournalsPanel
@@ -728,6 +751,8 @@ export default function MapCanvas() {
             handleAddLog={handleAddLog}
             handleRemovePin={handleRemovePin}
             removeBusy={removeBusy}
+            reviewOpen={reviewOpen}
+            setReviewOpen={setReviewOpen}
             removeError={removeError}
             cancelRemove={cancelRemove}
             onBackFromPin={handleBackFromPin}

@@ -66,6 +66,8 @@ export default function JournalsPanel({
   handleAddLog,
   handleRemovePin,
   removeBusy,
+  reviewOpen,
+  setReviewOpen,
   removeError,
   cancelRemove,
   onBackFromPin,
@@ -82,7 +84,9 @@ export default function JournalsPanel({
   onMovePlace,
 }) {
   const [reviewJourneyId, setReviewJourneyId] = useState(null);
-  const [reviewAll, setReviewAll] = useState(false);
+  const [reviewAllLocal, setReviewAllLocal] = useState(false);
+  const reviewAll = reviewOpen ?? reviewAllLocal;
+  const setReviewAll = setReviewOpen ?? setReviewAllLocal;
   const [draftCounts, setDraftCounts] = useState({});
 
   const refreshDraftCounts = useCallback(() => {

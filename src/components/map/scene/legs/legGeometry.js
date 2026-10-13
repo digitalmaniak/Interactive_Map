@@ -61,7 +61,7 @@ export function resolveLegs(rows, pinsById) {
     const a = end(r.from_pin_id, r.from_lat, r.from_lng, r.from_label);
     const b = end(r.to_pin_id, r.to_lat, r.to_lng, r.to_label);
     if (!a || !b || a.v.angleTo(b.v) < 1e-7) continue;
-    out.push({ id: r.id, mode: normLegMode(r.mode), a, b, toPinId: r.to_pin_id || null, fromPinId: r.from_pin_id || null, distanceKm: r.distance_km == null ? null : Number(r.distance_km), sort: r.sort_order ?? out.length, offsetDeg: 0 });
+    out.push({ id: r.id, mode: normLegMode(r.mode), a, b, toPinId: r.to_pin_id || null, fromPinId: r.from_pin_id || null, distanceKm: r.distance_km == null ? null : Number(r.distance_km), sort: r.sort_order ?? out.length, offsetDeg: 0, departAt: r.depart_at || null, arriveAt: r.arrive_at || null, status: r.status || null });
   }
   // Outbound and return flights on the same route get a sideways offset each (pairOffsetDeg).
   // The rotation is about each leg's own travel direction, so the pair lands on

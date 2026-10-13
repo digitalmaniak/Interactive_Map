@@ -116,6 +116,49 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
     if (was && enabled) moveRef.current = { ...endGoal() };
   }, [enabled, endGoal, moveRef, publish, state, tripKey]);
 
+  // Timeline scrub: jump the sequence to t ms (paused) and ease the camera to the matching
+  // point between stops. Reuses the plan, timings and the single CameraController.
+  const planNow = useCallback(() => {
+    const f = r.current;
+    if (!f.plan) f.plan = buildFlyoverPlan(legs, { reducedMotion });
+    return f.plan;
+  }, [legs, reducedMotion]);
+  const timeNow = useCallback(() => {
+    const f = r.current;
+    if (!f.plan) return 0;
+    let t = 0;
+    for (let k = 0; k < f.i; k++) t += f.plan.steps[k].ms;
+    return t + f.elapsed + (f.playing ? performance.now() - f.t0 : 0);
+  }, []);
+  const seek = useCallback((tMs, easeMs = 150) => {
+    const f = r.current;
+    if (!enabled) return;
+    const plan = planNow();
+    if (!plan.steps.length) return;
+    f.playing = false; cancelAnimationFrame(f.raf);
+    const t = Math.max(0, Math.min(plan.totalMs - 1, tMs));
+    let i = 0, start = 0;
+    while (i < plan.steps.length - 1 && start + plan.steps[i].ms <= t) { start += plan.steps[i].ms; i++; }
+    const step = plan.steps[i];
+    f.i = i; f.elapsed = t - start; f.t0 = performance.now();
+    const to = plan.stops[step.stopIndex];
+    let n = to.v.clone().normalize();
+    if (step.kind === "move") {
+      // Previous stop: the one held before this move (the trip fit for the intro).
+      let prev = null;
+      for (let k = i - 1; k >= 0; k--) if (plan.steps[k].kind === "hold") { prev = plan.stops[plan.steps[k].stopIndex]; break; }
+      if (prev) {
+        const a = prev.v.clone().normalize(), b = n.clone();
+        const w = easeInOutCubic(Math.min(1, f.elapsed / step.ms));
+        const ang = a.angleTo(b);
+        n = ang < 1e-6 ? a : a.multiplyScalar(Math.sin((1 - w) * ang) / Math.sin(ang)).add(b.multiplyScalar(Math.sin(w * ang) / Math.sin(ang))).normalize();
+      }
+    }
+    f.issued = { n, D: FLYOVER.stopDist, tilt: THREE.MathUtils.degToRad(FLYOVER.tiltDeg), heading: 0, fov, trip: true, ms: reducedMotion ? 1 : easeMs, ease: easeInOutCubic };
+    moveRef.current = f.issued;
+    publish({ playing: false, paused: true, done: false, legIndex: step.legIndex, stopIndex: step.stopIndex, pinId: step.kind === "end" ? null : to?.pinId ?? null, legId: step.kind === "end" ? null : step.legId });
+  }, [enabled, fov, moveRef, planNow, publish, reducedMotion]);
+
   const toggle = useCallback(() => { if (r.current.playing) pause(); else play(); }, [pause, play]);
 
   // Changing trips, leaving trip view or unmounting: cancel the timer, drop the plan and
@@ -134,5 +177,5 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
   // Outside trip view the flyover always reads as idle (refs were reset above).
   const live = enabled && state.key === tripKey ? state : IDLE;
   useEffect(() => { flyoverActive.current = !!(live.playing || live.paused); }, [live.playing, live.paused]);
-  return { state: live, play, pause, stop, toggle };
+  return { state: live, play, pause, stop, toggle, seek, timeNow, planNow };
 }
