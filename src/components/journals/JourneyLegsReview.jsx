@@ -12,8 +12,13 @@ const fmtDate = (v) => {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 };
 
-const fmtCoord = (lat, lng) =>
-  Number.isFinite(lat) && Number.isFinite(lng) ? `${lat.toFixed(2)}, ${lng.toFixed(2)}` : null;
+// Coordinates may arrive as numeric strings or be null (a leg ending at a labeled
+// place with no pin, such as "Newark (EWR)"). Never throws.
+const fmtCoord = (lat, lng) => {
+  if (lat == null || lng == null || lat === "" || lng === "") return null;
+  const a = Number(lat), b = Number(lng);
+  return Number.isFinite(a) && Number.isFinite(b) ? `${a.toFixed(2)}, ${b.toFixed(2)}` : null;
+};
 
 const fmtKm = (km) => {
   if (!Number.isFinite(km)) return null;

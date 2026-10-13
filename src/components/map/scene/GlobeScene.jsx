@@ -953,10 +953,32 @@ export default function GlobeScene({
   // Lowest tier: no WebGL, software rendering, or sustained fps under ~20 shows a static image.
   const [renderTier] = useState(() => detectRenderTier());
   const [lowFps, setLowFps] = useState(false);
-  const onLowFps = useCallback(() => { setLowFps(true); onFallback?.(); }, [onFallback]);
+  const onLowFps = useCallback((fps) => {
+    console.warn(`[globe] sustained low frame rate (${Number(fps).toFixed(1)} fps), switching to the static globe`);
+    setLowFps(true);
+    onFallback?.();
+  }, [onFallback]);
+  // Lost WebGL context: log it and show a quiet notice instead of a frozen canvas.
+  const [contextLost, setContextLost] = useState(false);
+  const onCreated = useCallback(({ gl }) => {
+    const el = gl.domElement;
+    el.addEventListener("webglcontextlost", (e) => {
+      e.preventDefault(); // allow the browser to restore it
+      console.warn("[globe] WebGL context lost");
+      setContextLost(true);
+    });
+    el.addEventListener("webglcontextrestored", () => {
+      console.info("[globe] WebGL context restored");
+      setContextLost(false);
+    });
+  }, []);
   useEffect(() => { if (backdrop && renderTier === "static") onFallback?.(); }, [backdrop, renderTier, onFallback]);
   // Backdrop: the parent owns the static image and its crossfade, so render nothing here.
   if (renderTier === "static" || lowFps) {
+    if (typeof window !== "undefined" && !window.__globeStaticLogged) {
+      window.__globeStaticLogged = true;
+      console.info(`[globe] static globe shown (${lowFps ? "low frame rate" : "no hardware WebGL"}); pins and camera moves need the live scene`);
+    }
     if (backdrop) return null;
     const w = typeof window !== "undefined" ? window.innerWidth : 0;
     return <StaticGlobe offsetX={panelOffsetFor(panelOpen, w, panelWidth)} />;
@@ -991,6 +1013,7 @@ export default function GlobeScene({
     <div className="v2-map" onPointerDownCapture={onCanvasPointerDown}>
       <Canvas
         onPointerMissed={onPointerMissed}
+        onCreated={onCreated}
         dpr={[t.dpr[0], t.dpr[1]]}
         gl={{ antialias: t.msaa, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
         camera={{ fov: CAM.keyframes[0].fov, near: 0.005, far: 100, position: [0, 0.9, HOME_DIST - 0.12] }}
@@ -1037,6 +1060,9 @@ export default function GlobeScene({
         )}
       </Canvas>
 
+      {contextLost && (
+        <div className="v2-globe-notice" role="status">Globe paused. Graphics were interrupted, reload the page to restore it.</div>
+      )}
       <div className="v2-map-overlay">
         {items.map((it, i) => (
           <div

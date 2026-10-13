@@ -11,6 +11,8 @@ import { loadJourneys, groupPinsByJourney } from "../lib/journeys/api";
 export function useTravelData(session) {
   const [pins, setPins] = useState([]);
   const [journeyRows, setJourneyRows] = useState([]);
+  // False until the first journeys fetch settles, so the UI can tell loading from empty.
+  const [journeysLoaded, setJourneysLoaded] = useState(false);
 
   const reload = useCallback(async () => {
     const [journeysRes, pinsRes] = await Promise.all([
@@ -22,6 +24,7 @@ export function useTravelData(session) {
     } else {
       setJourneyRows(journeysRes.data || []);
     }
+    setJourneysLoaded(true);
     if (pinsRes.error) {
       console.error("Failed to load pins from Supabase", pinsRes.error);
     } else if (pinsRes.data) {
@@ -41,5 +44,5 @@ export function useTravelData(session) {
     [journeyRows, pins]
   );
 
-  return { journeys, pins, setPins, reload };
+  return { journeys, pins, setPins, reload, journeysLoaded };
 }

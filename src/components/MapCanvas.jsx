@@ -71,7 +71,7 @@ export default function MapCanvas() {
   } = useAuthSession();
 
   // Journeys + flat pins (GlobeScene) — useTravelData
-  const { journeys, pins, setPins, reload: reloadTravelData } = useTravelData(session);
+  const { journeys, pins, setPins, reload: reloadTravelData, journeysLoaded } = useTravelData(session);
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showFlightPaths, setShowFlightPaths] = useState(false);
@@ -591,6 +591,7 @@ export default function MapCanvas() {
       >
         {session && (
           <JournalsPanel
+            journeysLoading={!journeysLoaded}
             activeTab={activeTab}
             isAddingEntry={isAddingEntry}
             activePin={activePin}

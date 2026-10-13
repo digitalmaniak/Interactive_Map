@@ -21,6 +21,7 @@ const emptyForm = () => ({
  */
 export default function JourneyList({
   journeys,
+  loading = false,
   onSelectJourney,
   onCreateJourney,
   onUpdateJourney,
@@ -353,7 +354,18 @@ export default function JourneyList({
             </div>
           );
         })}
-        {(journeys || []).length === 0 && (
+        {loading && (journeys || []).length === 0 && (
+          <div className="v2-skeleton-list" role="status" aria-live="polite">
+            <span className="v2-skeleton-label">Loading journeys</span>
+            {[0, 1, 2].map((k) => (
+              <div key={k} className="v2-skeleton-row" aria-hidden="true">
+                <div className="v2-skeleton-bar" style={{ width: `${62 - k * 12}%` }} />
+                <div className="v2-skeleton-bar is-dim" style={{ width: `${38 - k * 6}%` }} />
+              </div>
+            ))}
+          </div>
+        )}
+        {!loading && (journeys || []).length === 0 && (
           <div style={{ textAlign: "center", color: "var(--v2-text-dim)", fontSize: "0.9rem", padding: "2rem 0" }}>
             No journeys yet. Create one or add a memory pin to the globe!
           </div>

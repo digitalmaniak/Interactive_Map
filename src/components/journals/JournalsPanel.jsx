@@ -21,6 +21,7 @@ export default function JournalsPanel({
   activeJourney,
   clusterPins,
   journeys,
+  journeysLoading = false,
   // Add memory
   newPinName,
   setNewPinName,
@@ -182,6 +183,7 @@ export default function JournalsPanel({
         />
       ) : (
         <JourneyList
+          loading={journeysLoading}
           journeys={journeys}
           onSelectJourney={onSelectJourney}
           onCreateJourney={onCreateJourney}

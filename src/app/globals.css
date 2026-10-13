@@ -287,3 +287,13 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 .legs-entry { min-height: 44px; margin-top: 0.6rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%; padding: 0 0.75rem; background: #282A2D; border: 1px solid #3A3D41; border-radius: 2px; color: #FFFFFF; font: 500 0.85rem/1 var(--v2-sans); cursor: pointer; }
 .legs-entry:hover { border-color: #5CC8E4; }
 .legs-badge { font-size: 10px; padding: 0.2rem 0.45rem; border-radius: 2px; background: rgba(92, 200, 228, 0.16); color: #5CC8E4; border: 1px solid rgba(92, 200, 228, 0.4); }
+
+/* Journals loading skeleton: quiet hairline rows in the dark chrome. */
+.v2-skeleton-list { display: flex; flex-direction: column; gap: 10px; padding: 0.75rem 0; }
+.v2-skeleton-label { font: 400 10px/1.4 var(--v2-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--v2-text-dim); }
+.v2-skeleton-row { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-surface); }
+.v2-skeleton-bar { height: 8px; border-radius: 2px; background: var(--v2-hairline); animation: v2-skeleton-pulse 1.4s ease-in-out infinite; }
+.v2-skeleton-bar.is-dim { height: 6px; opacity: 0.6; }
+@keyframes v2-skeleton-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.9; } }
+@media (prefers-reduced-motion: reduce) { .v2-skeleton-bar { animation: none; } }
+.v2-globe-notice { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 6px 10px; border-radius: 4px; background: rgba(7, 9, 11, 0.8); border: 1px solid var(--v2-hairline); font: 400 11px/1.4 var(--v2-mono); color: var(--v2-text-dim); z-index: 2; }
