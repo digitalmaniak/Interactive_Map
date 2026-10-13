@@ -13,8 +13,8 @@ export function createGlobeMaterial(landTex, opts = {}) {
     defines: opts.cheap ? { CHEAP: "" } : {},
     // Push the globe surface back in depth so border lines never sink into it.
     polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
+    polygonOffsetFactor: 2,
+    polygonOffsetUnits: 4,
     uniforms: {
       uLand: { value: landTex },
       uLow: { value: new THREE.Color(C.land.low) },

@@ -28,6 +28,7 @@ const MIN_DIST = 1.08;
 const TRIP_MIN_ALT = 0.00125;
 // Below about 50 km the baked relief texture fades out so its softness reads as intentional.
 const RELIEF_FADE_ALT = 0.0078;
+const BORDER_LIFT_MAX = 0.0003;
 const TRIP_MIN_DIST = GLOBE_R + TRIP_MIN_ALT;
 const MAX_DIST = 6;
 const LABEL_DIST = 1.9;
@@ -75,6 +76,7 @@ function tripFraming(points) {
 
 function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false }) {
   const { gl, size, camera } = useThree();
+  const coastRef = useRef();
   const t = cheap ? { ...tiers.phoneLow, globeSeg: [64, 32], maskW: 1024 } : tiers[tier];
   const { material, atmo, coast, tex } = useMemo(() => {
     const max = gl.capabilities.maxTextureSize || 4096;
@@ -87,6 +89,12 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
     // Trip only uniforms follow tripBlend (0 globe, 1 trip), driven by the camera tween.
     const b = tripBlend ? tripBlend.current : 0;
     const alt = camera.position.length() - GLOBE_R;
+    // Border lift grows with altitude (smooth in log altitude): 0 at the 8 km minimum,
+    // BORDER_LIFT_MAX at full globe view. Applied as a scale, no geometry rebuild.
+    if (coastRef.current) {
+      const k = THREE.MathUtils.smoothstep(Math.log(Math.max(alt, 1e-6)), Math.log(TRIP_MIN_ALT), Math.log(HOME_DIST - GLOBE_R));
+      coastRef.current.scale.setScalar(1 + BORDER_LIFT_MAX * k);
+    }
     material.uniforms.uReliefMix.value = THREE.MathUtils.smoothstep(alt, RELIEF_FADE_ALT * 0.25, RELIEF_FADE_ALT);
     material.uniforms.uHatchSpacing.value = THREE.MathUtils.lerp(tokens.hatch.spacingPx.globe, tokens.hatch.spacingPx.trip, b);
   });
@@ -106,7 +114,7 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
           <sphereGeometry args={[GLOBE_R, 64, 32]} />
         </mesh>
       )}
-      <lineSegments geometry={coast} raycast={() => null}>
+      <lineSegments ref={coastRef} geometry={coast} raycast={() => null}>
         <lineBasicMaterial color={C.coast} transparent opacity={C.coastOpacity} />
       </lineSegments>
     </group>
