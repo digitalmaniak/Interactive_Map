@@ -69,3 +69,17 @@ if (failed) process.exit(1);
   }
   if (bad) process.exit(1);
 }
+
+{
+  const { resolveLegs: R, pairOffsetDeg } = await import("../src/components/map/scene/legs/legGeometry.js");
+  const pins = { tk: { id: "tk", latitude: 35.68, longitude: 139.69 }, hk: { id: "hk", latitude: 42.80, longitude: 140.69 } };
+  const legs = R([
+    { id: 1, mode: "fly", from_pin_id: null, to_pin_id: "tk", from_lat: 40.69, from_lng: -74.17 },
+    { id: 2, mode: "fly", from_pin_id: "tk", to_pin_id: "hk" }, { id: 3, mode: "fly", from_pin_id: "hk", to_pin_id: "tk" },
+    { id: 4, mode: "fly", from_pin_id: "tk", to_pin_id: null, to_lat: 40.69, to_lng: -74.17 },
+  ], pins);
+  const ang = legs[1].a.v.angleTo(legs[1].b.v) * 180 / Math.PI;
+  const okk = legs[0].offsetDeg === 4 && legs[3].offsetDeg === 4 && Math.abs(legs[1].offsetDeg - 0.05 * ang) < 1e-9 && legs[1].offsetDeg < 0.4 && pairOffsetDeg(Math.PI) === 4;
+  console.log(`${okk ? "PASS" : "FAIL"} pair offset scales: EWR pair ${legs[0].offsetDeg} deg, Tokyo-Niseko ${legs[1].offsetDeg.toFixed(3)} deg (leg ${ang.toFixed(2)} deg)`);
+  if (!okk) process.exit(1);
+}

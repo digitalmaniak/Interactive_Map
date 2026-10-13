@@ -10,6 +10,9 @@ export const FLY_SEGMENTS = 96;
 export const FLY_END_FADE = 0.08; // last 8 percent at each end
 export const FLY_END_ALPHA = 0.4;
 export const PAIR_OFFSET_DEG = 4;
+export const PAIR_OFFSET_FRAC = 0.05;
+// Pair offset scales with the leg: 5 percent of its great circle length, capped at 4 deg.
+export const pairOffsetDeg = (angRad) => Math.min(PAIR_OFFSET_DEG, PAIR_OFFSET_FRAC * THREE.MathUtils.radToDeg(angRad));
 export const FLY_TRIP_SCALE = 0.5; // trip view halves H so arcs stay in frame at 48 deg tilt
 const SURFACE_STEP_RAD = THREE.MathUtils.degToRad(0.25);
 const PAIR_MATCH_RAD = THREE.MathUtils.degToRad(0.45); // about 50 km
@@ -51,12 +54,12 @@ export function resolveLegs(rows, pinsById) {
     if (!a || !b || a.v.angleTo(b.v) < 1e-7) continue;
     out.push({ id: r.id, mode: normLegMode(r.mode), a, b, toPinId: r.to_pin_id || null, sort: r.sort_order ?? out.length, offsetDeg: 0 });
   }
-  // Outbound and return flights on the same route get a 4 degree sideways offset each.
+  // Outbound and return flights on the same route get a sideways offset each (pairOffsetDeg).
   // The rotation is about each leg's own travel direction, so the pair lands on
   // opposite sides of the great circle and runs in opposite directions.
   const flights = out.filter((l) => l.mode === "fly");
   for (const l of flights) {
-    if (flights.some((m) => m !== l && m.a.v.angleTo(l.b.v) < PAIR_MATCH_RAD && m.b.v.angleTo(l.a.v) < PAIR_MATCH_RAD)) l.offsetDeg = PAIR_OFFSET_DEG;
+    if (flights.some((m) => m !== l && m.a.v.angleTo(l.b.v) < PAIR_MATCH_RAD && m.b.v.angleTo(l.a.v) < PAIR_MATCH_RAD)) l.offsetDeg = pairOffsetDeg(l.a.v.angleTo(l.b.v));
   }
   return out;
 }
