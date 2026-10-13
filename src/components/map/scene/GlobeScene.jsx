@@ -52,6 +52,7 @@ const TRIP_MIN_DIST = GLOBE_R + TRIP_MIN_ALT;
 const MAX_DIST = 6;
 const LABEL_DIST = 1.9;
 const DRAG_PX = 5;
+const PIN_HOVER_PX = 16; // screen radius that counts as hovering a pin
 const easeMove = bezier([0.65, 0, 0.35, 1]);
 const TRIP_KEY = CAM.keyframes[CAM.keyframes.length - 1];
 const easeGrow = bezier([0.16, 1, 0.3, 1]);
@@ -331,7 +332,7 @@ function blendStates(a, b, w) {
   };
 }
 
-function CameraController({ pinHoverRef, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef }) {
+function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDragStart, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef }) {
   const { camera, size, gl } = useThree();
   const st = useRef({ tw: null, prev: null, seen: null, offset: 0, offsetKey: null, heading: 0, panelTarget: null, applied: null, fade: null });
   const idleUntil = useRef(0);
@@ -435,7 +436,26 @@ function CameraController({ pinHoverRef, controlsRef, moveRef, reducedMotion, tr
 
     if (!s.tw) {
       // Idle drift on the globe view, paused while the user interacts.
-      if (controls && !tripView.current && !reducedMotion && now > idleUntil.current && !pinHoverRef.current) {
+      // Hover pause that does not depend on pointer events: R3F only re-raycasts on
+      // pointer move, so a pin drifting under a still cursor never fires pointerover.
+      // Each frame, test the last pointer position against the projected pins.
+      let underCursor = false;
+      const ptr = pointerRef.current;
+      if (ptr && ptr.inside) {
+        const rect = gl.domElement.getBoundingClientRect();
+        const px = ptr.x - rect.left, py = ptr.y - rect.top;
+        const camDirV = new THREE.Vector3();
+        const v = new THREE.Vector3();
+        for (const it of itemsRef.current || []) {
+          if (it.dimmed) continue;
+          camDirV.copy(camera.position).sub(it.pos).normalize();
+          if (camDirV.dot(it.pos) <= 0) continue; // far side
+          v.copy(it.pos).project(camera);
+          const sx = (v.x * 0.5 + 0.5) * size.width, sy = (-v.y * 0.5 + 0.5) * size.height;
+          if (Math.hypot(sx - px, sy - py) <= PIN_HOVER_PX) { underCursor = true; break; }
+        }
+      }
+      if (controls && !tripView.current && !reducedMotion && now > idleUntil.current && !pinHoverRef.current && !underCursor) {
         const yaw = THREE.MathUtils.degToRad(CAM.idleYawDegPerSec) * delta;
         camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
         controls.update();
@@ -535,8 +555,9 @@ function CameraController({ pinHoverRef, controlsRef, moveRef, reducedMotion, tr
   useEffect(() => {
     const c = controlsRef.current;
     if (!c) return;
-    const pause = () => { idleUntil.current = Infinity; };
-    const resume = () => { idleUntil.current = performance.now() + CAM.idleResumeMs; };
+    // Drag start clears the region readout and suppresses it until the drag ends.
+    const pause = () => { idleUntil.current = Infinity; draggingRef.current = true; onDragStart?.(); };
+    const resume = () => { idleUntil.current = performance.now() + CAM.idleResumeMs; draggingRef.current = false; };
     c.addEventListener("start", pause);
     c.addEventListener("end", resume);
     return () => { c.removeEventListener("start", pause); c.removeEventListener("end", resume); };
@@ -814,6 +835,8 @@ export default function GlobeScene({
   const viewRef = useRef(null);
   const [hoveredPinId, setHoveredPinId] = useState(null);
   const pinHoverRef = useRef(false);
+  const pointerRef = useRef(null);
+  const draggingRef = useRef(false);
 
   const geo = useMemo(() => rewindGeo(geoJson), [geoJson]);
   const focusing = focusJourneyId != null && !String(focusJourneyId).startsWith("__");
@@ -992,12 +1015,21 @@ export default function GlobeScene({
     [countryAt, onMapClick]
   );
 
+  const itemsRef = useRef(items);
+  useEffect(() => { itemsRef.current = items; }, [items]);
+  const clearRegionReadout = useCallback(() => {
+    if (hoverRafRef.current) { cancelAnimationFrame(hoverRafRef.current); hoverRafRef.current = null; }
+    if (lastRegionRef.current) { lastRegionRef.current = null; }
+    onHoverRegion?.(null);
+  }, [onHoverRegion]);
+
   const handleGlobeHover = useCallback(
     (point) => {
       if (!point) {
         if (lastRegionRef.current) { lastRegionRef.current = null; onHoverRegion?.(null); }
         return;
       }
+      if (draggingRef.current) return; // no readout while dragging
       if (hoverRafRef.current) return;
       const p = point.clone();
       hoverRafRef.current = requestAnimationFrame(() => {
@@ -1073,7 +1105,12 @@ export default function GlobeScene({
   }
 
   return (
-    <div className="v2-map" onPointerDownCapture={onCanvasPointerDown}>
+    <div
+      className="v2-map"
+      onPointerDownCapture={onCanvasPointerDown}
+      onPointerMove={(e) => { pointerRef.current = { x: e.clientX, y: e.clientY, inside: true }; }}
+      onPointerLeave={() => { pointerRef.current = null; }}
+    >
       <Canvas
         onPointerMissed={onPointerMissed}
         onCreated={onCreated}
@@ -1108,7 +1145,7 @@ export default function GlobeScene({
           maxDistance={MAX_DIST}
           onStart={() => { moveRef.current = null; }}
         />
-        <CameraController pinHoverRef={pinHoverRef} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
+        <CameraController pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={activePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>
