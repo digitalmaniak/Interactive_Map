@@ -24,12 +24,16 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
   const [view, setView] = useState(null);
   const v = view && view.t0 >= full.t0 && view.t1 <= full.t1 ? view : full;
   const [hover, setHover] = useState(null);
+  const [stopHover, setStopHover] = useState(null);
 
   // ---- Trip ----
   const tr = useMemo(() => {
     if (!trip) return null;
     const t = tripTimeline(trip);
-    const legs = placeLegs(trip.legs, t.pinDates, t.range).map((l) => (t.undated ? { ...l, guessed: true, alpha: STRIP.guessedAlpha } : l));
+    // Stops spread by order: every leg is a guess (40%); with no trip dates at all, leg
+    // dates are ignored too so nothing lands outside the order-only range.
+    const src = t.undated ? trip.legs.map((l) => ({ ...l, departAt: null, arriveAt: null })) : trip.legs;
+    const legs = placeLegs(src, t.pinDates, t.range).map((l) => (t.spread ? { ...l, guessed: true, alpha: STRIP.guessedAlpha } : l));
     return { ...t, legs };
   }, [trip]);
   const plan = useMemo(() => (tr && fly ? fly.planNow() : null), [tr, fly]);
@@ -110,6 +114,14 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
   // Stop dots sit where the playhead lands for that stop (anchors), else at their date.
   const dots = tr ? stopPositions(trip.stops, tr.pinDates, anchors, plan, scale) : [];
   const groups = overlapGroups(dots, STRIP.currentPx);
+  // All time: trip dots that overlap pick the nearest on click and carry a "+N" badge.
+  const marks = tr ? [] : tripMarks(trips, scale).filter((m) => m.x1 >= x0 && m.x0 <= x1);
+  const dotMarks = marks.filter((m) => m.dot).map((m) => ({ ...m, x: m.cx }));
+  const tripGroups = overlapGroups(dotMarks, STRIP.dotPx);
+  const nearestMark = (clientX) => { const r = box.current.getBoundingClientRect(); return nearestStop(dotMarks, clientX - r.left); };
+  // Trip view: stop name on hover (nearest dot), cleared on leave and on view change.
+  const stopHoverNow = stopHover && stopHover.key === viewKey ? dots.find((d) => d.id === stopHover.id) : null;
+  const hoverStopAt = (e) => { const r = box.current.getBoundingClientRect(); const d = nearestStop(dots, e.clientX - r.left); if (d && d.id !== stopHoverNow?.id) setStopHover({ id: d.id, key: viewKey }); };
   const pickStop = (e) => {
     const r = box.current.getBoundingClientRect();
     const d = nearestStop(dots, e.clientX - r.left);
@@ -118,7 +130,7 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
 
   return (
     <div ref={box} className={`v2-timeline${lite ? " is-lite" : ""}`} style={{ left, right }} role="region" aria-label={tr ? "Trip timeline" : "Trips timeline"}
-      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onMouseLeave={() => setHover(null)}>
+      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onMouseLeave={() => { setHover(null); setStopHover(null); }}>
       <svg width={w} height={STRIP.heightPx} aria-hidden="true" style={{ position: "absolute", inset: 0 }}>
         {ticks.map((t) => {
           const x = scale.x(t.t); if (x < x0 - 0.5 || x > x1 + 0.5) return null;
@@ -135,13 +147,21 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
           return <line key={l.id} data-leg={l.id} x1={a + gap} x2={b - gap} y1={cy} y2={cy} stroke={STRIP.leg} strokeOpacity={l.alpha} strokeWidth={l.solid ? 2 : 1.5} strokeDasharray={l.solid ? undefined : "4 3"} />;
         })}
       </svg>
-      {!tr && tripMarks(trips, scale).filter((m) => m.x1 >= x0 && m.x0 <= x1).map((m) => (
-        <button key={m.id} type="button" data-hit className="v2-tl-trip" aria-label={`Open ${m.title}`}
-          style={m.dot ? { left: m.cx - STRIP.dotPx / 2, width: STRIP.dotPx, borderRadius: "50%" } : { left: Math.max(x0, m.x0), width: Math.min(x1, m.x1) - Math.max(x0, m.x0) }}
-          onMouseEnter={() => setHover({ m, key: viewKey })} onMouseLeave={() => setHover(null)} onFocus={() => setHover({ m, key: viewKey })} onBlur={() => setHover(null)}
-          onClick={() => onOpenTrip?.(m.id)} />
-      ))}
-      {!tr && hoverNow && <div className="v2-tl-tip" style={{ left: Math.min(x1 - 120, Math.max(x0, hoverNow.cx - 60)) }}>{hoverNow.title}</div>}
+      {!tr && marks.map((m) => {
+        const g = m.dot ? tripGroups.get(m.id) : null;
+        const badgeOn = g && g.size > 1 && g.ids[0] === m.id;
+        return (
+          <button key={m.id} type="button" data-hit className="v2-tl-trip" aria-label={`Open ${m.title}`} data-trip={m.id}
+            style={m.dot ? { left: m.cx - STRIP.dotPx / 2, width: STRIP.dotPx, borderRadius: "50%", zIndex: badgeOn ? 2 : undefined } : { left: Math.max(x0, m.x0), width: Math.min(x1, m.x1) - Math.max(x0, m.x0) }}
+            onMouseEnter={(e) => setHover({ m: m.dot ? nearestMark(e.clientX) || m : m, key: viewKey })}
+            onMouseMove={(e) => { if (m.dot) { const n = nearestMark(e.clientX); if (n && n.id !== hoverNow?.id) setHover({ m: n, key: viewKey }); } }}
+            onMouseLeave={() => setHover(null)} onFocus={() => setHover({ m, key: viewKey })} onBlur={() => setHover(null)}
+            onClick={(e) => onOpenTrip?.(m.dot ? (nearestMark(e.clientX) || m).id : m.id)}>
+            {badgeOn && <span className="v2-tl-more" aria-hidden="true">+{g.size - 1}</span>}
+          </button>
+        );
+      })}
+      {!tr && hoverNow && <div className="v2-tl-tip" style={{ left: Math.min(x1 - 120, Math.max(x0, (hoverNow.x ?? hoverNow.cx) - 60)) }}>{hoverNow.title}</div>}
       {tr && dots.map((d) => {
         const cur = d.id === current; const sz = cur ? STRIP.currentPx : STRIP.stopPx;
         const g = groups.get(d.id);
@@ -149,11 +169,12 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
         const badgeOn = g && g.size > 1 && (g.ids.includes(current) ? current === d.id : g.ids[0] === d.id);
         return (
           <button key={d.id} type="button" data-hit className={`v2-tl-stop${cur ? " is-current" : ""}`} aria-label={`Fly to ${d.label}`} title={d.label} data-stop={d.id}
-            style={{ left: d.x - sz / 2, top: cy - sz / 2, width: sz, height: sz, zIndex: badgeOn ? 2 : cur ? 1 : undefined }} onClick={pickStop}>
+            style={{ left: d.x - sz / 2, top: cy - sz / 2, width: sz, height: sz, zIndex: badgeOn ? 2 : cur ? 1 : undefined }} onClick={pickStop} onMouseEnter={hoverStopAt} onMouseMove={hoverStopAt} onMouseLeave={() => setStopHover(null)} onFocus={() => setStopHover({ id: d.id, key: viewKey })} onBlur={() => setStopHover(null)}>
             {badgeOn && <span className="v2-tl-more" aria-hidden="true">+{g.size - 1}</span>}
           </button>
         );
       })}
+      {tr && stopHoverNow && <div className="v2-tl-tip is-stop" style={{ left: Math.min(x1 - 160, Math.max(x0, stopHoverNow.x - 80)) }}>{stopHoverNow.label}</div>}
       {tr && fly && anchors.length > 0 && (
         <div ref={head} className="v2-tl-head" style={{ transition: scrubbing && !reducedMotion ? `transform ${STRIP.scrubEaseMs}ms ease` : "none" }} aria-hidden="true" />
       )}

@@ -139,7 +139,14 @@ export default function MapCanvas() {
   }, [activeTab]);
 
   const timelineProps = {
-    trips: tripRanges.map((r) => ({ ...r, title: (journeys || []).find((j) => j.id === r.journey_id)?.title || "Journey" })),
+    // Stop dates first (journey_stats_v2 derives them from stops only), then the trip's own
+    // journeys.date_start/date_end, else undated.
+    trips: tripRanges.map((r) => {
+      const j = (journeys || []).find((x) => x.id === r.journey_id);
+      const first = r.first_date || j?.date_start || null;
+      const last = r.first_date ? r.last_date : j?.date_end || j?.date_start || null;
+      return { ...r, first_date: first, last_date: last, title: j?.title || "Journey" };
+    }),
     undatedCount,
     onOpenTrip: (id) => { setClusterPins(null); setActivePin(null); setIsAddingEntry(false); setReviewOpen(false); setActiveJourneyId(id); setActiveTab("Journals"); },
     onOpenReview: () => { setClusterPins(null); setActivePin(null); setIsAddingEntry(false); setActiveJourneyId(null); setReviewOpen(true); setActiveTab("Journals"); },

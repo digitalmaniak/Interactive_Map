@@ -1,9 +1,10 @@
 // Pure helpers (also used by scripts/check-review.mjs).
 export function groupReviewItems(items, journeys = []) {
   // Same named trips stay distinguishable: "Snowboarding · Feb 2019" from the earliest
-  // dated place (or the journey start_date). Undated trips get no suffix.
+  // dated place, else the trip's own date_start (journeys). Undated trips get no suffix.
   const label = (j) => {
-    const ds = [j.start_date, ...(j.places || []).map((p) => p.start_date)].filter(Boolean).map((d) => String(d).slice(0, 10)).sort();
+    const stopDs = (j.places || []).map((p) => p.start_date).filter(Boolean);
+    const ds = (stopDs.length ? stopDs : [j.date_start, j.start_date]).filter(Boolean).map((d) => String(d).slice(0, 10)).sort();
     if (!ds.length) return { text: j.title, sort: `${j.title}|` };
     const m = new Date(`${ds[0]}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
     return { text: `${j.title} \u00b7 ${m}`, sort: `${j.title}|${ds[0]}` };

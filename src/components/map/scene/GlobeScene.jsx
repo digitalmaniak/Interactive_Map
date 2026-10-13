@@ -642,6 +642,9 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
 const CLUSTER_PX = 28;
 const LABEL_PAD = 6;
 const LABEL_RECOMPUTE_MS = 100;
+// A trip enter or exit crossfade never outlives this, even if the camera move that drives it
+// was replaced or never ran (labels from the old trip were left on the globe).
+const LABEL_XFADE_MAX_MS = 2500;
 const LABEL_RETURN_MS = 200;
 const FACING_MIN = Math.cos(THREE.MathUtils.degToRad(75));
 
@@ -777,7 +780,8 @@ function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, met
     if (s.old) {
       const mix = labelMix.current;
       let w;
-      if (mix.active) w = mix.p;
+      if (now - s.xStart > LABEL_XFADE_MAX_MS) w = 1;
+      else if (mix.active) w = mix.p;
       else if (now - s.xStart < 120) w = 0; // the camera move has not picked up the goal yet
       else w = 1;
       items.forEach((it, i) => {
@@ -790,7 +794,9 @@ function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, met
         el.style.visibility = op > 0.001 ? "visible" : "hidden";
         if (wasOld && !isNew && op > 0.001) oldIdx.push(i);
       });
-      if (w >= 1) { s.old = null; oldIdx = []; }
+      // Done: drop the old set and recompute at once so the final styles come from the
+      // current view (not heads computed mid move).
+      if (w >= 1) { s.old = null; oldIdx = []; s.dirty = true; s.last = 0; }
     }
     // Keep shown labels glued to their pins every frame.
     for (const i of [...s.heads.keys(), ...oldIdx]) {
