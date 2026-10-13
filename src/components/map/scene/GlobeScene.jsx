@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { makeTapGuard } from "./tapGuard";
+import { easeInOutCubic } from "./flyover/flyoverTiming";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerformanceMonitor } from "@react-three/drei";
@@ -304,6 +305,7 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
 // or the framed trip sits centred in the space left of the panel. No offset when the
 // panel would cover most of the screen (narrow / mobile).
 const SHEET_EASE_MS = 300;
+const RELEASE_MS = 600; // zoom back out to world view after an interrupted exit
 export const panelOffsetFor = (open, width, panelWidth) =>
   open && width > panelWidth * 1.6 ? panelWidth / 2 : 0;
 
@@ -450,6 +452,7 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       applyOffset(s.offset);
     }
     viewRef.current = { width: size.width, height: size.height, offset: panelTarget, offsetY: s.voff, offsetYTarget: s.vTo };
+    if (typeof window !== "undefined") window.__globeCamD = camera.position.length(); // smoke tests read this
 
     // New goal, or a panel change while idle or mid-move: one tween from the live state.
     const req = moveRef.current;
@@ -470,6 +473,8 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
         const exiting = wasExit;
         setBlend(exiting ? 0 : tripBlend.current >= 0.5 ? 1 : 0);
         if (exiting && controls && controls.target.lengthSq() > 1e-6) { controls.target.set(0, 0, 0); controls.update(); }
+        // The zoom still eases out to the world view once the drag ends (see idle branch).
+        if (exiting) s.pendingOut = true;
         labelMix.current = { active: false, p: 1 };
         if (s.fade) { gl.domElement.style.opacity = "1"; s.fade = null; }
       } else {
@@ -509,6 +514,15 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       return;
     }
 
+    if (!s.tw && s.pendingOut && !draggingRef.current) {
+      // A drag interrupted the exit: finish the zoom out to world view distance over
+      // RELEASE_MS with the flyover easing, from wherever the drag left the camera.
+      s.pendingOut = false;
+      if (camera.position.length() < HOME_DIST - 0.02) {
+        moveRef.current = { n: camera.position.clone().normalize(), D: HOME_DIST, tilt: 0, heading: s.heading, fov: CAM.keyframes[0].fov, trip: false, ms: reducedMotion ? 1 : RELEASE_MS, ease: easeInOutCubic };
+        return;
+      }
+    }
     if (!s.tw) {
       // Idle drift on the globe view, paused while the user interacts.
       // Hover pause that does not depend on pointer events: R3F only re-raycasts on
