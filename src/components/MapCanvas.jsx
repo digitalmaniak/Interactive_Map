@@ -351,16 +351,21 @@ export default function MapCanvas() {
 
   const handleRemovePin = async () => {
     if (!activePin) return;
-
+    const id = activePin.id;
     try {
-      const { error } = await deletePinRow(activePin.id);
+      const { error, deleted } = await deletePinRow(id);
       if (error) throw error;
-
-      // Remove from state
-      setPins((prev) => prev.filter((p) => p.id !== activePin.id));
+      if (!deleted) throw new Error("This memory could not be removed. It may already be gone.");
+      // Soft deleted on the server. Close the dialog and drop the pin everywhere it is shown.
+      setIsConfirmingDelete(false);
+      setPins((prev) => prev.filter((p) => p.id !== id));
       setActivePin(null);
+      setClusterPins((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
+      reloadTravelData();
     } catch (e) {
       console.error(e);
+      setIsConfirmingDelete(false);
+      alert(e?.message || "Error removing memory.");
     }
   };
 

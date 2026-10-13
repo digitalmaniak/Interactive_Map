@@ -43,8 +43,14 @@ export async function updatePin(id, fields) {
 
 /** Delete a pin by id. */
 export async function removePin(id) {
-  const { error } = await supabase.from("pins").delete().eq("id", id);
-  return { error };
+  // Soft delete: stamp deleted_at instead of removing the row. No RETURNING (the SELECT
+  // policy hides deleted rows); an exact count tells us one row changed.
+  const { error, count } = await supabase
+    .from("pins")
+    .update({ deleted_at: new Date().toISOString() }, { count: "exact" })
+    .eq("id", id)
+    .is("deleted_at", null);
+  return { error, deleted: count ?? 0 };
 }
 
 /** Insert a single pin_logs row; returns the inserted row via .select().single(). */
