@@ -112,3 +112,27 @@ if (failed) process.exit(1);
   console.log(`${same ? "PASS" : "FAIL"} EWR-Tokyo height unchanged (${ewr.toFixed(4)} vs ${ewrOld.toFixed(4)})`);
   if (bad || !same) process.exit(1);
 }
+
+// Legs with a null pin on one or both ends fall back to the leg's own lat/lng (Japan's
+// Tokyo to EWR, Euro Enduro's EWR to GVA).
+{
+  const pins = { tok: { latitude: 35.6762, longitude: 139.6503 } };
+  const rows = [
+    { id: "l1", mode: "fly", from_pin_id: "tok", to_pin_id: null, from_lat: null, from_lng: null, to_lat: 40.6895, to_lng: -74.1745, to_label: "Newark (EWR)" },
+    { id: "l2", mode: "fly", from_pin_id: null, to_pin_id: null, from_lat: 40.6895, from_lng: -74.1745, to_lat: 46.2381, to_lng: 6.109 },
+    { id: "l3", mode: "fly", from_pin_id: "missing", to_pin_id: null, from_lat: 1, from_lng: 2, to_lat: 3, to_lng: 4 },
+    { id: "l4", mode: "fly", from_pin_id: null, to_pin_id: null, from_lat: null, from_lng: 5, to_lat: 3, to_lng: 4 },
+  ];
+  const L = resolveLegs(rows, pins);
+  const ids = L.map((l) => l.id).join(",");
+  const p1 = L.find((l) => l.id === "l1");
+  const ok1 = p1 && p1.a.pinned && !p1.b.pinned && Math.abs(p1.b.lat - 40.6895) < 1e-9;
+  const ok2 = L.some((l) => l.id === "l2" && !l.a.pinned && !l.b.pinned);
+  const ok3 = L.some((l) => l.id === "l3" && l.a.lat === 1);
+  const ok4 = !L.some((l) => l.id === "l4");
+  console.log(`${ok1 ? "PASS" : "FAIL"} null to_pin_id uses to_lat/to_lng`);
+  console.log(`${ok2 ? "PASS" : "FAIL"} both pins null uses both lat/lng`);
+  console.log(`${ok3 ? "PASS" : "FAIL"} a pin id that is not loaded falls back to the leg's lat/lng`);
+  console.log(`${ok4 ? "PASS" : "FAIL"} a leg with no usable end is skipped, never thrown (${ids})`);
+  if (!(ok1 && ok2 && ok3 && ok4)) process.exit(1);
+}
