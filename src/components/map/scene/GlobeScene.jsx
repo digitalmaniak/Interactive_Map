@@ -1394,11 +1394,13 @@ function TripTitle({ title, sub, tripBlend, instant = false }) {
   const visW = box.w, H = box.h;
   // Safe area: measure the profile chip so the title block always sits above it.
   const [chipPx, setChipPx] = useState(0);
+  const [chipW, setChipW] = useState(0);
   useEffect(() => {
     const measure = () => {
       const chip = document.querySelector(".ui-layer .bottom-left-group");
       const r = chip?.getBoundingClientRect();
       setChipPx(r && r.height > 0 ? Math.max(0, window.innerHeight - r.top) : 0);
+      setChipW(r && r.width > 0 ? r.width : 0);
     };
     measure();
     window.addEventListener("resize", measure);
@@ -1437,10 +1439,10 @@ function TripTitle({ title, sub, tripBlend, instant = false }) {
   }
   px = Math.max(TRIP_TITLE.minPx * (lines.length > 1 ? 0.7 : 1), px);
   return (
-    <div ref={el} className="v2-trip-title" style={{ left: TRIP_TITLE.left, bottom: titleBottomPx(chipPx), maxWidth: room, opacity: 0, transition: `opacity ${TRIP_TITLE.fadeMs}ms ease` }}>
+    <div ref={el} className="v2-trip-title" style={{ left: TRIP_TITLE.left, bottom: titleBottomPx(chipPx), maxWidth: `min(${room}px, calc(100vw - ${Math.round(chipW)}px - 48px))`, opacity: 0, transition: `opacity ${TRIP_TITLE.fadeMs}ms ease` }}>
       <h2 style={{ fontSize: px, lineHeight: TRIP_TITLE.lineHeight, fontWeight: TRIP_TITLE.weight, letterSpacing: TRIP_TITLE.tracking }}>{lines.map((l, i) => <span key={i} style={{ display: "block" }}>{l}</span>)}</h2>
       {sub && (sub.base || sub.km) && (
-        <p style={{ fontSize: TRIP_TITLE.subPx, maxWidth: room }}>
+        <p style={{ fontSize: TRIP_TITLE.subPx, maxWidth: "100%" }}>
           {[sub.base, visW >= TRIP_TITLE.narrowPx ? sub.km : ""].filter(Boolean).join("   ")}
         </p>
       )}
