@@ -461,9 +461,14 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       s.seen = req;
       if (!req && fresh) {
         // User drag or zoom: cancel instantly; the live pose is the drag's start.
+        const wasExit = !!s.tw && s.blendTo === 0;
         s.tw = null; s.prev = null;
         // Settle the blend on the nearer end so a cancelled move never leaves a half state.
-        setBlend(tripBlend.current >= 0.5 ? 1 : 0);
+        // An exit (goal out of trip view) always settles on the globe view, so a drag during
+        // the exit never strands the camera in trip view.
+        const exiting = wasExit;
+        setBlend(exiting ? 0 : tripBlend.current >= 0.5 ? 1 : 0);
+        if (exiting && controls && controls.target.lengthSq() > 1e-6) { controls.target.set(0, 0, 0); controls.update(); }
         labelMix.current = { active: false, p: 1 };
         if (s.fade) { gl.domElement.style.opacity = "1"; s.fade = null; }
       } else {
@@ -1095,6 +1100,10 @@ export default function GlobeScene({
     moveRef.current = tripFitGoal(stops);
   }, [focusing, focusIsCollection, focusJourneyId, items, panelOpen, panelWidth, tripFitGoal]);
 
+  // Selection at the moment a point engages (read by the flyTo effect below, same commit).
+  const selRef = useRef({ pin: null, focus: null });
+  useEffect(() => { selRef.current = { pin: activePinId, focus: focusJourneyId }; });
+
   useEffect(() => {
     if (!flyTo) return;
     const lon = Number(flyTo.lon), lat = Number(flyTo.lat);
@@ -1102,7 +1111,7 @@ export default function GlobeScene({
     const n = lonLatToVec3(lon, lat).normalize();
     // A pin inside a real trip keeps the trip as the exit anchor; otherwise it is a point.
     const eng = engagedRef.current;
-    if (!(eng && eng.kind === "trip" && eng.key === focusKeyRef.current)) engagedRef.current = { kind: "point", n };
+    if (!(eng && eng.kind === "trip" && eng.key === focusKeyRef.current)) engagedRef.current = { kind: "point", n, pin: selRef.current.pin, focus: selRef.current.focus };
     moveRef.current = { n, D: 1.12, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), fov: TRIP_KEY.fov, trip: true };
   }, [flyTo]);
 
@@ -1213,7 +1222,11 @@ export default function GlobeScene({
     const eng = engagedRef.current;
     if (!eng) return;
     const tripKey = focusing && !focusIsCollection ? String(focusJourneyId) : null;
-    const gone = eng.kind === "trip" ? tripKey !== eng.key : !panelOpen;
+    // A point is gone when the panel closes, its pin closes (Esc or back to the list), or
+    // the journal it was opened from closes. Keeps the camera from staying anchored.
+    const gone = eng.kind === "trip"
+      ? tripKey !== eng.key
+      : !panelOpen || (eng.pin != null && activePinId !== eng.pin) || (eng.focus != null && focusJourneyId !== eng.focus);
     if (gone) {
       if (tripKey == null) focusKeyRef.current = null;
       exitTripView();
