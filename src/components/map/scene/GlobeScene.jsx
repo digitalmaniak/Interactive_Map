@@ -155,7 +155,7 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
 
 // Stop dots (one InstancedMesh) and stop beams (one InstancedMesh).
 // Route colours are pushed above 1 (emissive 1.6, accent 2.0) so only they cross the bloom threshold.
-function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMotion, beamHeightRef }) {
+function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMotion, beamHeightRef, hideBeams = false, tripBlend }) {
   const dots = useRef();
   const beams = useRef();
   const hits = useRef();
@@ -184,8 +184,14 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
     const g = reducedMotion ? 1 : easeGrow(Math.min(1, (performance.now() - growStart.current) / tokens.beam.growMs));
     const tripish = THREE.MathUtils.clamp((2.4 - camera.position.length()) / 1.2, 0, 1);
     beamMat.uniforms.uGrow.value = g;
-    beamMat.uniforms.uHeight.value = THREE.MathUtils.lerp(tokens.beam.heightR.globe, tokens.beam.heightR.trip, tripish) * (dist < 0.5 ? dist / 0.5 + 0.15 : 1);
-    if (beamHeightRef) beamHeightRef.current = beamMat.uniforms.uHeight.value * g;
+    const h0 = THREE.MathUtils.lerp(tokens.beam.heightR.globe, tokens.beam.heightR.trip, tripish) * (dist < 0.5 ? dist / 0.5 + 0.15 : 1);
+    // Trip view: beam length = min(current length, 0.15 x altitude), blended in with tripBlend
+    // so globe view keeps today's beams. uHeight is a per frame uniform, no rebuild.
+    const tb = tripBlend ? tripBlend.current : 0;
+    beamMat.uniforms.uHeight.value = THREE.MathUtils.lerp(h0, Math.min(h0, 0.15 * dist), tb);
+    // Lite (force3d): no beams at all; dots, hit spheres and labels stay.
+    b.visible = !hideBeams;
+    if (beamHeightRef) beamHeightRef.current = hideBeams ? 0 : beamMat.uniforms.uHeight.value * g;
     beamMat.uniforms.uWidth.value = 0.0012 * THREE.MathUtils.clamp(dist / 0.3, 0.004, 1); // thin beams near the surface
     const aColor = beamGeo.getAttribute("aColor");
     const aAlpha = beamGeo.getAttribute("aAlpha");
@@ -1167,6 +1173,8 @@ export default function GlobeScene({
         <LegsLayer legs={legs} activePinId={activePinId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
         <Stops
           beamHeightRef={beamHeightRef}
+          hideBeams={force3d}
+          tripBlend={tripBlend}
           items={items}
           activePinId={activePinId}
           hoveredPinId={hoveredPinId}
