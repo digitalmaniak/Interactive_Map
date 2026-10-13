@@ -13,7 +13,26 @@ import { tokens, tiers, bezier } from "./tokens";
 import { detectRenderTier } from "./renderTier";
 import { supabase } from "../../../lib/supabase/client";
 import FpsGuard from "./FpsGuard";
-import { poseFor, localFrame, raySphere, solveTripFit } from "./tripFit";
+import { poseFor, localFrame, raySphere, solveTripFit, estimateLabelBox } from "./tripFit";
+
+// Trip framing margins: 80 px plus the overlay chrome measured from the DOM (tab bar and
+// wordmark on top, profile on the bottom left), with a little extra room on the left.
+const TRIP_PAD = 80;
+function tripPads(W, H) {
+  let top = 0, bottom = 0;
+  if (typeof document !== "undefined") {
+    for (const el of document.querySelectorAll(".ui-layer .top-left-group, .ui-layer .v2-nav")) {
+      const r = el.getBoundingClientRect();
+      if (r.height > 0 && r.top < H / 3) top = Math.max(top, r.bottom);
+    }
+    for (const el of document.querySelectorAll(".ui-layer .bottom-left-group")) {
+      const r = el.getBoundingClientRect();
+      if (r.height > 0 && r.bottom > (2 * H) / 3) bottom = Math.max(bottom, H - r.top);
+    }
+  }
+  void W;
+  return { top: TRIP_PAD + top, right: TRIP_PAD, bottom: TRIP_PAD + bottom, left: TRIP_PAD + 24 };
+}
 import StaticGlobe from "./StaticGlobe";
 
 // v2 main view (DESIGN.md v2: mock A globe, mock C trip framing).
@@ -103,7 +122,12 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
     <group>
       <mesh
         material={material}
-        onClick={(e) => { if (e.delta > DRAG_PX) return; onGlobeClick(e.point); }}
+        onClick={(e) => {
+          if (e.delta > DRAG_PX) return;
+          // A click that also hit a pin belongs to the pin, never to add-point.
+          if (e.intersections?.some((h) => h.object?.userData?.pinHit)) return;
+          onGlobeClick(e.point);
+        }}
         onPointerMove={(e) => onGlobeHover(e.point)}
         onPointerOut={() => onGlobeHover(null)}
       >
@@ -126,6 +150,7 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
 function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMotion, beamHeightRef }) {
   const dots = useRef();
   const beams = useRef();
+  const hits = useRef();
   const tmp = useMemo(() => new THREE.Object3D(), []);
   const col = useMemo(() => new THREE.Color(), []);
   const beamMat = useMemo(() => createBeamMaterial(), []);
@@ -143,7 +168,7 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
   const { camera } = useThree();
 
   useFrame(() => {
-    const d = dots.current, b = beams.current;
+    const d = dots.current, b = beams.current, hm = hits.current;
     if (!d || !b) return;
     const dist = camera.position.length() - GLOBE_R;
     const px = THREE.MathUtils.clamp(dist * 0.0055, 0.000006, 0.02); // ~6 px disc
@@ -165,6 +190,14 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
       tmp.scale.set(s, s, s);
       tmp.updateMatrix();
       d.setMatrixAt(i, tmp.matrix);
+      if (hm) {
+        // Invisible hit sphere about 3x the dot so pins win over the globe click.
+        tmp.scale.setScalar(px * 3);
+        tmp.updateMatrix();
+        hm.setMatrixAt(i, tmp.matrix);
+        tmp.scale.set(s, s, s);
+        tmp.updateMatrix();
+      }
       b.setMatrixAt(i, tmp.matrix);
       col.set(active ? C.accent : C.route).multiplyScalar(active ? tokens.glow.emissive.accent : tokens.glow.emissive.route);
       if (it.dimmed) col.set(C.route).multiplyScalar(0.25);
@@ -173,6 +206,7 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
       aAlpha.setX(i, it.dimmed ? 0 : 1);
     });
     d.instanceMatrix.needsUpdate = true;
+    if (hm) { hm.instanceMatrix.needsUpdate = true; hm.computeBoundingSphere?.(); }
     if (d.instanceColor) d.instanceColor.needsUpdate = true;
     b.instanceMatrix.needsUpdate = true;
     aColor.needsUpdate = true;
@@ -183,11 +217,16 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
   return (
     <group>
       <instancedMesh key={`b-${items.length}`} ref={beams} args={[beamGeo, beamMat, items.length]} raycast={() => null} frustumCulled={false} />
+      <instancedMesh key={`d-${items.length}`} ref={dots} args={[undefined, undefined, items.length]} frustumCulled={false} raycast={() => null}>
+        <circleGeometry args={[1, 20]} />
+        <meshBasicMaterial toneMapped={false} />
+      </instancedMesh>
       <instancedMesh
-        key={`d-${items.length}`}
-        ref={dots}
+        key={`h-${items.length}`}
+        ref={hits}
         args={[undefined, undefined, items.length]}
         frustumCulled={false}
+        userData={{ pinHit: true }}
         onClick={(e) => {
           e.stopPropagation();
           if (e.delta > DRAG_PX) return;
@@ -197,8 +236,8 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
         onPointerOver={(e) => { e.stopPropagation(); const it = items[e.instanceId]; if (it && !it.dimmed) onHover(it.pin); }}
         onPointerOut={() => onHover(null)}
       >
-        <circleGeometry args={[1, 20]} />
-        <meshBasicMaterial toneMapped={false} />
+        <sphereGeometry args={[1, 8, 6]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </instancedMesh>
     </group>
   );
@@ -292,7 +331,7 @@ function blendStates(a, b, w) {
   };
 }
 
-function CameraController({ controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef }) {
+function CameraController({ pinHoverRef, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef }) {
   const { camera, size, gl } = useThree();
   const st = useRef({ tw: null, prev: null, seen: null, offset: 0, offsetKey: null, heading: 0, panelTarget: null, applied: null, fade: null });
   const idleUntil = useRef(0);
@@ -396,7 +435,7 @@ function CameraController({ controlsRef, moveRef, reducedMotion, tripView, tripB
 
     if (!s.tw) {
       // Idle drift on the globe view, paused while the user interacts.
-      if (controls && !tripView.current && !reducedMotion && now > idleUntil.current) {
+      if (controls && !tripView.current && !reducedMotion && now > idleUntil.current && !pinHoverRef.current) {
         const yaw = THREE.MathUtils.degToRad(CAM.idleYawDegPerSec) * delta;
         camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
         controls.update();
@@ -774,6 +813,7 @@ export default function GlobeScene({
   const moveRef = useRef(null);
   const viewRef = useRef(null);
   const [hoveredPinId, setHoveredPinId] = useState(null);
+  const pinHoverRef = useRef(false);
 
   const geo = useMemo(() => rewindGeo(geoJson), [geoJson]);
   const focusing = focusJourneyId != null && !String(focusJourneyId).startsWith("__");
@@ -894,7 +934,9 @@ export default function GlobeScene({
     if (view && view.width && view.height) {
       const sol = solveTripFit(stops.map((it) => it.pos.clone().normalize()), {
         W: view.width, H: view.height, offset: panelOffsetFor(panelOpen, view.width, panelWidth),
-        fov: TRIP_KEY.fov, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, pad: 80, minAlt: TRIP_MIN_ALT,
+        fov: TRIP_KEY.fov, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0,
+        pad: tripPads(view.width, view.height), labels: stops.map((it) => estimateLabelBox(it.text, it.coord)),
+        minAlt: TRIP_MIN_ALT,
       });
       n = sol.n; D = sol.D;
     }
@@ -1052,7 +1094,7 @@ export default function GlobeScene({
           hoveredPinId={hoveredPinId}
           reducedMotion={reducedMotion}
           onSelect={(pin) => onPinClick?.(pin)}
-          onHover={(pin) => { setHoveredPinId(pin?.id || null); onHoverRegion?.(pin?.location_name || null); }}
+          onHover={(pin) => { pinHoverRef.current = !!pin; setHoveredPinId(pin?.id || null); onHoverRegion?.(pin?.location_name || null); }}
         />
         <OrbitControls
           ref={controlsRef}
@@ -1066,7 +1108,7 @@ export default function GlobeScene({
           maxDistance={MAX_DIST}
           onStart={() => { moveRef.current = null; }}
         />
-        <CameraController controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
+        <CameraController pinHoverRef={pinHoverRef} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={activePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>
