@@ -18,7 +18,7 @@ export function globeImageHeightPct({ fov = 35, dist = 3, radius = 1 } = {}) {
   return rOverHalfH * 0.5 * (SVG_SIZE / SVG_R) * 100;
 }
 
-export default function StaticGlobe({ className = "", visible = true, framing, fadeMs = 400 }) {
+export default function StaticGlobe({ className = "", visible = true, framing, fadeMs = 400, offsetX = 0 }) {
   const heightPct = globeImageHeightPct(framing);
   return (
     <div
@@ -48,7 +48,8 @@ export default function StaticGlobe({ className = "", visible = true, framing, f
           width: "auto",
           aspectRatio: "1 / 1",
           maxWidth: "none",
-          transform: "translate(-50%, -50%)",
+          transform: `translate(calc(-50% - ${offsetX}px), -50%)`,
+          transition: `transform ${offsetX ? 1600 : 1200}ms cubic-bezier(0.65, 0, 0.35, 1)`,
           display: "block",
         }}
       />

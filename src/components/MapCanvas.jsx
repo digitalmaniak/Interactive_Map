@@ -557,6 +557,8 @@ export default function MapCanvas() {
             onPinClick={handlePinClick}
             onMapClick={handleMapClick}
             onHoverRegion={handleHoverRegion}
+            panelOpen={Boolean(session) && activeTab === "Journals"}
+            panelWidth={350}
           />
         )}
       </div>

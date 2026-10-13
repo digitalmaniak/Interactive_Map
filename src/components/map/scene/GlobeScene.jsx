@@ -212,6 +212,49 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
 
 // Globe to trip and back (DESIGN.md camera table). Controls are disabled while tweening
 // and re-enabled after the settle. Reduced motion: instant cut to the end keyframe.
+// Journals panel offset: shift the projection centre (not the canvas) so the globe
+// or the framed trip sits centred in the space left of the panel. Eased with the
+// camera move tokens (1600 ms open, 1200 ms close). No offset when the panel would
+// cover most of the screen (narrow / mobile).
+export const panelOffsetFor = (open, width, panelWidth) =>
+  open && width > panelWidth * 1.6 ? panelWidth / 2 : 0;
+
+function ViewOffset({ panelOpen, panelWidth, reducedMotion, viewRef }) {
+  const { camera, size } = useThree();
+  const st = useRef({ cur: 0, from: 0, to: 0, t0: 0, open: true, w: 0, h: 0, applied: null });
+  useFrame(() => {
+    const s = st.current;
+    const target = panelOffsetFor(panelOpen, size.width, panelWidth);
+    viewRef.current = { width: size.width, height: size.height, offset: target };
+    const now = performance.now();
+    if (target !== s.to) {
+      s.from = s.cur; s.to = target; s.t0 = now; s.open = target > s.from;
+    }
+    if (s.cur !== s.to) {
+      const dur = s.open ? CAM.open.ms : CAM.close.ms;
+      const raw = reducedMotion ? 1 : Math.min(1, (now - s.t0) / dur);
+      const e = s.open ? easeOpen(raw) : easeClose(raw);
+      s.cur = raw >= 1 ? s.to : s.from + (s.to - s.from) * e;
+    }
+    const key = `${s.cur.toFixed(2)}|${size.width}|${size.height}`;
+    if (key === s.applied) return;
+    s.applied = key;
+    if (s.cur > 0.01) camera.setViewOffset(size.width, size.height, s.cur, 0, size.width, size.height);
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+  });
+  return null;
+}
+
+// Trip fit for the visible area left of the panel: a narrower view needs more altitude.
+function fitForView(fit, view) {
+  if (!view || !view.offset || !view.height) return fit;
+  const availAspect = (view.width - 2 * view.offset) / view.height;
+  if (availAspect >= 1) return fit;
+  const scale = Math.min(1.8, 1 / Math.max(availAspect, 0.3));
+  return 1 + (fit - 1) * scale;
+}
+
 function CameraDirector({ controlsRef, moveRef, reducedMotion, tripView, onArrive }) {
   const { camera } = useThree();
   const anim = useRef(null);
@@ -398,6 +441,8 @@ export default function GlobeScene({
   onMapClick,
   onHoverRegion,
   backdrop = false,
+  panelOpen = false,
+  panelWidth = 350,
   onFirstFrame,
   onFallback,
 }) {
@@ -410,6 +455,7 @@ export default function GlobeScene({
   const hoverRafRef = useRef(null);
   const tripView = useRef(false);
   const moveRef = useRef(null);
+  const viewRef = useRef(null);
   const [hoveredPinId, setHoveredPinId] = useState(null);
 
   const geo = useMemo(() => rewindGeo(geoJson), [geoJson]);
@@ -444,7 +490,8 @@ export default function GlobeScene({
     const prev = focusKeyRef.current;
     focusKeyRef.current = key;
     if (key != null) {
-      moveRef.current = { kind: "open", ...tripFraming(stops) };
+      const fr = tripFraming(stops);
+      moveRef.current = { kind: "open", n: fr.n, fit: fitForView(fr.fit, viewRef.current) };
     } else if (prev != null) {
       const cam = controlsRef.current?.object.position;
       const n = cam ? cam.clone().normalize() : new THREE.Vector3(0, 0, 1);
@@ -499,7 +546,11 @@ export default function GlobeScene({
   const onLowFps = useCallback(() => { setLowFps(true); onFallback?.(); }, [onFallback]);
   useEffect(() => { if (backdrop && renderTier === "static") onFallback?.(); }, [backdrop, renderTier, onFallback]);
   // Backdrop: the parent owns the static image and its crossfade, so render nothing here.
-  if (renderTier === "static" || lowFps) return backdrop ? null : <StaticGlobe />;
+  if (renderTier === "static" || lowFps) {
+    if (backdrop) return null;
+    const w = typeof window !== "undefined" ? window.innerWidth : 0;
+    return <StaticGlobe offsetX={panelOffsetFor(panelOpen, w, panelWidth)} />;
+  }
 
   if (backdrop) {
     // Login backdrop: smallest tier, no bloom, demand frameloop driven at ~30fps by
@@ -559,6 +610,7 @@ export default function GlobeScene({
           maxDistance={MAX_DIST}
           onStart={() => { moveRef.current = null; }}
         />
+        <ViewOffset panelOpen={panelOpen} panelWidth={panelWidth} reducedMotion={reducedMotion} viewRef={viewRef} />
         <CameraDirector controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} />
         {t.bloom && (

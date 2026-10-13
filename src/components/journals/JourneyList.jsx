@@ -114,7 +114,7 @@ export default function JourneyList({
 
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", flexShrink: 0, paddingRight: "0.5rem" }}>
         <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 600, color: "var(--v2-text)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
           Journeys
@@ -135,7 +135,7 @@ export default function JourneyList({
           </button>
         )}
       </div>
-      <p style={{ fontSize: "0.85rem", color: "var(--v2-text-dim)", margin: 0, flexShrink: 0 }}>
+      <p style={{ fontSize: "0.85rem", color: "var(--v2-text-dim)", margin: 0, flexShrink: 0, paddingRight: "0.5rem" }}>
         Your trips and collections. Open one to see its places.
       </p>
 
