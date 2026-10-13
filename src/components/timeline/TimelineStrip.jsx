@@ -4,7 +4,7 @@
 // Trip view: days, legs by date, stops, and a playhead mapped to flyover time that scrubs
 // the existing flyover controller. Undated stops are never placed; a chip opens review.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { STRIP, DAY, toMs, makeScale, allTimeRange, yearTicks, tripMarks, zoomRange, panRange, dayTicks, placeLegs, planAnchors, timeToDate, dateToTime, tripTimeline, stopPositions, overlapGroups, nearestStop } from "./timelineLogic";
+import { STRIP, DAY, toMs, makeScale, allTimeRange, yearTicks, tripMarks, zoomRange, panRange, dayTicks, placeLegs, planAnchors, timeToDate, dateToTime, tripTimeline, stopPositions, overlapGroups, nearestStop, laneMarks, LANES } from "./timelineLogic";
 
 const mono = "var(--v2-mono)";
 
@@ -117,10 +117,9 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
   const dots = tr ? stopPositions(trip.stops, tr.pinDates, tr.spread ? [] : anchors, plan, scale) : [];
   const groups = overlapGroups(dots, STRIP.currentPx);
   // All time: trip dots that overlap pick the nearest on click and carry a "+N" badge.
-  const marks = tr ? [] : tripMarks(trips, scale).filter((m) => m.x1 >= x0 && m.x0 <= x1);
-  const dotMarks = marks.filter((m) => m.dot).map((m) => ({ ...m, x: m.cx }));
-  const tripGroups = overlapGroups(dotMarks, STRIP.dotPx);
-  const nearestMark = (clientX) => { const r = box.current.getBoundingClientRect(); return nearestStop(dotMarks, clientX - r.left); };
+  const marks = tr ? [] : laneMarks(tripMarks(trips, scale).filter((m) => m.x1 >= x0 && m.x0 <= x1));
+  // A mark with overflow trips (+N) picks the nearest of itself and its extras on click.
+  const pickOf = (m, clientX) => { if (!m.extras.length) return m; const r = box.current.getBoundingClientRect(); return nearestStop([{ ...m, x: m.cx }, ...m.extras], clientX - r.left) || m; };
   // Trip view: stop name on hover (nearest dot), cleared on leave and on view change.
   const stopHoverNow = stopHover && stopHover.key === viewKey ? dots.find((d) => d.id === stopHover.id) : null;
   const hoverStopAt = (e) => { const r = box.current.getBoundingClientRect(); const d = nearestStop(dots, e.clientX - r.left); if (d && d.id !== stopHoverNow?.id) setStopHover({ id: d.id, key: viewKey }); };
@@ -150,16 +149,16 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
         })}
       </svg>
       {!tr && marks.map((m) => {
-        const g = m.dot ? tripGroups.get(m.id) : null;
-        const badgeOn = g && g.size > 1 && g.ids[0] === m.id;
+        const badgeOn = m.extras.length > 0;
+        const top = LANES.centers[m.lane] - LANES.heightPx / 2;
         return (
-          <button key={m.id} type="button" data-hit className="v2-tl-trip" aria-label={`Open ${m.title}`} data-trip={m.id}
-            style={m.dot ? { left: m.cx - STRIP.dotPx / 2, width: STRIP.dotPx, borderRadius: "50%", zIndex: badgeOn ? 2 : undefined } : { left: Math.max(x0, m.x0), width: Math.min(x1, m.x1) - Math.max(x0, m.x0) }}
-            onMouseEnter={(e) => setHover({ m: m.dot ? nearestMark(e.clientX) || m : m, key: viewKey })}
-            onMouseMove={(e) => { if (m.dot) { const n = nearestMark(e.clientX); if (n && n.id !== hoverNow?.id) setHover({ m: n, key: viewKey }); } }}
+          <button key={m.id} type="button" data-hit className={`v2-tl-trip${m.dot ? " is-dot" : ""}`} aria-label={`Open ${m.title}`} data-trip={m.id} data-lane={m.lane}
+            style={m.dot ? { left: m.cx - LANES.dotHitPx / 2, width: LANES.dotHitPx, top, zIndex: badgeOn ? 2 : undefined } : { left: Math.max(x0, m.x0), width: Math.max(STRIP.minBarPx, Math.min(x1, m.x1) - Math.max(x0, m.x0)), top }}
+            onMouseEnter={(e) => setHover({ m: pickOf(m, e.clientX), key: viewKey })}
+            onMouseMove={(e) => { if (badgeOn) { const n = pickOf(m, e.clientX); if (n.id !== hoverNow?.id) setHover({ m: n, key: viewKey }); } }}
             onMouseLeave={() => setHover(null)} onFocus={() => setHover({ m, key: viewKey })} onBlur={() => setHover(null)}
-            onClick={(e) => onOpenTrip?.(m.dot ? (nearestMark(e.clientX) || m).id : m.id)}>
-            {badgeOn && <span className="v2-tl-more" aria-hidden="true">+{g.size - 1}</span>}
+            onClick={(e) => onOpenTrip?.(pickOf(m, e.clientX).id)}>
+            {badgeOn && <span className="v2-tl-more" aria-hidden="true">+{m.extras.length}</span>}
           </button>
         );
       })}

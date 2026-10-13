@@ -189,3 +189,30 @@ export function nearestStop(dots, x) {
   for (const d of dots) { const k = Math.abs(d.x - x); if (k < bd) { bd = k; best = d; } }
   return best;
 }
+
+// All time lanes (Prism): overlapping trips stack into up to 3 lanes inside the 64 px strip,
+// 14 px each with a 4 px gap. Greedy in start order: each trip takes the first lane that is
+// free at its start (bars and dots alike, by hit extent). A trip that would need a 4th lane
+// rides on the mark it overlaps as "+N" (click picks the nearest of them).
+export const LANES = { count: 3, heightPx: 14, gapPx: 4, dotHitPx: 14, centers: [38, 56, 20] };
+export function laneMarks(marks) {
+  const ext = (m) => (m.dot ? [m.cx - LANES.dotHitPx / 2, m.cx + LANES.dotHitPx / 2] : [m.x0, Math.max(m.x1, m.x0 + STRIP.minBarPx)]);
+  const order = marks.map((m, i) => ({ m, i, e: ext(m) })).sort((a, b) => a.e[0] - b.e[0] || a.i - b.i);
+  const ends = Array(LANES.count).fill(-Infinity);
+  const placed = [];
+  const out = new Map();
+  for (const o of order) {
+    const lane = ends.findIndex((end) => end + 2 <= o.e[0]);
+    if (lane >= 0) {
+      ends[lane] = o.e[1];
+      const r = { ...o.m, lane, ext: o.e, extras: [] };
+      placed.push(r); out.set(r.id, r);
+    } else {
+      // Overflow: attach to the placed mark it overlaps most (latest ending wins ties).
+      let host = null, best = -Infinity;
+      for (const p of placed) { const ov = Math.min(p.ext[1], o.e[1]) - Math.max(p.ext[0], o.e[0]); if (ov >= best) { best = ov; host = p; } }
+      if (host) host.extras.push({ ...o.m, x: o.m.cx });
+    }
+  }
+  return marks.map((m) => out.get(m.id)).filter(Boolean);
+}

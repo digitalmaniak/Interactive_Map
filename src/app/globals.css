@@ -343,8 +343,12 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
   border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--v2-radius); overflow: hidden; }
 .v2-timeline.is-lite { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(14, 18, 21, 0.9); }
 @media (max-width: 599px) { .v2-timeline { display: none; } }
-.v2-tl-trip { position: absolute; top: 35px; height: 6px; padding: 0; border: 0; background: rgba(230, 237, 240, 0.6); cursor: pointer; }
-.v2-tl-trip:hover, .v2-tl-trip:focus-visible { background: #E6EDF0; outline: none; }
+/* Trip marks: a 14 px lane tall hit area; the visible bar (6 px) or dot sits centred in it. */
+.v2-tl-trip { position: absolute; top: 31px; height: 14px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.v2-tl-trip::before { content: ""; position: absolute; left: 0; right: 0; top: 4px; height: 6px; background: rgba(230, 237, 240, 0.6); }
+.v2-tl-trip.is-dot::before { left: 4px; right: auto; width: 6px; border-radius: 50%; }
+.v2-tl-trip:hover::before, .v2-tl-trip:focus-visible::before { background: #E6EDF0; }
+.v2-tl-trip:hover, .v2-tl-trip:focus-visible { outline: none; }
 .v2-tl-tip { position: absolute; top: 44px; width: 120px; text-align: center; font: 400 10px/1.4 var(--v2-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .v2-tl-stop { position: absolute; padding: 0; border: 0; border-radius: 50%; background: #E6EDF0; cursor: pointer; }
 .v2-tl-stop.is-current { background: #FF3311; box-shadow: 0 0 0 4px rgba(255, 51, 17, 0.25); }

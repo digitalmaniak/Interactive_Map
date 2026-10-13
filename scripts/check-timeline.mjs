@@ -1,4 +1,4 @@
-import { makeScale, allTimeRange, yearTicks, tripMarks, zoomRange, dayTicks, placeLegs, planAnchors, timeToDate, dateToTime, STRIP, DAY, toMs, tripTimeline, stopPositions, overlapGroups, nearestStop } from "../src/components/timeline/timelineLogic.js";
+import { makeScale, allTimeRange, yearTicks, tripMarks, zoomRange, dayTicks, placeLegs, planAnchors, timeToDate, dateToTime, STRIP, DAY, toMs, tripTimeline, stopPositions, overlapGroups, nearestStop, laneMarks, LANES } from "../src/components/timeline/timelineLogic.js";
 let failed = 0; const ok = (c, m) => { console.log(`${c ? "PASS" : "FAIL"} ${m}`); if (!c) failed++; };
 const trips = [{ journey_id: "a", title: "Japan", first_date: "2025-01-10", last_date: "2025-02-02" }, { journey_id: "b", title: "Day", first_date: "2019-05-01", last_date: "2019-05-01" }, { journey_id: "c", title: "Undated", first_date: null }];
 const r = allTimeRange(trips, Date.UTC(2026, 9, 13));
@@ -53,4 +53,18 @@ const real = tripTimeline({ mode: "tripRange", from: "2025-08-18", to: "2025-08-
   { sort: 5, departAt: "2025-08-25 21:23:00+00", arriveAt: "2025-08-26 02:24:00+00" }] });
 const rd = ["a", "b", "c"].map((k) => toMs(real.pinDates[k].start)); const lo = toMs("2025-08-18 20:06:00+00"), hi = toMs("2025-08-25 21:23:00+00");
 ok(rd.every((d, i) => Math.abs(d - (lo + ((i + 0.5) / 3) * (hi - lo))) < 1), "Acatenango: stops spread evenly between the first flight's arrival and the last flight's departure");
+// Lanes: overlapping trips stack (3 lanes, greedy by start); a 4th overlap becomes +N.
+{
+  const mk = (id, x0, x1, dot = false) => ({ id, title: id, x0, x1, dot, cx: (x0 + x1) / 2 });
+  const L = laneMarks([mk("snow", 870, 874, true), mk("japan", 868, 876, true), mk("euro", 100, 200), mk("x", 150, 300)]);
+  const by = Object.fromEntries(L.map((m) => [m.id, m]));
+  ok(by.snow.lane !== by.japan.lane, `overlapping dots (Snowboarding Run vs Japan) take different lanes (${by.snow.lane}, ${by.japan.lane})`);
+  ok(by.euro.lane === 0 && by.x.lane === 1, "overlapping bars stack: first takes lane 0, next lane 1");
+  const centers = L.map((m) => LANES.centers[m.lane]);
+  ok(centers.every((c) => c - LANES.heightPx / 2 >= 0 && c + LANES.heightPx / 2 <= STRIP.heightPx), "all lanes fit the 64 px strip");
+  const four = laneMarks([mk("a", 10, 14, true), mk("b", 11, 15, true), mk("c", 12, 16, true), mk("d", 13, 17, true)]);
+  ok(four.length === 3 && four.reduce((n, m) => n + m.extras.length, 0) === 1, "a 4th overlapping trip falls back to the +N badge");
+  const apart = laneMarks([mk("p", 10, 14, true), mk("q", 60, 64, true)]);
+  ok(apart.every((m) => m.lane === 0), "trips that do not overlap stay in lane 0");
+}
 process.exit(failed ? 1 : 0);
