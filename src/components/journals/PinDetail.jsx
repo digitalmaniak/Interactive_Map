@@ -34,6 +34,9 @@ export default function PinDetail({
   setNewLogCategory,
   handleAddLog,
   handleRemovePin,
+  removeBusy = false,
+  removeError = "",
+  cancelRemove,
   onBack,
 }) {
   return (
@@ -53,9 +56,10 @@ export default function PinDetail({
           <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 700, color: "var(--v2-text)" }}>Remove this memory?</h2>
           <p style={{ fontSize: "0.9rem", color: "var(--v2-text-dim)", margin: 0, lineHeight: 1.5 }}>This will remove &quot;{activePin.title || activePin.location_name}&quot; and its logs from your journal.</p>
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button className="glass-pill icon-button" style={{ flex: 1, background: "var(--v2-surface-2)", border: "1px solid var(--v2-hairline)", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "var(--v2-text-dim)" }} onClick={() => setIsConfirmingDelete(false)}>CANCEL</button>
-            <button className="glass-pill btn-red" style={{ flex: 1, display: "flex", justifyContent: "center" }} onClick={handleRemovePin}>REMOVE</button>
+            <button className="glass-pill icon-button" style={{ flex: 1, background: "var(--v2-surface-2)", border: "1px solid var(--v2-hairline)", padding: "0.5rem 1rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", justifyContent: "center", color: "var(--v2-text-dim)" }} onClick={() => (cancelRemove ? cancelRemove() : setIsConfirmingDelete(false))}>CANCEL</button>
+            <button className="glass-pill btn-red" style={{ flex: 1, display: "flex", justifyContent: "center", opacity: removeBusy ? 0.6 : 1 }} onClick={handleRemovePin} disabled={removeBusy} aria-busy={removeBusy}>{removeBusy ? "REMOVING..." : "REMOVE"}</button>
           </div>
+          {removeError && <p role="alert" style={{ fontSize: "0.85rem", color: "#FF6B57", margin: 0, lineHeight: 1.4 }}>{removeError}</p>}
         </div>
       ) : isEditingPin ? (
         <div className="sidebar-scrollbar" style={{ overflowY: "auto", paddingRight: "0.5rem", flexGrow: 1 }}>

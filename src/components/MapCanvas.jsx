@@ -349,13 +349,31 @@ export default function MapCanvas() {
     }
   };
 
+  // REMOVE: one call at a time, aborted after 10 s. The dialog stays closable throughout;
+  // CANCEL aborts the call. Errors and timeouts show inline in the dialog.
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeError, setRemoveError] = useState("");
+  const removeCtl = useRef(null);
+  const cancelRemove = () => {
+    removeCtl.current?.abort();
+    removeCtl.current = null;
+    setRemoveBusy(false);
+    setRemoveError("");
+    setIsConfirmingDelete(false);
+  };
   const handleRemovePin = async () => {
-    if (!activePin) return;
+    if (!activePin || removeCtl.current) return;
     const id = activePin.id;
+    const ctl = new AbortController();
+    removeCtl.current = ctl;
+    const timer = setTimeout(() => ctl.abort(), 10000);
+    setRemoveBusy(true);
+    setRemoveError("");
     try {
-      const { error, deleted } = await deletePinRow(id);
+      const { error, deleted } = await deletePinRow(id, ctl.signal);
+      if (ctl.signal.aborted) throw new Error("timeout");
       if (error) throw error;
-      if (!deleted) throw new Error("This memory could not be removed. Please try again.");
+      if (!deleted) throw new Error("not removed");
       // Soft deleted on the server. Close the dialog and drop the pin everywhere it is shown.
       setIsConfirmingDelete(false);
       setPins((prev) => prev.filter((p) => p.id !== id));
@@ -363,9 +381,14 @@ export default function MapCanvas() {
       setClusterPins((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
       reloadTravelData();
     } catch (e) {
-      console.error(e);
-      setIsConfirmingDelete(false);
-      alert(e?.message || "Error removing memory.");
+      // Cancelled by the user: the dialog is already closed, say nothing.
+      if (removeCtl.current === ctl) {
+        console.error(e);
+        setRemoveError("This memory could not be removed. Please try again.");
+      }
+    } finally {
+      clearTimeout(timer);
+      if (removeCtl.current === ctl) { removeCtl.current = null; setRemoveBusy(false); }
     }
   };
 
@@ -699,6 +722,9 @@ export default function MapCanvas() {
             setNewLogCategory={setNewLogCategory}
             handleAddLog={handleAddLog}
             handleRemovePin={handleRemovePin}
+            removeBusy={removeBusy}
+            removeError={removeError}
+            cancelRemove={cancelRemove}
             onBackFromPin={handleBackFromPin}
             onSelectPin={handleSelectPinFromList}
             onSelectJourney={(journey) => {

@@ -64,6 +64,9 @@ export default function JournalsPanel({
   setNewLogCategory,
   handleAddLog,
   handleRemovePin,
+  removeBusy,
+  removeError,
+  cancelRemove,
   onBackFromPin,
   // Lists
   onSelectPin,
@@ -158,6 +161,9 @@ export default function JournalsPanel({
           setNewLogCategory={setNewLogCategory}
           handleAddLog={handleAddLog}
           handleRemovePin={handleRemovePin}
+          removeBusy={removeBusy}
+          removeError={removeError}
+          cancelRemove={cancelRemove}
           onBack={onBackFromPin}
         />
       ) : clusterPins ? (

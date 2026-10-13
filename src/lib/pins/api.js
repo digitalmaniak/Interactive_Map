@@ -42,10 +42,12 @@ export async function updatePin(id, fields) {
 }
 
 /** Delete a pin by id. */
-export async function removePin(id) {
+export async function removePin(id, signal) {
   // Soft delete through Harbor's owner-only RPC (safe to call twice). Success is ok or
   // already_deleted; anything else is reported as not removed.
-  const { data, error } = await supabase.rpc("soft_delete_pin", { p_id: id });
+  let q = supabase.rpc("soft_delete_pin", { p_id: id });
+  if (signal) q = q.abortSignal(signal);
+  const { data, error } = await q;
   const ok = Boolean(data && (data.ok || data.already_deleted));
   return { error, deleted: ok ? 1 : 0 };
 }
