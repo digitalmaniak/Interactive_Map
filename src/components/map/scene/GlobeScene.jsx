@@ -1043,13 +1043,27 @@ export default function GlobeScene({
     if (!flyEnabled) return undefined;
     const onKey = (e) => {
       const t = e.target;
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName))) return;
-      if (e.code === "Space" || e.key === " ") { e.preventDefault(); flyToggle(); }
-      else if (e.key === "Escape" && flyOn) { e.preventDefault(); flyStop(); }
+      if (e.code === "Space" || e.key === " ") {
+        if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName))) return;
+        e.preventDefault(); flyToggle();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [flyEnabled, flyOn, flyToggle, flyStop]);
+  }, [flyEnabled, flyToggle]);
+  // Esc while a flyover is active (playing or paused) ONLY stops the flyover. Capture phase
+  // on window runs before any button or the journal's Esc handler, and nothing else sees it.
+  // With no flyover active this listener is gone, so the journal's Esc works as before.
+  useEffect(() => {
+    if (!flyEnabled || !flyOn) return undefined;
+    const onEsc = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+      flyStop();
+    };
+    window.addEventListener("keydown", onEsc, true);
+    return () => window.removeEventListener("keydown", onEsc, true);
+  }, [flyEnabled, flyOn, flyStop]);
 
   // Exit when the selection is gone: a trip whose focus cleared, or a point whose panel
   // closed. Map button, empty click and panel close all land here.
