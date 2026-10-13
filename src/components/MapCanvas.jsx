@@ -90,6 +90,11 @@ export default function MapCanvas() {
     activeJourneyId != null
       ? journeys.find((j) => j.id === activeJourneyId) || null
       : null;
+  // The Imported bucket (undated pins from anywhere) is a collection, not a trip: the
+  // globe treats a pin opened from it as a single point selection.
+  const activeJourneyIsCollection =
+    activeJourneyId != null &&
+    (String(activeJourneyId).startsWith("__") || activeJourney?.title === "Imported");
 
   const resolveJourneyIdForPin = (pin) => {
     if (pin?.journey_id) return pin.journey_id;
@@ -171,12 +176,13 @@ export default function MapCanvas() {
 
   // Clicking the map closes the panel when open; clicking land (when closed)
   // starts a new memory at that spot; clicking open ocean does nothing.
-  const handleMapClick = ({ lat, lon, isLand }) => {
-    // Empty globe or ocean while a trip is open (or the panel is open) exits back to the map.
-    if (activeTab === "Journals" || activeJourneyId != null) {
+  const handleMapClick = ({ lat, lon, isLand, offGlobe }) => {
+    // Empty globe, ocean or space while a trip is open (or the panel is open) exits to the map.
+    if (activeTab === "Journals" || activeJourneyId != null || activePin) {
       closeJournalPanel();
       return;
     }
+    if (offGlobe) return;
     if (isLand) {
       setClickedCoords({ lat: parseFloat(lat.toFixed(4)), lon: parseFloat(lon.toFixed(4)) });
       setActiveTab("Journals");
@@ -555,6 +561,7 @@ export default function MapCanvas() {
             activePinId={activePin?.id || null}
             focusJourneyId={activeJourneyId}
             flyTo={flyTo}
+            focusIsCollection={activeJourneyIsCollection}
             onPinClick={handlePinClick}
             onMapClick={handleMapClick}
             onHoverRegion={handleHoverRegion}

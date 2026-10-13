@@ -59,6 +59,8 @@ function pickTier() {
   return cores >= 6 && mem >= 4 ? "phoneHigh" : "phoneLow";
 }
 
+// Trip centre: mean of the pins as unit 3D vectors, normalized (never a lat/lng average),
+// so trips crossing the 180 line centre on the right side of the globe.
 function tripFraming(points) {
   const c = new THREE.Vector3();
   for (const p of points) c.add(lonLatToVec3(p.lon, p.lat));
@@ -728,6 +730,7 @@ export default function GlobeScene({
   activePinId = null,
   focusJourneyId = null,
   flyTo = null,
+  focusIsCollection = false,
   onPinClick,
   onMapClick,
   onHoverRegion,
@@ -828,49 +831,90 @@ export default function GlobeScene({
   }, [items]);
 
   // Opening a trip eases into mock C's tilted close view. Closing eases back out.
+  // Trip engagement. `engaged` remembers what the camera framed: a trip (its journey key)
+  // or a single point (a pin from the Imported bucket, or a pin with no trip). Exit is
+  // driven only by this ref and the current props, so a click during the opening move
+  // is never lost and no stale flag survives the exit.
+  const engagedRef = useRef(null);
   const focusKeyRef = useRef(null);
+
+  // Shared exit: stay over the selection, level the tilt, FOV 35, pull back to 3.2 R.
+  // Never a saved pre-trip pose or the default view.
+  const exitTripView = useCallback(() => {
+    const eng = engagedRef.current;
+    engagedRef.current = null;
+    if (!eng) return;
+    let n = null;
+    if (eng.kind === "trip") {
+      const tripPins = items.filter((it) => String(it.pin.journey_id) === eng.key);
+      if (tripPins.length) n = tripFraming(tripPins).n;
+    } else if (eng.n) n = eng.n.clone();
+    if (!n) {
+      const c = controlsRef.current;
+      const tgt = c && c.target.lengthSq() > 1e-6 ? c.target : c?.object.position;
+      n = tgt ? tgt.clone().normalize() : new THREE.Vector3(0, 0, 1);
+    }
+    moveRef.current = { n, D: HOME_DIST, tilt: 0, fov: CAM.keyframes[0].fov, trip: false };
+  }, [items]);
+
+  // Opening a trip: frame its pins (skipped for the Imported collection, which opens as
+  // a single point via flyTo).
   useEffect(() => {
-    const key = focusing ? String(focusJourneyId) : null;
+    const key = focusing && !focusIsCollection ? String(focusJourneyId) : null;
     if (key === focusKeyRef.current) return;
     const stops = items.filter((it) => !it.dimmed);
     if (key != null && stops.length === 0) return; // wait for pins
-    const prev = focusKeyRef.current;
     focusKeyRef.current = key;
-    if (key != null) {
-      // Frame the pins' ground points so their projected bbox is centred in the visible
-      // area left of the panel with 80 px padding, at the trip tilt (iterative solve).
-      const fr = tripFraming(stops);
-      const view = viewRef.current;
-      let n = fr.n, D = fr.fit;
-      if (view && view.width && view.height) {
-        const sol = solveTripFit(stops.map((it) => it.pos.clone().normalize()), {
-          W: view.width, H: view.height, offset: panelOffsetFor(panelOpen, view.width, panelWidth),
-          fov: TRIP_KEY.fov, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, pad: 80, minAlt: TRIP_MIN_ALT,
-        });
-        n = sol.n; D = sol.D;
-      }
-      moveRef.current = { n, D, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true };
-    } else if (prev != null) {
-      // Leaving a trip: stay over the trip's region (centroid of its pins, else the
-      // current look target), level the tilt and pull back to globe view altitude.
-      const tripPins = items.filter((it) => String(it.pin.journey_id) === prev);
-      let n;
-      if (tripPins.length) n = tripFraming(tripPins).n;
-      else {
-        const c = controlsRef.current;
-        const tgt = c && c.target.lengthSq() > 1e-6 ? c.target : c?.object.position;
-        n = tgt ? tgt.clone().normalize() : new THREE.Vector3(0, 0, 1);
-      }
-      moveRef.current = { n, D: HOME_DIST, tilt: 0, fov: CAM.keyframes[0].fov, trip: false };
+    if (key == null) return;
+    // Frame the pins' ground points so their projected bbox is centred in the visible
+    // area left of the panel with 80 px padding, at the trip tilt (iterative solve).
+    const fr = tripFraming(stops);
+    const view = viewRef.current;
+    let n = fr.n, D = fr.fit;
+    if (view && view.width && view.height) {
+      const sol = solveTripFit(stops.map((it) => it.pos.clone().normalize()), {
+        W: view.width, H: view.height, offset: panelOffsetFor(panelOpen, view.width, panelWidth),
+        fov: TRIP_KEY.fov, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, pad: 80, minAlt: TRIP_MIN_ALT,
+      });
+      n = sol.n; D = sol.D;
     }
-  }, [focusing, focusJourneyId, items, panelOpen, panelWidth]);
+    engagedRef.current = { kind: "trip", key };
+    moveRef.current = { n, D, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true };
+  }, [focusing, focusIsCollection, focusJourneyId, items, panelOpen, panelWidth]);
 
   useEffect(() => {
     if (!flyTo) return;
     const lon = Number(flyTo.lon), lat = Number(flyTo.lat);
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-    moveRef.current = { n: lonLatToVec3(lon, lat).normalize(), D: 1.12, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), fov: TRIP_KEY.fov, trip: true };
+    const n = lonLatToVec3(lon, lat).normalize();
+    // A pin inside a real trip keeps the trip as the exit anchor; otherwise it is a point.
+    const eng = engagedRef.current;
+    if (!(eng && eng.kind === "trip" && eng.key === focusKeyRef.current)) engagedRef.current = { kind: "point", n };
+    moveRef.current = { n, D: 1.12, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), fov: TRIP_KEY.fov, trip: true };
   }, [flyTo]);
+
+  // Exit when the selection is gone: a trip whose focus cleared, or a point whose panel
+  // closed. Map button, empty click and panel close all land here.
+  useEffect(() => {
+    const eng = engagedRef.current;
+    if (!eng) return;
+    const tripKey = focusing && !focusIsCollection ? String(focusJourneyId) : null;
+    const gone = eng.kind === "trip" ? tripKey !== eng.key : !panelOpen;
+    if (gone) {
+      if (tripKey == null) focusKeyRef.current = null;
+      exitTripView();
+    }
+  }, [focusing, focusIsCollection, focusJourneyId, panelOpen, activePinId, exitTripView]);
+
+  // Canvas level empty clicks (space, beams, anything that is not a pin): exit when the
+  // pointer moved under 5 px between down and up.
+  const downRef = useRef(null);
+  const onCanvasPointerDown = useCallback((e) => { downRef.current = { x: e.clientX, y: e.clientY }; }, []);
+  const onPointerMissed = useCallback((e) => {
+    const d = downRef.current;
+    if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) >= DRAG_PX) return;
+    onMapClick?.({ offGlobe: true });
+  }, [onMapClick]);
 
   const countryAt = useCallback(
     (ll) => (ll && geo ? geo.features.find((f) => geoContains(f, [ll.lon, ll.lat])) || null : null),
@@ -944,8 +988,9 @@ export default function GlobeScene({
   }
 
   return (
-    <div className="v2-map">
+    <div className="v2-map" onPointerDownCapture={onCanvasPointerDown}>
       <Canvas
+        onPointerMissed={onPointerMissed}
         dpr={[t.dpr[0], t.dpr[1]]}
         gl={{ antialias: t.msaa, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
         camera={{ fov: CAM.keyframes[0].fov, near: 0.005, far: 100, position: [0, 0.9, HOME_DIST - 0.12] }}
