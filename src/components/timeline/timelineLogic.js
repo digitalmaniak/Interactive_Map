@@ -126,3 +126,54 @@ function interp(arr, key, val, other) {
 }
 export const timeToDate = (anchors, t) => interp(anchors, "t", t, "d");
 export const dateToTime = (anchors, d) => interp(anchors, "d", d, "t");
+
+// Trip range and per stop dates for the strip. Dated stops: their dates. No dated stop:
+// the trip's own range (journey_stats_v2), stops spread evenly by order inside it. Neither:
+// an "Undated" range with stops spaced by order only (undated: true).
+export function tripTimeline(trip) {
+  const n = trip.stops.length;
+  if (trip.mode !== "tripRange" && trip.mode !== "undated" && trip.from) {
+    const range = { t0: toMs(trip.from), t1: toMs(trip.to || trip.from) + DAY };
+    return { range, pinDates: Object.fromEntries(trip.stops.map((s) => [s.id, { start: s.start, end: s.end }])), undated: false, spread: false };
+  }
+  const undated = !trip.from;
+  const range = undated ? { t0: 0, t1: Math.max(1, n) * DAY } : { t0: toMs(trip.from), t1: toMs(trip.to || trip.from) + DAY };
+  const step = (range.t1 - range.t0) / Math.max(1, n);
+  const iso = (t) => new Date(t).toISOString();
+  const pinDates = Object.fromEntries(trip.stops.map((s, i) => [s.id, { start: iso(range.t0 + (i + 0.5) * step), end: iso(range.t0 + (i + 0.5) * step) }]));
+  return { range, pinDates, undated, spread: true };
+}
+
+// Stop dot x: the playhead position of that stop's first arrival in the flyover plan, so a
+// dot and the playhead always agree; stops outside the plan fall back to their date.
+export function stopPositions(stops, pinDates, anchors, plan, scale) {
+  const at = new Map();
+  if (plan && anchors.length) {
+    const holds = anchors.filter((a) => a.stop);
+    let h = 0;
+    plan.steps.forEach((s) => { if (s.kind !== "hold") return; const pin = plan.stops[s.stopIndex]?.pinId; const a = holds[h++]; if (pin && a && !at.has(pin)) at.set(pin, a.d); });
+  }
+  return stops.map((s) => {
+    let d = at.get(s.id);
+    if (!Number.isFinite(d)) { const st = toMs(pinDates[s.id]?.start); if (!Number.isFinite(st)) return null; d = String(pinDates[s.id]?.start).length <= 10 ? st + DAY / 2 : st; }
+    return { id: s.id, label: s.label, x: scale.x(d) };
+  }).filter(Boolean);
+}
+
+// Dots closer than minPx chain into one overlap group. Map id -> { ids, size }.
+export function overlapGroups(dots, minPx) {
+  const sorted = [...dots].sort((a, b) => a.x - b.x);
+  const out = new Map();
+  let cur = [];
+  const flush = () => { const g = { ids: cur.map((d) => d.id), size: cur.length }; cur.forEach((d) => out.set(d.id, g)); cur = []; };
+  sorted.forEach((d) => { if (cur.length && d.x - cur[cur.length - 1].x >= minPx) flush(); cur.push(d); });
+  if (cur.length) flush();
+  return out;
+}
+
+// Click on overlapping dots: the dot nearest the cursor wins, not the top one.
+export function nearestStop(dots, x) {
+  let best = null, bd = Infinity;
+  for (const d of dots) { const k = Math.abs(d.x - x); if (k < bd) { bd = k; best = d; } }
+  return best;
+}

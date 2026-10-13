@@ -1,4 +1,4 @@
-import { makeScale, allTimeRange, yearTicks, tripMarks, zoomRange, dayTicks, placeLegs, planAnchors, timeToDate, dateToTime, STRIP, DAY, toMs } from "../src/components/timeline/timelineLogic.js";
+import { makeScale, allTimeRange, yearTicks, tripMarks, zoomRange, dayTicks, placeLegs, planAnchors, timeToDate, dateToTime, STRIP, DAY, toMs, tripTimeline, stopPositions, overlapGroups, nearestStop } from "../src/components/timeline/timelineLogic.js";
 let failed = 0; const ok = (c, m) => { console.log(`${c ? "PASS" : "FAIL"} ${m}`); if (!c) failed++; };
 const trips = [{ journey_id: "a", title: "Japan", first_date: "2025-01-10", last_date: "2025-02-02" }, { journey_id: "b", title: "Day", first_date: "2019-05-01", last_date: "2019-05-01" }, { journey_id: "c", title: "Undated", first_date: null }];
 const r = allTimeRange(trips, Date.UTC(2026, 9, 13));
@@ -28,4 +28,24 @@ ok(Math.abs(dateToTime(an, timeToDate(an, 3000)) - 3000) < 1, "date to time roun
 ok([0, 7500, -5, 9e9].every((t) => Number.isFinite(timeToDate(an, t))), "no NaN at the ends");
 const same = planAnchors({ steps: [{ kind: "hold", ms: 1000, stopIndex: 0 }, { kind: "hold", ms: 1000, stopIndex: 1 }, { kind: "hold", ms: 1000, stopIndex: 2 }], totalMs: 3000 }, [toMs("2025-01-10"), toMs("2025-01-10"), toMs("2025-01-10")], range);
 ok(same[0].d < same[1].d && same[1].d < same[2].d && same[2].d - same[0].d < DAY, "same-day stops spread inside that day so each is reachable");
+// Trips with no dated stop: trip range first, else an "Undated" range by order.
+const acat = { mode: "tripRange", from: "2025-08-18", to: "2025-08-25", stops: [{ id: "a1" }, { id: "a2" }, { id: "a3" }] };
+const at = tripTimeline(acat);
+const ad = ["a1", "a2", "a3"].map((k) => toMs(at.pinDates[k].start));
+ok(!at.undated && at.range.t0 === toMs("2025-08-18") && at.range.t1 === toMs("2025-08-26") && ad[0] < ad[1] && ad[1] < ad[2] && Math.abs((ad[1] - ad[0]) - (ad[2] - ad[1])) < 1, "no dated stop: trip range from journey_stats_v2, stops spread evenly by order");
+const un = tripTimeline({ mode: "undated", from: null, stops: acat.stops });
+const ul = placeLegs([{ id: "x", mode: "drive", fromPinId: "a1", toPinId: "a2" }, { id: "y", mode: "fly", departAt: null, fromPinId: "a2", toPinId: "a3" }], un.pinDates, un.range);
+ok(un.undated && ul.every((l) => l.alpha === 0.4) && ul[0].a < ul[1].a, "no dates at all: undated range, legs by order at 40%");
+const dt = tripTimeline({ mode: "dated", from: "2025-01-10", to: "2025-01-12", stops: [{ id: "p", start: "2025-01-10" }] });
+ok(!dt.undated && !dt.spread && dt.pinDates.p.start === "2025-01-10", "dated trips unchanged");
+// Stop dots at the playhead anchor of their arrival; overlaps; nearest pick.
+const plan2 = { steps: [{ kind: "move", ms: 1000, stopIndex: 0 }, { kind: "hold", ms: 1000, stopIndex: 0 }, { kind: "move", ms: 1000, stopIndex: 1 }, { kind: "hold", ms: 1000, stopIndex: 1 }, { kind: "move", ms: 1000, stopIndex: 2 }, { kind: "hold", ms: 1000, stopIndex: 2 }], stops: [{ pinId: "s1" }, { pinId: "s2" }, { pinId: "s3" }], totalMs: 6000 };
+const sd = { s1: { start: "2025-01-10" }, s2: { start: "2025-01-10" }, s3: { start: "2025-01-20" } };
+const an2 = planAnchors(plan2, ["s1", "s2", "s3"].map((k) => toMs(sd[k].start)), range);
+const sc2 = makeScale(range.t0, range.t1, 0, 150);
+const dots = stopPositions([{ id: "s1" }, { id: "s2" }, { id: "s3" }], sd, an2, plan2, sc2);
+ok(dots.every((d) => { const a = an2.filter((x) => x.stop)[["s1", "s2", "s3"].indexOf(d.id)]; return Math.abs(sc2.x(a.d) - d.x) < 1e-9; }), "stop dot x equals the playhead x at that stop");
+const gr = overlapGroups(dots, 8);
+ok(gr.get("s1").size === 2 && gr.get("s2") === gr.get("s1") && gr.get("s3").size === 1, `same day stops overlap (+1), others alone`);
+ok(nearestStop(dots, dots[1].x + 0.5).id === "s2" && nearestStop(dots, dots[0].x - 0.5).id === "s1", "click picks the dot nearest the cursor");
 process.exit(failed ? 1 : 0);

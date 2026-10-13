@@ -4,7 +4,7 @@
 // Trip view: days, legs by date, stops, and a playhead mapped to flyover time that scrubs
 // the existing flyover controller. Undated stops are never placed; a chip opens review.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { STRIP, DAY, toMs, makeScale, allTimeRange, yearTicks, tripMarks, zoomRange, panRange, dayTicks, placeLegs, planAnchors, timeToDate, dateToTime } from "./timelineLogic";
+import { STRIP, DAY, toMs, makeScale, allTimeRange, yearTicks, tripMarks, zoomRange, panRange, dayTicks, placeLegs, planAnchors, timeToDate, dateToTime, tripTimeline, stopPositions, overlapGroups, nearestStop } from "./timelineLogic";
 
 const mono = "var(--v2-mono)";
 
@@ -27,10 +27,10 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
 
   // ---- Trip ----
   const tr = useMemo(() => {
-    if (!trip || !trip.from) return null;
-    const range = { t0: toMs(trip.from), t1: toMs(trip.to) + DAY };
-    const pinDates = Object.fromEntries(trip.stops.map((s) => [s.id, { start: s.start, end: s.end }]));
-    return { range, legs: placeLegs(trip.legs, pinDates, range), pinDates };
+    if (!trip) return null;
+    const t = tripTimeline(trip);
+    const legs = placeLegs(trip.legs, t.pinDates, t.range).map((l) => (t.undated ? { ...l, guessed: true, alpha: STRIP.guessedAlpha } : l));
+    return { ...t, legs };
   }, [trip]);
   const plan = useMemo(() => (tr && fly ? fly.planNow() : null), [tr, fly]);
   const anchors = useMemo(() => {
@@ -99,13 +99,26 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
     return () => el.removeEventListener("wheel", onWheel);
   }, [tr, full, x0, x1]);
 
-  const ticks = tr ? dayTicks(tr.range.t0, tr.range.t1, x1 - x0) : yearTicks(v.t0, v.t1);
+  // Trip name hover label: tagged with the view it was set in, so any view change (trip
+  // opened or closed, zoom, pan) drops it.
+  const viewKey = `${tr ? `trip:${tr.range.t0}:${tr.range.t1}` : "all"}|${v.t0}|${v.t1}`;
+  const hoverNow = hover && hover.key === viewKey ? hover.m : null;
+
+  const ticks = tr ? (tr.undated ? [{ t: tr.range.t0, label: "Undated" }, { t: tr.range.t1, label: null }] : dayTicks(tr.range.t0, tr.range.t1, x1 - x0)) : yearTicks(v.t0, v.t1);
   const cy = 38;
   const current = currentPinId;
+  // Stop dots sit where the playhead lands for that stop (anchors), else at their date.
+  const dots = tr ? stopPositions(trip.stops, tr.pinDates, anchors, plan, scale) : [];
+  const groups = overlapGroups(dots, STRIP.currentPx);
+  const pickStop = (e) => {
+    const r = box.current.getBoundingClientRect();
+    const d = nearestStop(dots, e.clientX - r.left);
+    if (d) onStopClick?.(d.id);
+  };
 
   return (
     <div ref={box} className={`v2-timeline${lite ? " is-lite" : ""}`} style={{ left, right }} role="region" aria-label={tr ? "Trip timeline" : "Trips timeline"}
-      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onMouseLeave={() => setHover(null)}>
       <svg width={w} height={STRIP.heightPx} aria-hidden="true" style={{ position: "absolute", inset: 0 }}>
         {ticks.map((t) => {
           const x = scale.x(t.t); if (x < x0 - 0.5 || x > x1 + 0.5) return null;
@@ -125,14 +138,21 @@ export default function TimelineStrip({ left, right, lite, reducedMotion, trips 
       {!tr && tripMarks(trips, scale).filter((m) => m.x1 >= x0 && m.x0 <= x1).map((m) => (
         <button key={m.id} type="button" data-hit className="v2-tl-trip" aria-label={`Open ${m.title}`}
           style={m.dot ? { left: m.cx - STRIP.dotPx / 2, width: STRIP.dotPx, borderRadius: "50%" } : { left: Math.max(x0, m.x0), width: Math.min(x1, m.x1) - Math.max(x0, m.x0) }}
-          onMouseEnter={() => setHover(m)} onMouseLeave={() => setHover(null)} onFocus={() => setHover(m)} onBlur={() => setHover(null)}
+          onMouseEnter={() => setHover({ m, key: viewKey })} onMouseLeave={() => setHover(null)} onFocus={() => setHover({ m, key: viewKey })} onBlur={() => setHover(null)}
           onClick={() => onOpenTrip?.(m.id)} />
       ))}
-      {!tr && hover && <div className="v2-tl-tip" style={{ left: Math.min(x1 - 120, Math.max(x0, hover.cx - 60)) }}>{hover.title}</div>}
-      {tr && trip.stops.filter((s) => s.start).map((s) => {
-        const x = scale.x(toMs(s.start) + DAY / 2); const cur = s.id === current; const sz = cur ? STRIP.currentPx : STRIP.stopPx;
-        return <button key={s.id} type="button" data-hit className={`v2-tl-stop${cur ? " is-current" : ""}`} aria-label={`Fly to ${s.label}`} title={s.label}
-          style={{ left: x - sz / 2, top: cy - sz / 2, width: sz, height: sz }} onClick={() => onStopClick?.(s.id)} />;
+      {!tr && hoverNow && <div className="v2-tl-tip" style={{ left: Math.min(x1 - 120, Math.max(x0, hoverNow.cx - 60)) }}>{hoverNow.title}</div>}
+      {tr && dots.map((d) => {
+        const cur = d.id === current; const sz = cur ? STRIP.currentPx : STRIP.stopPx;
+        const g = groups.get(d.id);
+        // "+N" sits on the dot a click would pick: the current one, else the group's first.
+        const badgeOn = g && g.size > 1 && (g.ids.includes(current) ? current === d.id : g.ids[0] === d.id);
+        return (
+          <button key={d.id} type="button" data-hit className={`v2-tl-stop${cur ? " is-current" : ""}`} aria-label={`Fly to ${d.label}`} title={d.label} data-stop={d.id}
+            style={{ left: d.x - sz / 2, top: cy - sz / 2, width: sz, height: sz, zIndex: badgeOn ? 2 : cur ? 1 : undefined }} onClick={pickStop}>
+            {badgeOn && <span className="v2-tl-more" aria-hidden="true">+{g.size - 1}</span>}
+          </button>
+        );
       })}
       {tr && fly && anchors.length > 0 && (
         <div ref={head} className="v2-tl-head" style={{ transition: scrubbing && !reducedMotion ? `transform ${STRIP.scrubEaseMs}ms ease` : "none" }} aria-hidden="true" />

@@ -159,6 +159,23 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
     publish({ playing: false, paused: true, done: false, legIndex: step.legIndex, stopIndex: step.stopIndex, pinId: step.kind === "end" ? null : to?.pinId ?? null, legId: step.kind === "end" ? null : step.legId });
   }, [enabled, fov, moveRef, planNow, publish, reducedMotion]);
 
+  // Stop dot: set the flyover time to that stop's arrival (paused there). Playhead, current
+  // marker and camera follow from seek; RESUME continues from this stop. Returns false when
+  // the stop is not in the plan (caller falls back to opening the pin).
+  const seekStop = useCallback((pinId, easeMs = 600) => {
+    if (!enabled) return false;
+    const plan = planNow();
+    let t = 0, hit = -1;
+    for (let k = 0; k < plan.steps.length; k++) {
+      const s = plan.steps[k];
+      if (s.kind === "hold" && plan.stops[s.stopIndex]?.pinId === pinId) { hit = k; break; }
+      t += s.ms;
+    }
+    if (hit < 0) return false;
+    seek(t, easeMs);
+    return true;
+  }, [enabled, planNow, seek]);
+
   const toggle = useCallback(() => { if (r.current.playing) pause(); else play(); }, [pause, play]);
 
   // Changing trips, leaving trip view or unmounting: cancel the timer, drop the plan and
@@ -177,5 +194,5 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
   // Outside trip view the flyover always reads as idle (refs were reset above).
   const live = enabled && state.key === tripKey ? state : IDLE;
   useEffect(() => { flyoverActive.current = !!(live.playing || live.paused); }, [live.playing, live.paused]);
-  return { state: live, play, pause, stop, toggle, seek, timeNow, planNow };
+  return { state: live, play, pause, stop, toggle, seek, seekStop, timeNow, planNow };
 }

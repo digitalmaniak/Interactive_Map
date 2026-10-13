@@ -1108,27 +1108,45 @@ export default function GlobeScene({
     return { base: parts.join("   "), km: kmText };
   }, [tripStops, tripDates, legs]);
 
-  // Timeline strip: shown at 600 px and wider, left of the panel, clear of the profile chip.
-  const [stripBox, setStripBox] = useState({ W: 0, chipRight: 0 });
+  // Timeline strip: shown at 600 px and wider, left of the panel, clear of the profile chip,
+  // and ending 12 px before the Add entry button (measured, so it tracks the button's size).
+  const [stripBox, setStripBox] = useState({ W: 0, H: 0, chipRight: 0, addLeft: null, addTop: null });
   useEffect(() => {
     const measure = () => {
       const r = document.querySelector(".ui-layer .bottom-left-group")?.getBoundingClientRect();
-      setStripBox({ W: window.innerWidth, chipRight: r && r.width > 0 ? r.right : 0 });
+      const a = document.querySelector(".ui-layer .bottom-right-group")?.getBoundingClientRect();
+      const next = { W: window.innerWidth, H: window.innerHeight, chipRight: r && r.width > 0 ? r.right : 0, addLeft: a && a.width > 0 ? a.left : null, addTop: a && a.width > 0 ? a.top : null };
+      setStripBox((cur) => (Object.keys(next).every((k) => cur[k] === next[k]) ? cur : next));
     };
     measure();
     window.addEventListener("resize", measure);
-    const t = setTimeout(measure, 500);
-    return () => { window.removeEventListener("resize", measure); clearTimeout(t); };
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    const watch = () => ["bottom-left-group", "bottom-right-group"].forEach((c) => { const el = document.querySelector(`.ui-layer .${c}`); if (el && ro) ro.observe(el); });
+    watch();
+    const t = setTimeout(() => { watch(); measure(); }, 500);
+    return () => { window.removeEventListener("resize", measure); ro?.disconnect(); clearTimeout(t); };
   }, []);
   const stripOn = !!timeline && stripBox.W >= STRIP.hideBelowPx;
   const stripLeft = Math.max(STRIP.insetPx, stripBox.chipRight ? stripBox.chipRight + STRIP.gapPx : 0);
+  const stripRight = useMemo(() => {
+    const base = (panelOpen ? panelWidth : 0) + STRIP.insetPx;
+    const { W, H, addLeft, addTop } = stripBox;
+    // Only when the button shares the strip's band and sits left of the strip's right end.
+    if (addLeft == null || addTop == null || addTop >= H - STRIP.insetPx || addTop + 1 < H - STRIP.insetPx - STRIP.heightPx - 64) return base;
+    if (addLeft - STRIP.gapPx >= W - base) return base;
+    return Math.max(base, W - addLeft + STRIP.gapPx);
+  }, [stripBox, panelOpen, panelWidth]);
+  // Trip range for the strip: stop dates first; with no dated stop, the trip's own dates
+  // (journey_stats_v2); with neither, an undated range spaced by stop order.
   const stripTrip = useMemo(() => {
-    if (!tripStops.length || !tripDates) return null;
-    return {
-      from: tripDates.from, to: tripDates.to, legs,
-      stops: tripStops.map((it) => ({ id: it.pin.id, label: it.text, start: it.pin.start_date ? String(it.pin.start_date).slice(0, 10) : null, end: it.pin.end_date ? String(it.pin.end_date).slice(0, 10) : null })),
-    };
-  }, [tripStops, tripDates, legs]);
+    if (!tripStops.length) return null;
+    const stops = tripStops.map((it) => ({ id: it.pin.id, label: it.text, start: it.pin.start_date ? String(it.pin.start_date).slice(0, 10) : null, end: it.pin.end_date ? String(it.pin.end_date).slice(0, 10) : null }));
+    if (tripDates) return { from: tripDates.from, to: tripDates.to, legs, stops, mode: "dated" };
+    const row = (timeline?.trips || []).find((r) => r.journey_id === focusJourneyId);
+    const from = row?.first_date ? String(row.first_date).slice(0, 10) : null;
+    const to = row?.last_date ? String(row.last_date).slice(0, 10) : from;
+    return { from, to, legs, stops, mode: from ? "tripRange" : "undated" };
+  }, [tripStops, tripDates, legs, timeline, focusJourneyId]);
 
   // Trip flyover: stop to stop in leg order through the same CameraController.
   const flyEnabled = focusing && !focusIsCollection && legs.length > 0;
@@ -1387,7 +1405,7 @@ export default function GlobeScene({
       {stripOn && (
         <TimelineStrip
           left={stripLeft}
-          right={(panelOpen ? panelWidth : 0) + STRIP.insetPx}
+          right={stripRight}
           lite={force3d}
           reducedMotion={reducedMotion}
           trips={timeline.trips}
@@ -1397,7 +1415,7 @@ export default function GlobeScene({
           trip={stripTrip}
           currentPinId={shownActivePinId}
           fly={stripTrip && flyEnabled ? fly : null}
-          onStopClick={(id) => { const it = tripStops.find((x) => x.pin.id === id); if (it) onPinClick?.(it.pin); }}
+          onStopClick={(id) => { if (flyEnabled && fly.seekStop(id)) return; const it = tripStops.find((x) => x.pin.id === id); if (it) onPinClick?.(it.pin); }}
         />
       )}
       {contextLost && (
