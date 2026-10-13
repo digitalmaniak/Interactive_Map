@@ -337,6 +337,17 @@ function BackdropSpin({ children, reducedMotion }) {
   return <group ref={ref} rotation={[0.35, -1.2, 0]}>{children}</group>;
 }
 
+// Reports once, after the first frame has been drawn and presented (next rAF).
+function FirstFrame({ onFirstFrame }) {
+  const done = useRef(false);
+  useFrame(() => {
+    if (done.current) return;
+    done.current = true;
+    requestAnimationFrame(() => onFirstFrame?.());
+  });
+  return null;
+}
+
 const isTyping = () => {
   const el = document.activeElement;
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
@@ -387,6 +398,8 @@ export default function GlobeScene({
   onMapClick,
   onHoverRegion,
   backdrop = false,
+  onFirstFrame,
+  onFallback,
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const [tier, setTier] = useState(() => pickTier());
@@ -483,14 +496,16 @@ export default function GlobeScene({
   // Lowest tier: no WebGL, software rendering, or sustained fps under ~20 shows a static image.
   const [renderTier] = useState(() => detectRenderTier());
   const [lowFps, setLowFps] = useState(false);
-  const onLowFps = useCallback(() => setLowFps(true), []);
-  if (renderTier === "static" || lowFps) return <StaticGlobe className={backdrop ? "v2-map-backdrop" : ""} />;
+  const onLowFps = useCallback(() => { setLowFps(true); onFallback?.(); }, [onFallback]);
+  useEffect(() => { if (backdrop && renderTier === "static") onFallback?.(); }, [backdrop, renderTier, onFallback]);
+  // Backdrop: the parent owns the static image and its crossfade, so render nothing here.
+  if (renderTier === "static" || lowFps) return backdrop ? null : <StaticGlobe />;
 
   if (backdrop) {
     // Login backdrop: smallest tier, no bloom, demand frameloop driven at ~30fps by
     // BackdropDriver, paused while an input has focus or the tab is hidden.
     return (
-      <div className="v2-map v2-map-backdrop" aria-hidden="true">
+      <div className="v2-map" aria-hidden="true">
         <Canvas
           dpr={[1, 1.25]}
           frameloop="demand"
@@ -501,6 +516,7 @@ export default function GlobeScene({
         >
           <color attach="background" args={[C.bg]} />
           <BackdropDriver fps={30} reducedMotion={reducedMotion} />
+          <FirstFrame onFirstFrame={onFirstFrame} />
           <FpsGuard minFps={20} onLow={onLowFps} />
           <BackdropSpin reducedMotion={reducedMotion}>
             {geo && <Globe geo={geo} tier="phoneLow" tripView={tripView} onGlobeClick={() => {}} onGlobeHover={() => {}} />}
