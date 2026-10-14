@@ -22,7 +22,7 @@ import { resolveLegs } from "./legs/legGeometry";
 import { sharedJourneyLegs } from "../../../lib/journeys/legs";
 import { tripZoomK } from "./legs/legGeometry";
 import useFlyover from "./flyover/useFlyover";
-import { TRIP_TITLE, titleReservePx, titleBottomPx, CROSSHAIR, HOME_RINGS, pickHomeBase } from "./mockA";
+import { TRIP_TITLE, titleReservePx, titleBottomPx, HOME_RINGS, pickHomeBase } from "./mockA";
 import { fetchHomeBases } from "../../../lib/homeBases";
 import { tripCounts } from "../../../lib/legs/tripHeader";
 import { poseFor, localFrame, raySphere, solveTripFit, estimateLabelBox } from "./tripFit";
@@ -1505,11 +1505,7 @@ export default function GlobeScene({
       </Canvas>
 
       <div className="v2-frame" style={{ right: panelOpen ? panelWidth : 0 }} aria-hidden={!(tripStops.length && focusTitle)}>
-        {["tl", "tr", "bl", "br"].map((c) => (
-          <svg key={c} className={`v2-cross is-${c}`} width={CROSSHAIR.armPx} height={CROSSHAIR.armPx} viewBox={`0 0 ${CROSSHAIR.armPx} ${CROSSHAIR.armPx}`} style={{ opacity: CROSSHAIR.opacity, margin: CROSSHAIR.inset }} aria-hidden="true">
-            <path d={`M${CROSSHAIR.armPx / 2} 0V${CROSSHAIR.armPx}M0 ${CROSSHAIR.armPx / 2}H${CROSSHAIR.armPx}`} stroke={CROSSHAIR.color} strokeWidth={CROSSHAIR.strokePx} fill="none" />
-          </svg>
-        ))}
+        {/* Corner crosshairs come from the shell (Crosshairs, 10px in); no inner set here. */}
         {tripStops.length > 0 && focusTitle && (
           <TripTitle key={String(focusJourneyId)} title={focusTitle} sub={tripSub} tripBlend={tripBlend} instant={force3d || reducedMotion} lift={stripOn ? STRIP.heightPx : 0} sheetBottom={sheetInset ? sheetInset + 68 : 0} />
         )}
