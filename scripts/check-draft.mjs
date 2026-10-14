@@ -1,5 +1,5 @@
 // Node check: trip draft helpers and the stub parser. Run: node scripts/check-draft.mjs
-import { LEG_MODES, normalizeDraft, canSave, toRpcDraft, stubParse, warningsFor, hasLocation, explicitDate, dayStated } from "../src/lib/draft/draft.js";
+import { LEG_MODES, normalizeDraft, canSave, toRpcDraft, stubParse, warningsFor, hasLocation, saveHint, explicitDate, dayStated } from "../src/lib/draft/draft.js";
 let failed = 0; const ok = (c, m) => { console.log(`${c ? "PASS" : "FAIL"} ${m}`); if (!c) failed++; };
 ok(LEG_MODES.join() === "fly,drive,train,boat,cruise,walk,other", "modes match journey_legs_mode_check");
 const d = stubParse("Paris in May 2024, flew from JFK, took the train to Lyon");
@@ -22,4 +22,5 @@ ok(explicitDate("3rd May 2024") === "2024-05-03" && explicitDate("May 2024") ===
 ok(!dayStated("Paris in May 2024", "2024-05-01") && dayStated("Paris May 3 2024", "2024-05-03") && !dayStated("trip 2021", "2021-01-01"), "dayStated drops invented AI dates");
 ok(JSON.stringify(stubParse("Lisbon, Sintra, Porto 2024").stops.map((s) => s.name)) === '["Lisbon","Sintra","Porto"]', "comma list finds every stop");
 ok(JSON.stringify(stubParse("Went to Kyoto and Osaka").stops.map((s) => s.name)) === '["Kyoto","Osaka"]', "sentence starter is not a stop");
+ok(saveHint({ journey: { title: "" }, stops: [{ name: "a" }, { name: "b" }] }) === "Add a location for 2 stops and a trip name." && saveHint({ journey: { title: "T" }, stops: [{ name: "a", lat: 1, lng: 1 }] }) === null && saveHint({ journey: { title: "T" }, stops: [] }) === "Add a stop to save.", "save hint counts missing locations and the name");
 process.exit(failed ? 1 : 0);

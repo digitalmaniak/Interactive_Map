@@ -425,3 +425,5 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
   .app-container.is-draft-open .v2-quickadd:not(.v2-quickadd-inline):not(.v2-quickadd-dialog), .app-container.is-draft-open .ui-layer .bottom-left-group, .app-container.is-draft-open .ui-layer .bottom-right-group { display: none; }
 }
 .app-container.is-draft-edit .ui-layer .bottom-right-group { display: none; }
+/* Disabled primary buttons read as off: grey, 40% opacity, not-allowed cursor. */
+.v2-btn-primary:disabled, .v2-btn-primary[aria-disabled="true"] { background: #5b6470; border-color: #5b6470; color: #c9d1da; opacity: 0.4; cursor: not-allowed; box-shadow: none; }

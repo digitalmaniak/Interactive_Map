@@ -42,7 +42,20 @@ export function normalizeDraft(d) {
 }
 
 // Save is allowed only when every stop has a real location (and there is at least one).
-export const canSave = (d) => Array.isArray(d?.stops) && d.stops.length > 0 && d.stops.every(hasLocation);
+export const canSave = (d) => Array.isArray(d?.stops) && d.stops.length > 0 && d.stops.every(hasLocation) && String(d?.journey?.title || "").trim().length > 0;
+
+/** Why Save is off, in one short line ("Add a location for 2 stops and a trip name"). Null when ready. */
+export function saveHint(d) {
+  if (canSave(d)) return null;
+  const stops = Array.isArray(d?.stops) ? d.stops : [];
+  const noName = !String(d?.journey?.title || "").trim();
+  if (!stops.length) return noName ? "Add a stop and a trip name to save." : "Add a stop to save.";
+  const missing = stops.filter((s) => !hasLocation(s)).length;
+  const parts = [];
+  if (missing) parts.push(`a location for ${missing} ${missing === 1 ? "stop" : "stops"}`);
+  if (noName) parts.push("a trip name");
+  return `Add ${parts.join(" and ")}.`;
+}
 
 // The payload the RPC gets: contract fields only (UI flags like guessed are dropped).
 export function toRpcDraft(d) {

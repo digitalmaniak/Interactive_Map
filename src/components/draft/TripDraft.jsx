@@ -7,7 +7,7 @@
 // Nothing is saved until Save. Save stays disabled until every stop has a location.
 import { useState } from "react";
 import QuickAdd from "../quickadd/QuickAdd";
-import { LEG_MODES, MODE_LABEL, NO_DATE_WARNING, canSave, hasLocation, warningsFor } from "../../lib/draft/draft";
+import { LEG_MODES, MODE_LABEL, NO_DATE_WARNING, canSave, hasLocation, saveHint, warningsFor } from "../../lib/draft/draft";
 
 const PLACEHOLDER = "Paris in May 2024, flew from JFK, took the train to Lyon";
 
@@ -87,7 +87,7 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
     legs: cur.legs.filter((l) => l.from_stop !== i && l.to_stop !== i).map((l) => ({ ...l, from_stop: l.from_stop > i ? l.from_stop - 1 : l.from_stop, to_stop: l.to_stop > i ? l.to_stop - 1 : l.to_stop })),
   }));
   const ready = canSave(d);
-  const missing = d.stops.filter((s) => !hasLocation(s)).length;
+  const hint = saveHint(d);
 
   return (
     <div className="v2-draft v2-draft-edit" role="dialog" aria-label="Trip draft" onPointerDown={(e) => e.stopPropagation()}>
@@ -150,9 +150,9 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
 
       {saveError && <p className="v2-draft-error" role="alert">{saveError}</p>}
       <div className="v2-draft-foot">
-        <button type="button" className="v2-btn v2-btn-primary" disabled={!ready || saving} onClick={onSave}>{saving ? "Saving" : "Save trip"}</button>
+        <button type="button" className="v2-btn v2-btn-primary" disabled={!ready || saving} aria-disabled={!ready || saving} aria-describedby={hint ? "v2-draft-save-hint" : undefined} onClick={onSave}>{saving ? "Saving" : "Save trip"}</button>
         {onDiscard && <button type="button" className="v2-link" onClick={onDiscard}>Discard</button>}
-        {!ready && <span className="v2-draft-hint">{d.stops.length ? `${missing} ${missing === 1 ? "stop needs" : "stops need"} a place on the map.` : "Add a stop to save."}</span>}
+        {hint && <span className="v2-draft-hint" id="v2-draft-save-hint">{hint}</span>}
       </div>
     </div>
   );
