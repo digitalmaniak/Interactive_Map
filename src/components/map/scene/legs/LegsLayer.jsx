@@ -61,13 +61,14 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
   const built = useMemo(() => {
     const out = [];
     for (const leg of legs || []) {
-      const s = STYLE[leg.mode] || STYLE.drive;
+      // Add entry preview leg: always dashed at 40%, never animated.
+      const s = leg.preview ? { ...(STYLE[leg.mode] || STYLE.drive), dash: [4, 4], head: false, alpha: 1, chevronPx: 0, tickPx: 0, wake: 0 } : STYLE[leg.mode] || STYLE.drive;
       // Flyover names the active leg directly; otherwise the leg arriving at the active stop.
       const active = activeLegId !== undefined ? activeLegId != null && leg.id === activeLegId : activePinId != null && leg.toPinId === activePinId;
       const fly = leg.mode === "fly";
       const path = fly ? flyArc(leg.a.v, leg.b.v, { offsetDeg: leg.offsetDeg }) : { points: surfacePath(leg.a.v, leg.b.v), alpha: null };
       // Guessed (draft) legs use the existing 40% style until confirmed.
-      const baseA = (active ? 1 : s.alpha * (leg.status === "draft" ? 0.4 : 1)) * (leg.home ? ARC_HOME_GLOW : 1);
+      const baseA = leg.preview ? 0.4 : (active ? 1 : s.alpha * (leg.status === "draft" ? 0.4 : 1)) * (leg.home ? ARC_HOME_GLOW : 1);
       const col = leg.home ? HOME : ROUTE;
       const colors = [];
       path.points.forEach((_, i) => colors.push(col.r, col.g, col.b, path.alpha ? (active ? Math.max(path.alpha[i], 0.4) : path.alpha[i] * baseA) : baseA));

@@ -64,6 +64,12 @@ export function sharedJourneyLegs(journeyId) {
   };
 }
 
+/** Owner insert (journey_legs_owner_all). user_id defaults to auth.uid(). */
+export async function insertJourneyLeg(row) {
+  if (!row) return { data: null, error: { message: "No leg." } };
+  return supabase.from("journey_legs").insert(row).select(LEG_COLUMNS).single();
+}
+
 export async function updateLegMode(legId, mode) {
   if (!LEG_MODES.includes(mode)) throw new Error("Unknown mode");
   const { error } = await supabase.from("journey_legs").update({ mode }).eq("id", legId);

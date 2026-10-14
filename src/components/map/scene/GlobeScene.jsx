@@ -913,7 +913,9 @@ export default function GlobeScene({
   pins = [],
   activePinId = null,
   focusJourneyId = null,
-  draftLegs = null, // trip draft preview: leg rows (pin ids "draft:i") used instead of a fetch
+  draftLegs = null,
+  previewLeg = null, // Add entry: dashed 40% leg from the trip's last stop to the picked place
+  legsReloadKey = 0, // bump to refetch the open trip's legs after a save // trip draft preview: leg rows (pin ids "draft:i") used instead of a fetch
   draftPlayKey = null, // changes when a parsed draft should play its fast flyover
   legsOverride = null, // share view: leg rows read by the page (share token client), no fetch here
   autoPlayKey = null, // share view: plays the normal flyover once per key
@@ -1070,13 +1072,15 @@ export default function GlobeScene({
       .then((rows) => { if (!cancelled) setLegRows({ key: tripKeyForLegs, rows: rows || [] }); })
       .catch((err) => { if (!cancelled) { console.warn("[globe] legs not loaded", err?.message || err); setLegRows({ key: tripKeyForLegs, rows: [] }); } });
     return () => { cancelled = true; req.release(); };
-  }, [tripKeyForLegs, external]);
-  const legs = useMemo(() => {
+  }, [tripKeyForLegs, external, legsReloadKey]);
+  const tripLegs = useMemo(() => {
     if (!tripKeyForLegs || (!external && legRows.key !== tripKeyForLegs)) return [];
     const byId = {};
     for (const p of pins) byId[p.id] = p;
     return resolveLegs(external ? (isDraft ? draftLegs : legsOverride) || [] : legRows.rows, byId);
   }, [tripKeyForLegs, legRows, pins, draftLegs, legsOverride, external, isDraft]);
+  const previewLegs = useMemo(() => resolveLegs(previewLeg ? [previewLeg] : [], {}).map((l) => ({ ...l, preview: true, home: false })), [previewLeg]);
+  const legs = useMemo(() => (previewLegs.length ? [...tripLegs, ...previewLegs] : tripLegs), [tripLegs, previewLegs]);
 
   // Trip engagement. `engaged` remembers what the camera framed: a trip (its journey key)
   // or a single point (a pin from the Imported bucket, or a pin with no trip). Exit is
@@ -1176,11 +1180,11 @@ export default function GlobeScene({
     const fmt = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }).toUpperCase();
     const parts = [];
     if (tripDates) parts.push(tripDates.from.slice(0, 7) === tripDates.to.slice(0, 7) ? fmt(tripDates.from) : `${fmt(tripDates.from)} TO ${fmt(tripDates.to)}`);
-    const c = tripCounts(tripStops.length, legs);
+    const c = tripCounts(tripStops.length, tripLegs);
     const counts = [c.stops, c.flights].filter(Boolean).join(" · ");
-    const kmText = legs.length && c.km ? c.km : "";
+    const kmText = tripLegs.length && c.km ? c.km : "";
     return { base: parts.join("   "), counts, km: kmText };
-  }, [tripStops, tripDates, legs]);
+  }, [tripStops, tripDates, tripLegs]);
 
   // Timeline strip: shown at 600 px and wider, left of the panel, clear of the profile chip,
   // and ending 12 px before the Add entry button (measured, so it tracks the button's size).

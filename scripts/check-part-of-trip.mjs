@@ -1,0 +1,22 @@
+import assert from "node:assert/strict";
+import { localDate, defaultChoice, tripOptions, lastStop, nextPinSort, joinLegRow, previewLegRow, dateOrNull } from "../src/lib/addentry/partOfTrip.js";
+// Local date: 23:30 on Oct 13 in NY is still the 13th, even though UTC is the 14th.
+assert.equal(localDate(new Date(2026, 9, 13, 23, 30)), "2026-10-13");
+assert.equal(defaultChoice(null), "place");
+assert.equal(defaultChoice("j1"), "trip");
+const js = [{ id: "a", title: "Old", updated_at: "2025-01-01" }, { id: "b", title: "New", updated_at: "2026-05-01" }, { id: "c", title: "Imported" }, { id: "__x", title: "C" }];
+assert.deepEqual(tripOptions(js).map((j) => j.id), ["b", "a"]);
+const pins = [{ id: 1, journey_id: "a", sort_order: 0 }, { id: 2, journey_id: "a", sort_order: 2 }, { id: 3, journey_id: "a", sort_order: 1 }, { id: 4, journey_id: "b", sort_order: 9 }, { id: 5, journey_id: "a", sort_order: 5, deleted_at: "x" }];
+assert.equal(lastStop(pins, "a").id, 2);
+assert.equal(lastStop(pins, "z"), null);
+assert.equal(nextPinSort(pins, "a"), 3);
+assert.equal(nextPinSort(pins, "z"), 0);
+const row = joinLegRow({ journeyId: "a", from: { id: 2 }, toPinId: 9, mode: "train", sortOrder: 4 });
+assert.deepEqual(row, { journey_id: "a", from_pin_id: 2, to_pin_id: 9, mode: "train", status: "confirmed", sort_order: 4 });
+assert.equal(joinLegRow({ journeyId: "a", from: null, toPinId: 9, mode: "fly" }), null);
+assert.equal(joinLegRow({ journeyId: "a", from: { id: 1 }, toPinId: 9, mode: "rocket" }).mode, "other");
+assert.equal(previewLegRow({ latitude: 1, longitude: 2 }, { lat: 3, lon: 4 }, null), null);
+assert.equal(previewLegRow({ latitude: 1, longitude: 2 }, { lat: 3, lon: 4 }, "fly").status, "draft");
+assert.equal(dateOrNull(""), null);
+assert.equal(dateOrNull("2026-10-13"), "2026-10-13");
+console.log("check-part-of-trip: ok");

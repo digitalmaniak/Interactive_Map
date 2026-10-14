@@ -19,6 +19,8 @@ import {
   movePinToJourney,
 } from "../lib/journeys/api";
 import QuickAdd from "./quickadd/QuickAdd";
+import { dateOrNull, defaultChoice, joinLegRow, lastStop, localDate, nextPinSort, previewLegRow, tripOptions } from "../lib/addentry/partOfTrip";
+import { fetchJourneyLegs, insertJourneyLeg } from "../lib/journeys/legs";
 import { placeLine } from "../lib/geocode/quickAdd";
 import { useAuthSession } from "../hooks/useAuthSession";
 import { flyoverActive } from "./map/scene/flyover/flyoverState";
@@ -56,8 +58,14 @@ export default function MapCanvas() {
   const [newPinCity, setNewPinCity] = useState("");
   const [newPinDetails, setNewPinDetails] = useState("");
   const [newPinCountryCode, setNewPinCountryCode] = useState(""); // set only by quick add
-  const [newPinStartDate, setNewPinStartDate] = useState(new Date().toISOString().split("T")[0]);
-  const [newPinEndDate, setNewPinEndDate] = useState(new Date().toISOString().split("T")[0]);
+  // Dates start empty: an undated entry saves with null dates (Undated bin).
+  const [newPinStartDate, setNewPinStartDate] = useState("");
+  const [newPinEndDate, setNewPinEndDate] = useState("");
+  // Part of a trip? choice for the add form.
+  const [tripChoice, setTripChoice] = useState("place");
+  const [newTripName, setNewTripName] = useState("");
+  const [joinTripId, setJoinTripId] = useState("");
+  const [joinMode, setJoinMode] = useState(null);
   const [isAddingLog, setIsAddingLog] = useState(false);
   const [newLogTitle, setNewLogTitle] = useState("");
   const [newLogContent, setNewLogContent] = useState("");
@@ -187,6 +195,8 @@ export default function MapCanvas() {
   const activeJourneyIsCollection =
     activeJourneyId != null &&
     (String(activeJourneyId).startsWith("__") || activeJourney?.title === "Imported");
+  const openTripId = activeJourneyId != null && !activeJourneyIsCollection ? activeJourneyId : null;
+  const [legsReloadKey, setLegsReloadKey] = useState(0);
 
   const resolveJourneyIdForPin = (pin) => {
     if (pin?.journey_id) return pin.journey_id;
@@ -385,6 +395,10 @@ export default function MapCanvas() {
     setActivePin(null);
     setIsAddingLog(false);
     setActiveTab("Journals");
+    setTripChoice(defaultChoice(openTripId));
+    setNewTripName("");
+    setJoinTripId(openTripId || "");
+    setJoinMode(null);
     setIsAddingEntry(true);
     setFlyTo({ lat, lon, at: Date.now() });
   };
@@ -425,21 +439,34 @@ export default function MapCanvas() {
         location_name: newPinCity,
         latitude: lat,
         longitude: lon,
-        start_date: newPinStartDate,
-        end_date: newPinEndDate,
+        start_date: dateOrNull(newPinStartDate),
+        end_date: dateOrNull(newPinEndDate) || dateOrNull(newPinStartDate),
         trip_type: "Unknown",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      // journey_id: the open trip if one is open, else the owner's existing "Imported"
-      // journey (looked up by name, never created here).
-      if (activeJourneyId && !String(activeJourneyId).startsWith("__")) {
-        pinFields.journey_id = activeJourneyId;
+      // journey_id from the Part of a trip? choice. Just a place: the owner's "Imported"
+      // journey (looked up by name, never created here). New trip: created first.
+      let targetJourneyId = null;
+      if (tripChoice === "new") {
+        const name = newTripName.trim();
+        if (!name) { alert("Give the new trip a name."); return; }
+        const { data: j, error: jErr } = await createJourneyRow({ userId: userData.user.id, title: name });
+        if (jErr || !j) throw jErr || new Error("journey not created");
+        targetJourneyId = j.id;
+      } else if (tripChoice === "trip") {
+        if (!joinTripId) { alert("Pick a trip to add to."); return; }
+        targetJourneyId = joinTripId;
+      }
+      if (targetJourneyId) {
+        pinFields.journey_id = targetJourneyId;
+        pinFields.sort_order = nextPinSort(pins, targetJourneyId);
       } else {
         // If it is missing from the list, omit it: the DB trigger routes the pin to Imported.
         const imported = journeys.find((j) => j.title === "Imported");
         if (imported?.id) pinFields.journey_id = imported.id;
       }
+      const joinFrom = tripChoice === "trip" ? lastStop(pins, targetJourneyId) : null;
 
       // Quick add only: ISO 3166-1 alpha-2 from the geocoder (geohash fills in the DB).
       if (/^[A-Z]{2}$/.test(newPinCountryCode)) pinFields.country_code = newPinCountryCode;
@@ -450,7 +477,7 @@ export default function MapCanvas() {
 
       const { data: insertedLog, error: logError } = await insertPinLog({
         pin_id: insertedPin.id,
-        log_date: newPinStartDate,
+        log_date: dateOrNull(newPinStartDate),
         title: "Initial Entry",
         content: newPinDetails,
         category: "Experience",
@@ -459,6 +486,15 @@ export default function MapCanvas() {
       });
 
       if (logError) throw logError;
+
+      // Joining a trip: one confirmed leg from its last stop to the new stop.
+      if (joinFrom && joinMode) {
+        const existing = await fetchJourneyLegs(targetJourneyId).catch(() => []);
+        const sortOrder = existing.length ? Math.max(...existing.map((l) => l.sort_order ?? 0)) + 1 : 0;
+        const row = joinLegRow({ journeyId: targetJourneyId, from: joinFrom, toPinId: insertedPin.id, mode: joinMode, sortOrder });
+        const { error: legError } = await insertJourneyLeg(row);
+        if (legError) console.warn("[add] leg not saved", legError.message || legError);
+      }
 
       const addedPin = { ...insertedPin, logs: [insertedLog] };
 
@@ -469,9 +505,13 @@ export default function MapCanvas() {
       setNewPinCity("");
       setNewPinDetails("");
       setNewPinCountryCode("");
-      setNewPinStartDate(new Date().toISOString().split("T")[0]);
-      setNewPinEndDate(new Date().toISOString().split("T")[0]);
+      setNewPinStartDate("");
+      setNewPinEndDate("");
       setClickedCoords(null);
+      setJoinMode(null);
+      setNewTripName("");
+      setLegsReloadKey((k) => k + 1);
+      if (tripChoice === "new") await reloadTravelData();
 
     } catch (err) {
       console.error(err);
@@ -484,7 +524,7 @@ export default function MapCanvas() {
     try {
       const { data: insertedLog, error } = await insertPinLog({
         pin_id: activePin.id,
-        log_date: new Date().toISOString().split("T")[0],
+        log_date: localDate(),
         title: newLogTitle,
         content: newLogContent,
         category: newLogCategory,
@@ -773,6 +813,21 @@ export default function MapCanvas() {
     }
   };
 
+  // Part of a trip? props for the add form, plus the live preview leg on the globe.
+  const joinId = tripChoice === "trip" ? joinTripId || null : null;
+  const joinFromStop = joinId ? lastStop(pins, joinId) : null;
+  const addTripProps = {
+    tripChoice, setTripChoice,
+    inTripTitle: openTripId ? activeJourney?.title || null : null,
+    newTripName, setNewTripName,
+    trips: tripOptions(journeys),
+    joinTripId, setJoinTripId: (v) => { setJoinTripId(v); setJoinMode(null); },
+    joinMode, setJoinMode,
+    canJoinLeg: !!joinFromStop,
+    savingTo: tripChoice === "new" ? newTripName.trim() || "New trip" : tripChoice === "trip" ? journeys.find((j) => j.id === joinTripId)?.title || "Pick a trip" : "Imported",
+  };
+  const previewLeg = isAddingEntry && joinFromStop && joinMode ? previewLegRow(joinFromStop, clickedCoords, joinMode) : null;
+
   return (
     <div className={`app-container${sheetOpen ? ` is-sheet-open${sheetCollapsed ? " is-sheet-collapsed" : ""}` : ""}${draftFace ? " is-draft-open" : ""}${draftOpen ? " is-draft-edit" : ""}`} style={sheetOpen ? { "--sheet-min": `${sheetHeaderPx}px` } : undefined}>
       <AuthGate
@@ -803,6 +858,8 @@ export default function MapCanvas() {
             activePinId={draftGlobe ? null : activePin?.id || null}
             focusJourneyId={draftGlobe ? (draftGlobe.pins.length ? draftGlobe.key : null) : activeJourneyId}
             draftLegs={draftGlobe ? draftGlobe.legs : null}
+            previewLeg={previewLeg}
+            legsReloadKey={legsReloadKey}
             draftPlayKey={draftGlobe ? tripDraft.playKey : null}
             flyTo={flyTo}
             focusIsCollection={draftGlobe ? false : activeJourneyIsCollection}
@@ -879,6 +936,7 @@ export default function MapCanvas() {
             journeysLoading={!journeysLoaded}
             activeTab={activeTab}
             isAddingEntry={isAddingEntry}
+            addTrip={addTripProps}
             savingTo={activeJourneyId && !String(activeJourneyId).startsWith("__") && activeJourney?.title ? activeJourney.title : "Imported"}
             activePin={activePin}
             activeJourney={activeJourney}

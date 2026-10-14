@@ -17,6 +17,7 @@ import PinDetail from "./PinDetail";
  * State and callbacks owned by MapCanvas; this component only switches views.
  */
 export default function JournalsPanel({
+  addTrip = null,
   sheet = null,
   activeTab,
   isAddingEntry,
@@ -201,6 +202,7 @@ export default function JournalsPanel({
           onAddPin={handleAddPin}
           savingTo={savingTo}
           onCancel={closeJournalPanel}
+          {...(addTrip || {})}
         />
       ) : activePin ? (
         <PinDetail
