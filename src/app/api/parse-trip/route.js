@@ -29,8 +29,8 @@ const DraftSchema = z.object({
     from_stop: z.number().int().min(0),
     to_stop: z.number().int().min(0),
     date: isoDate,
-    from_label: z.string().nullable(),
-    to_label: z.string().nullable(),
+    from_label: z.string().nullable().optional(),
+    to_label: z.string().nullable().optional(),
   })),
   warnings: z.array(z.string()),
 });
