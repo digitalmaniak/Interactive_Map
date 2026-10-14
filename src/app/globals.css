@@ -427,3 +427,27 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 .app-container.is-draft-edit .ui-layer .bottom-right-group { display: none; }
 /* Disabled primary buttons read as off: grey, 40% opacity, not-allowed cursor. */
 .v2-btn-primary:disabled, .v2-btn-primary[aria-disabled="true"] { background: #5b6470; border-color: #5b6470; color: #c9d1da; opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+/* Share view (item 5): globe, itinerary card or sheet, end buttons. */
+html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflow: hidden; }
+.share-globe-page { position: fixed; inset: 0; background: var(--v2-bg); color: var(--v2-text); overflow: hidden; }
+.share-globe-mark { position: fixed; top: 22px; left: 24px; z-index: 30; pointer-events: none; }
+.share-empty { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100vw - 32px)); padding: 24px; z-index: 30; }
+.share-empty-title { font: 300 32px/1 var(--v2-sans); letter-spacing: -0.02em; margin: 0 0 8px; }
+.share-itin { position: fixed; top: 24px; right: 24px; bottom: 24px; width: 332px; z-index: 25; display: flex; flex-direction: column; padding: 16px 0 8px; }
+.share-itin.is-sheet { top: auto; left: 0; right: 0; bottom: 0; width: auto; border-radius: 16px 16px 0 0; padding-top: 6px; transition: height 0.32s cubic-bezier(0.65, 0, 0.35, 1); }
+.share-itin-grip { align-self: center; width: 44px; height: 18px; border: 0; background: none; cursor: pointer; position: relative; flex: none; }
+.share-itin-grip::after { content: ""; position: absolute; left: 8px; right: 8px; top: 7px; height: 4px; border-radius: 2px; background: var(--v2-text-dim); opacity: 0.5; }
+.share-itin-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 0 16px 10px; flex: none; }
+.share-itin-dates { font-size: 13px; color: var(--v2-text-dim); margin-top: 4px; }
+.share-itin-replay { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--v2-border, rgba(255,255,255,0.14)); background: transparent; color: var(--v2-text); font: 500 12px/1 var(--v2-sans); padding: 7px 10px; border-radius: 999px; cursor: pointer; }
+.share-itin-list { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; flex: 1; }
+.share-leg { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 10px 8px; border: 0; border-radius: 10px; background: transparent; color: var(--v2-text); text-align: left; font: 400 14px/1.3 var(--v2-sans); cursor: pointer; transition: background 0.2s, opacity 0.2s; }
+.share-leg:hover { background: rgba(255, 255, 255, 0.05); }
+.share-leg.is-current { background: rgba(94, 234, 255, 0.12); box-shadow: inset 2px 0 0 #5eeaff; }
+.share-leg.is-current .share-leg-icon { color: #5eeaff; }
+.share-leg.is-done { opacity: 0.6; }
+.share-leg-icon { display: inline-flex; color: var(--v2-text-dim); }
+.share-leg-date { font: 400 11px/1 var(--v2-mono); color: var(--v2-text-dim); white-space: nowrap; }
+.share-end { position: fixed; left: 0; right: 0; top: 72px; margin: 0 auto; width: max-content; display: flex; gap: 8px; z-index: 26; }
+@media (prefers-reduced-motion: reduce) { .share-itin.is-sheet, .share-leg { transition: none; } }

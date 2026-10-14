@@ -914,6 +914,10 @@ export default function GlobeScene({
   focusJourneyId = null,
   draftLegs = null, // trip draft preview: leg rows (pin ids "draft:i") used instead of a fetch
   draftPlayKey = null, // changes when a parsed draft should play its fast flyover
+  legsOverride = null, // share view: leg rows read by the page (share token client), no fetch here
+  autoPlayKey = null, // share view: plays the normal flyover once per key
+  onFlyState, // share view: called with the flyover state on every change
+  flyApiRef = null, // share view: filled with { play, stop, seekLeg }
   flyTo = null,
   focusIsCollection = false,
   focusTitle = null,
@@ -975,6 +979,8 @@ export default function GlobeScene({
   const focusing = focusJourneyId != null && !String(focusJourneyId).startsWith("__");
   // Trip draft preview: not a saved journey, so nothing is fetched for it.
   const isDraft = focusing && String(focusJourneyId).startsWith("draft:");
+  // Draft or share view: legs come in as props, and no owner query runs.
+  const external = isDraft || (focusing && legsOverride != null);
 
   const items = useMemo(
     () =>
@@ -999,7 +1005,7 @@ export default function GlobeScene({
   // with notes (journal_blocks rows on the place). Read only.
   const [labelMeta, setLabelMeta] = useState({ ends: new Set(), notes: new Set() });
   useEffect(() => {
-    if (!focusing || isDraft) return undefined;
+    if (!focusing || external) return undefined;
     let cancelled = false;
     const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
     const sig = (q) => (ac && typeof q.abortSignal === "function" ? q.abortSignal(ac.signal) : q);
@@ -1027,7 +1033,7 @@ export default function GlobeScene({
       }
     })();
     return () => { cancelled = true; ac?.abort(); };
-  }, [focusing, focusJourneyId, isDraft]);
+  }, [focusing, focusJourneyId, external]);
 
   // Cluster tap: ease the camera in over the cluster until its pins separate.
   const clusterRef = useRef(new Map());
@@ -1056,21 +1062,20 @@ export default function GlobeScene({
   const tripKeyForLegs = focusing && !focusIsCollection ? String(focusJourneyId) : null;
   const [legRows, setLegRows] = useState({ key: null, rows: [] });
   useEffect(() => {
-    if (!tripKeyForLegs || tripKeyForLegs.startsWith("draft:")) return undefined;
+    if (!tripKeyForLegs || external) return undefined;
     let cancelled = false;
     const req = sharedJourneyLegs(tripKeyForLegs);
     req.promise
       .then((rows) => { if (!cancelled) setLegRows({ key: tripKeyForLegs, rows: rows || [] }); })
       .catch((err) => { if (!cancelled) { console.warn("[globe] legs not loaded", err?.message || err); setLegRows({ key: tripKeyForLegs, rows: [] }); } });
     return () => { cancelled = true; req.release(); };
-  }, [tripKeyForLegs]);
+  }, [tripKeyForLegs, external]);
   const legs = useMemo(() => {
-    const draftKey = tripKeyForLegs && tripKeyForLegs.startsWith("draft:");
-    if (!tripKeyForLegs || (!draftKey && legRows.key !== tripKeyForLegs)) return [];
+    if (!tripKeyForLegs || (!external && legRows.key !== tripKeyForLegs)) return [];
     const byId = {};
     for (const p of pins) byId[p.id] = p;
-    return resolveLegs(draftKey ? draftLegs || [] : legRows.rows, byId);
-  }, [tripKeyForLegs, legRows, pins, draftLegs]);
+    return resolveLegs(external ? (isDraft ? draftLegs : legsOverride) || [] : legRows.rows, byId);
+  }, [tripKeyForLegs, legRows, pins, draftLegs, legsOverride, external, isDraft]);
 
   // Trip engagement. `engaged` remembers what the camera framed: a trip (its journey key)
   // or a single point (a pin from the Imported bucket, or a pin with no trip). Exit is
@@ -1240,6 +1245,31 @@ export default function GlobeScene({
     const t = setTimeout(() => { playedRef.current = k; flyPlayRef.current?.(); }, 700);
     return () => clearTimeout(t);
   }, [isDraft, draftPlayKey, flyEnabled, tripKeyForLegs]);
+  // Share view: the normal flyover plays once per autoPlayKey after the trip fit starts.
+  useEffect(() => {
+    const k = `${autoPlayKey}|${tripKeyForLegs}`;
+    if (!autoPlayKey || !flyEnabled || reducedMotion || playedRef.current === k) return undefined;
+    const t = setTimeout(() => { playedRef.current = k; flyPlayRef.current?.(); }, 1200);
+    return () => clearTimeout(t);
+  }, [autoPlayKey, flyEnabled, tripKeyForLegs, reducedMotion]);
+  useEffect(() => { onFlyState?.(fly.state); }, [fly.state, onFlyState]);
+  useEffect(() => {
+    if (!flyApiRef) return;
+    flyApiRef.current = {
+      play: fly.play,
+      stop: fly.stop,
+      // Jump to the start of a leg and pause there (same seek as the timeline dots).
+      seekLeg: (legId) => {
+        const plan = fly.planNow();
+        let t = 0;
+        for (const st of plan.steps || []) {
+          if (st.kind === "move" && st.legId === legId) { fly.seek(t + 1, 600); return true; }
+          t += st.ms;
+        }
+        return false;
+      },
+    };
+  });
   const flyOn = fly.state.playing || fly.state.paused;
   const shownActivePinId = flyOn ? fly.state.pinId : activePinId;
   const activeLegId = flyOn ? fly.state.legId : undefined;
@@ -1452,6 +1482,7 @@ export default function GlobeScene({
           maxDistance={MAX_DIST}
           onStart={() => { moveRef.current = null; }}
         />
+        {onFirstFrame && <FirstFrame onFirstFrame={onFirstFrame} />}
         <CameraController sheetInset={sheetInset} pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={shownActivePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (

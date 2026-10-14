@@ -10,6 +10,9 @@ const SHARED_JOURNEY_SELECT =
 const SHARED_PLACE_SELECT =
   "id, title, location_name, latitude, longitude, start_date, end_date, journey_id, sort_order, trip_type";
 
+const SHARED_LEG_SELECT =
+  "id, journey_id, from_pin_id, from_label, from_lat, from_lng, to_pin_id, to_label, to_lat, to_lng, mode, depart_at, arrive_at, sort_order";
+
 /** App Router path for an unlisted journey share link. */
 export function journeySharePath(token) {
   return `/share/${token}`;
@@ -87,8 +90,24 @@ export async function loadSharedJourney(shareToken) {
 
   if (placesError) return { data: null, error: placesError };
 
+  // Legs need a journey_legs unlisted SELECT policy. Without one this returns no rows (or
+  // an error), and the view falls back to stop to stop in pin order.
+  let legs = [];
+  try {
+    const { data: legRows, error: legsError } = await client
+      .from("journey_legs")
+      .select(SHARED_LEG_SELECT)
+      .eq("journey_id", journey.id)
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: true });
+    if (legsError) console.warn("[share] legs not readable", legsError.message);
+    else legs = legRows || [];
+  } catch (err) {
+    console.warn("[share] legs not readable", err?.message || err);
+  }
+
   return {
-    data: { ...journey, places: places || [] },
+    data: { ...journey, places: places || [], legs },
     error: null,
   };
 }
