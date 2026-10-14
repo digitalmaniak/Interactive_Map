@@ -62,18 +62,18 @@ export default function AppShell({
       {/* Top left: wordmark */}
       <div className={`top-left-group${desktop ? " is-stack" : ""}`}>
         <div className="v2-wordmark">Odyssey</div>
+        {desktop && addButton}
         {desktop && (
           <div className="v2-profile-wrap" ref={profileRef}>
             <button
               type="button"
-              className="v2-profile is-quiet"
+              className="v2-profile"
               aria-expanded={showProfileMenu}
               aria-haspopup="menu"
               onClick={() => setShowProfileMenu(!showProfileMenu)}
             >
               <span className="v2-profile-dot" aria-hidden="true" />
               <span className="v2-mono-label">{handle}</span>
-              <svg className="v2-profile-chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M2 3.5l3 3 3-3" /></svg>
             </button>
             {showProfileMenu && (
               <div className="v2-menu v2-profile-menu" role="menu">
@@ -82,7 +82,6 @@ export default function AppShell({
             )}
           </div>
         )}
-        {desktop && addButton}
       </div>
 
       {/* Top center: nav */}
