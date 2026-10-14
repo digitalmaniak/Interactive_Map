@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { EDGE, avoidBox, edgePoint, kmText, mergeTags, roundedKm } from "../src/components/map/scene/edgeTagsMath.js";
+import { EDGE, avoidBox, edgePoint, kmText, mergeTags, nudgeTags, roundedKm } from "../src/components/map/scene/edgeTagsMath.js";
 const r = { x0: 20, y0: 76, x1: 1000, y1: 800 }, c = { x: 510, y: 438 };
 assert.deepEqual([edgePoint(c, { x: 1, y: 0 }, r).x, edgePoint(c, { x: 1, y: 0 }, r).y], [1000, 438], "right edge");
 assert.equal(edgePoint(c, { x: 0, y: -1 }, r).y, 76, "top edge below the nav");
@@ -15,6 +15,16 @@ assert.equal(EDGE.max, 6);
   const { shortName, estWidth } = await import("../src/components/map/scene/edgeTagsMath.js");
   assert.equal(shortName("Park City Mountain (Wasatch Range)").length, 18, "long names cut to 18");
   const wide = mergeTags([{ id: "d", x: 460, y: 76, w: estWidth({ name: "Denver & Vail area", km: "3,400 km" }) }, { id: "p", x: 520, y: 76, w: 200 }]);
-  assert.equal(wide.length, 1, "overlapping wide tags merge into +2");
+  assert.equal(wide.length, 2, "wide tags further apart than 40px stay separate (nudgeTags slides them apart)");
+}
+{
+  const r = { x0: 20, y0: 20, x1: 1420, y1: 880 };
+  const label = { x0: 600, x1: 760, y0: 20, y1: 60 };
+  const [a, b] = nudgeTags([{ cx: 680, cy: 37, w: 120, h: 34 }, { cx: 690, cy: 37, w: 120, h: 34 }], [label], r);
+  const clear = (t, o) => t.cx + t.w / 2 + 4 <= o.x0 || t.cx - t.w / 2 - 4 >= o.x1;
+  assert.ok(a.cy === 37 && clear(a, label), "tag slides along the top edge off a map label");
+  assert.ok(b.cy === 37 && Math.abs(a.cx - b.cx) >= 124, "second tag slides off the first");
+  const [c] = nudgeTags([{ cx: 1403, cy: 400, w: 34, h: 34 }], [{ x0: 1380, x1: 1420, y0: 380, y1: 420 }], r);
+  assert.ok(c.cx === 1403 && c.cy !== 400, "right-edge tag slides vertically");
 }
 console.log("check-edge-tags: ok");

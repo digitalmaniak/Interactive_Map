@@ -33,10 +33,8 @@ export const estWidth = (t) => 34 + 7.2 * ((t.name || "").length + String(t.km ?
 /** Long names are cut so a tag never spans half the screen. */
 export const shortName = (s, max = 18) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}\u2026` : s);
 const close = (a, b, mergePx) => {
-  if (Math.hypot(a.x - b.x, a.y - b.y) < mergePx) return true;
-  // Boxes centred on their edge points that would overlap also merge.
-  const wa = a.w ?? 0, wb = b.w ?? 0;
-  return Math.abs(a.x - b.x) < (wa + wb) / 2 && Math.abs(a.y - b.y) < EDGE.heightPx;
+  // Only edge points within mergePx merge; overlapping boxes are slid apart by nudgeTags.
+  return Math.hypot(a.x - b.x, a.y - b.y) < mergePx;
 };
 export function mergeTags(tags, mergePx = EDGE.mergePx) {
   const out = [];
@@ -51,4 +49,33 @@ export function mergeTags(tags, mergePx = EDGE.mergePx) {
     hit.w = 62;
   }
   return out.map((o) => (o.members.length > 1 ? { ...o, merged: true, label: `+${o.members.length}` } : o));
+}
+
+const hits = (a, b, pad = 4) => a.x0 < b.x1 + pad && a.x1 + pad > b.x0 && a.y0 < b.y1 + pad && a.y1 + pad > b.y0;
+/**
+ * Slide each tag along its own screen edge until it clears map labels and the tags already
+ * placed (nearest first keeps its spot). Boxes are { cx, cy, w, h }; r is the safe rect.
+ */
+export function nudgeTags(boxes, obstacles, r, maxShift = 420, step = 6) {
+  const placed = [];
+  return boxes.map((b) => {
+    const hw = b.w / 2, hh = b.h / 2;
+    const clampX = (x) => Math.min(r.x1 - hw, Math.max(r.x0 + hw, x));
+    const clampY = (y) => Math.min(r.y1 - hh, Math.max(r.y0 + hh, y));
+    const dTop = b.cy - hh - r.y0, dBot = r.y1 - (b.cy + hh), dL = b.cx - hw - r.x0, dR = r.x1 - (b.cx + hw);
+    const alongX = Math.min(dTop, dBot) <= Math.min(dL, dR); // on the top or bottom edge
+    const box = (cx, cy) => ({ x0: cx - hw, x1: cx + hw, y0: cy - hh, y1: cy + hh });
+    let best = { cx: b.cx, cy: b.cy };
+    for (let k = 0; k <= maxShift / step; k++) {
+      let found = null;
+      for (const s of k ? [k * step, -k * step] : [0]) {
+        const cx = alongX ? clampX(b.cx + s) : b.cx, cy = alongX ? b.cy : clampY(b.cy + s);
+        const bx = box(cx, cy);
+        if (!obstacles.some((o) => hits(bx, o)) && !placed.some((o) => hits(bx, o))) { found = { cx, cy }; break; }
+      }
+      if (found) { best = found; break; }
+    }
+    placed.push(box(best.cx, best.cy));
+    return { ...b, ...best };
+  });
 }
