@@ -7,7 +7,7 @@
 // Nothing is saved until Save. Save stays disabled until every stop has a location.
 import { useState } from "react";
 import QuickAdd from "../quickadd/QuickAdd";
-import { LEG_MODES, MODE_LABEL, canSave, hasLocation, warningsFor } from "../../lib/draft/draft";
+import { LEG_MODES, MODE_LABEL, NO_DATE_WARNING, canSave, hasLocation, warningsFor } from "../../lib/draft/draft";
 
 const PLACEHOLDER = "Paris in May 2024, flew from JFK, took the train to Lyon";
 
@@ -118,7 +118,7 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
                   )}
                   <input type="date" className="panel-input v2-draft-stop-date" aria-label={`Date for stop ${i + 1}`} value={s.date || ""} onChange={(e) => setStop(i, { date: e.target.value || null })} />
                 </div>
-                <Warn list={s.guessed || !located ? warningsFor(d, "stop", i) : []} id={`s${i}`} openId={openWarn} setOpenId={setOpenWarn} />
+                <Warn list={[...(s.guessed || !located ? warningsFor(d, "stop", i) : []), ...(s.date ? [] : [NO_DATE_WARNING])]} id={`s${i}`} openId={openWarn} setOpenId={setOpenWarn} />
                 <button type="button" className="v2-draft-rm" aria-label={`Remove stop ${i + 1}`} onClick={() => removeStop(i)}>×</button>
               </div>
               {leg && (

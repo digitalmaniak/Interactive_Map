@@ -8,7 +8,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { LEG_MODES } from "../../../lib/draft/draft";
+import { LEG_MODES, dayStated } from "../../../lib/draft/draft";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -76,7 +76,8 @@ export async function POST(req) {
         "with your best-estimate lat/lng and ISO-3166 alpha-2 country_code. from_stop/to_stop are 0-based " +
         `indexes into stops. Leg mode must be one of: ${LEG_MODES.join(", ")} (use "fly" for flights). ` +
         "For flights put the airport in from_label/to_label, like \"New York (JFK)\", else null. " +
-        "Dates are YYYY-MM-DD or null. Put any ambiguity in warnings.",
+        "Dates are YYYY-MM-DD or null. Never invent a date: give a date only when the text states the exact day, " +
+        "otherwise null (a month or a year alone is null). Put any ambiguity in warnings.",
       prompt: text,
     });
 
@@ -87,8 +88,11 @@ export async function POST(req) {
       if (!ok) warnings.push(`Dropped a leg with an invalid stop index (${l.from_stop} to ${l.to_stop}).`);
       return ok;
     });
-    const stops = object.stops.map((s) => ({ ...s, matched_pin_id: null }));
-    return NextResponse.json({ draft: { journey: object.journey, stops, legs, warnings } });
+    // Never invent dates: drop any date whose day the text does not state.
+    const keep = (d) => (d && dayStated(text, d) ? d : null);
+    const stops = object.stops.map((s) => ({ ...s, date: keep(s.date), matched_pin_id: null }));
+    const journey = { ...object.journey, date_start: keep(object.journey.date_start), date_end: keep(object.journey.date_end) };
+    return NextResponse.json({ draft: { journey, stops, legs: legs.map((l) => ({ ...l, date: keep(l.date) })), warnings } });
   } catch (e) {
     console.error("parse-trip failed", e?.message || e);
     const msg = String(e?.message || "");

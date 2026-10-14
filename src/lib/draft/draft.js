@@ -80,6 +80,35 @@ const GAZ = {
 };
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 const MODE_WORDS = [["fly", /\b(flew|fly|flight|plane)\b/], ["train", /\b(train|rail)\b/], ["drive", /\b(drove|drive|car|road trip)\b/], ["boat", /\b(boat|ferry)\b/], ["cruise", /\bcruise\b/], ["walk", /\b(walk|walked|hike|hiked)\b/]];
+const MON3 = MONTHS.map((m) => m.slice(0, 3));
+/** First date in the text that names a day: 2024-05-03, May 3 2024, 3 May 2024. Else null. */
+export function explicitDate(text) {
+  const t = String(text || "");
+  const iso = t.match(/\b((?:19|20)\d{2})-(\d{2})-(\d{2})\b/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const mon = "(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?";
+  const pad = (n) => String(n).padStart(2, "0");
+  const ok = (y, m, d) => (d >= 1 && d <= 31 ? `${y}-${pad(m)}-${pad(d)}` : null);
+  let m = t.match(new RegExp(`\\b${mon}\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+((?:19|20)\\d{2})\\b`, "i"));
+  if (m) return ok(m[3], MON3.indexOf(m[1].toLowerCase()) + 1, Number(m[2]));
+  m = t.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${mon}\\s+((?:19|20)\\d{2})\\b`, "i"));
+  if (m) return ok(m[3], MON3.indexOf(m[2].toLowerCase()) + 1, Number(m[1]));
+  return null;
+}
+
+/** True when the text states the day of this ISO date (the date itself, or its day number). */
+export function dayStated(text, iso) {
+  const m = String(iso || "").match(/^\d{4}-\d{2}-(\d{2})$/);
+  if (!m) return false;
+  const t = String(text || "");
+  if (t.includes(iso)) return true;
+  const d = Number(m[1]);
+  return new RegExp(`(^|[^\\d])0?${d}(st|nd|rd|th)?([^\\d]|$)`, "i").test(t.replace(/\b(19|20)\d{2}\b/g, " "));
+}
+
+/** Live per-stop warning: a stop with no date (shown amber, never filled in for you). */
+export const NO_DATE_WARNING = "No date yet. Add it if you know it.";
+
 const AIRPORT_RE = /\b(?:from|to)\s+([A-Z]{3})\b/;
 
 export function stubParse(text) {
@@ -101,10 +130,9 @@ export function stubParse(text) {
   found.sort((a, b) => a.i - b.i);
   const stops = found.map((f) => (f.g ? { name: f.g[0], lat: f.g[1], lng: f.g[2], country_code: f.g[3], date: null } : { name: f.name, lat: null, lng: null, country_code: null, date: null }));
   for (const s of stops) if (!hasLocation(s)) warnings.push(`Could not find "${s.name}". Pick it on the map.`);
-  let date = null;
-  const md = low.match(new RegExp(`\\b(${MONTHS.join("|")})\\s+(\\d{4})\\b`));
-  if (md) date = `${md[2]}-${String(MONTHS.indexOf(md[1]) + 1).padStart(2, "0")}-01`;
-  else { const y = low.match(/\b(?:19|20)\d{2}\b/); if (y) { date = `${y[0]}-01-01`; warnings.push("Only a year was given. Dates are set to January 1."); } }
+  // Never invent dates: only a date with an explicit day is used. Otherwise stops stay
+  // empty and the card shows an amber "no date" warning on each.
+  const date = explicitDate(t);
   if (date) stops.forEach((s) => { s.date = date; });
   const legs = [];
   const flewFromAirport = AIRPORT_RE.test(t) && /\b(flew|flight|fly)\b/.test(low);
@@ -115,6 +143,7 @@ export function stubParse(text) {
     if (!modes.length) warnings.push(`Leg ${i + 1}: how you traveled from ${stops[i].name} to ${stops[i + 1].name} is a guess.`);
   }
   if (!stops.length) warnings.push("No places found. Add stops below.");
-  const title = stops.length ? `${stops.map((s) => s.name).slice(0, 3).join(", ")}${date ? ` ${date.slice(0, 4)}` : ""}` : "New trip";
+  const yr = low.match(/\b(?:19|20)\d{2}\b/)?.[0];
+  const title = stops.length ? `${stops.map((s) => s.name).slice(0, 3).join(", ")}${yr ? ` ${yr}` : ""}` : "New trip";
   return normalizeDraft({ journey: { title, date_start: date, date_end: date }, stops, legs, warnings });
 }

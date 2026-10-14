@@ -1,10 +1,10 @@
 // Node check: trip draft helpers and the stub parser. Run: node scripts/check-draft.mjs
-import { LEG_MODES, normalizeDraft, canSave, toRpcDraft, stubParse, warningsFor, hasLocation } from "../src/lib/draft/draft.js";
+import { LEG_MODES, normalizeDraft, canSave, toRpcDraft, stubParse, warningsFor, hasLocation, explicitDate, dayStated } from "../src/lib/draft/draft.js";
 let failed = 0; const ok = (c, m) => { console.log(`${c ? "PASS" : "FAIL"} ${m}`); if (!c) failed++; };
 ok(LEG_MODES.join() === "fly,drive,train,boat,cruise,walk,other", "modes match journey_legs_mode_check");
 const d = stubParse("Paris in May 2024, flew from JFK, took the train to Lyon");
 ok(d.stops.map((s) => s.name).join() === "Paris,Lyon", `stub finds Paris then Lyon (${d.stops.map((s) => s.name)})`);
-ok(d.stops.every(hasLocation) && d.stops[0].date === "2024-05-01", "stub stops have coordinates and the month date");
+ok(d.stops.every(hasLocation) && d.stops.every((s) => s.date === null) && d.journey.date_start === null, "stub stops have coordinates and no invented dates (month only)");
 ok(d.legs.length === 1 && d.legs[0].mode === "train" && d.legs[0].from_stop === 0 && d.legs[0].to_stop === 1, `leg Paris to Lyon by train (${JSON.stringify(d.legs[0])})`);
 ok(canSave(d), "draft with all locations can save");
 const u = stubParse("Went to Lisbon then Sintra in 2023");
@@ -16,4 +16,8 @@ const r = toRpcDraft({ ...d, legs: d.legs.map((l) => ({ ...l, guessed: true })) 
 ok(!("guessed" in r.legs[0]) && !("from_iata" in r.legs[0]) && "from_label" in r.legs[0], "RPC payload: contract fields only, labels not IATA columns");
 ok(normalizeDraft({ stops: [{ name: "a" }], legs: [{ mode: "spaceship", from_stop: 0, to_stop: 0 }] }).legs.length === 0, "self legs dropped");
 ok(normalizeDraft({ stops: [{ name: "a", lat: 1, lng: 1 }, { name: "b", lat: 2, lng: 2 }], legs: [{ mode: "spaceship", from_stop: 0, to_stop: 1 }] }).legs[0].mode === "other", "unknown mode becomes other");
+ok(stubParse("Lisbon, Sintra, Porto 2024").stops.every((s) => s.date === null), "year only: no dates");
+ok(stubParse("Rome on May 3, 2024 then Florence").stops.every((s) => s.date === "2024-05-03"), "explicit day is kept");
+ok(explicitDate("3rd May 2024") === "2024-05-03" && explicitDate("May 2024") === null && explicitDate("2024-05-07") === "2024-05-07", "explicitDate");
+ok(!dayStated("Paris in May 2024", "2024-05-01") && dayStated("Paris May 3 2024", "2024-05-03") && !dayStated("trip 2021", "2021-01-01"), "dayStated drops invented AI dates");
 process.exit(failed ? 1 : 0);
