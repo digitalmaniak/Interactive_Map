@@ -453,3 +453,6 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 @media (prefers-reduced-motion: reduce) { .share-itin.is-sheet, .share-leg { transition: none; } }
 /* Return-home flight: icon in the home arc colour (ARC_HOME in lib/legs/homeLeg.js). */
 .share-leg.is-home .share-leg-icon { color: #E8D5B0; }
+/* '/' keycap hint in the Add entry button; hidden on touch devices. */
+.v2-add-key { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; margin-left: 6px; padding: 0 4px; border: 1px solid currentColor; border-radius: 3px; font: 500 10px/1 var(--v2-mono); opacity: 0.5; }
+@media (hover: none) and (pointer: coarse) { .v2-add-key { display: none; } }

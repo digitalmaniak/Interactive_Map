@@ -347,6 +347,22 @@ export default function MapCanvas() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  // '/' opens the Add entry search (same flow as the button), except while typing in a
+  // field or when a dialog is already open.
+  const signedInRef = useRef(false);
+  useEffect(() => { signedInRef.current = Boolean(session); }, [session]);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (!signedInRef.current || document.querySelector("[role=dialog][aria-modal=true]")) return;
+      e.preventDefault();
+      setAddSearchOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // Quick add pick: fly to the place and open the existing add form prefilled. The open
   // trip (if any) stays selected, so the form's confirm attaches the pin to it.
   const handleQuickAddPick = (r) => {
@@ -791,10 +807,6 @@ export default function MapCanvas() {
           />
         )}
       </div>
-
-      {session && (
-        <QuickAdd onPick={handleQuickAddPick} inTrip={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection} />
-      )}
 
       {session && draftFace && !addSearchOpen && (
         <TripDraft
