@@ -94,6 +94,9 @@ const TRIP_POLAR_MAX = THREE.MathUtils.degToRad(70);
 const TRIP_AZ_RANGE = THREE.MathUtils.degToRad(60);
 const TRIP_FLY_MS = 2400;
 const AUTO_ROTATE_EASE_S = 1.5;
+// Zoom-to-cursor incidence fade (cosine between the view ray and the surface normal).
+const ZOOM_GRAZE_MIN = 0.3, ZOOM_GRAZE_FULL = 0.6;
+const ZOOM_GESTURE_MS = 800;
 
 const easeGrow = bezier([0.16, 1, 0.3, 1]);
 
@@ -677,8 +680,12 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
           const rc = new THREE.Raycaster();
           rc.setFromCamera(new THREE.Vector2(((za.x - rect.left) / rect.width) * 2 - 1, -((za.y - rect.top) / rect.height) * 2 + 1), camera);
           const q = raySphere(rc.ray);
-          if (q && q.angleTo(za.p) > 1e-7) {
-            camera.position.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(q.normalize(), za.p));
+          // Near the limb the ray grazes the globe and holding that point would spin the view;
+          // fade the correction out by incidence so the edge is a plain centre zoom.
+          const w = q ? THREE.MathUtils.smoothstep(-rc.ray.direction.dot(q.clone().normalize()), ZOOM_GRAZE_MIN, ZOOM_GRAZE_FULL) : 0;
+          if (q && w > 0 && q.angleTo(za.p) > 1e-7) {
+            const full = new THREE.Quaternion().setFromUnitVectors(q.normalize(), za.p);
+            camera.position.applyQuaternion(new THREE.Quaternion().slerp(full, w));
             controls.update();
           }
         }
@@ -765,6 +772,13 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
         const p = raySphere(rc.ray);
         const s = st.current, now = performance.now();
         // Keep the first step's point while the wheel keeps going at the same spot.
+        // A wheel gesture that starts off the globe or at a grazing limb hit stays a plain
+        // centre zoom until the wheel pauses (0.8 s), even once the growing globe reaches the cursor.
+        const fresh = !s.zoomGesture || now - s.zoomGesture.t > ZOOM_GESTURE_MS;
+        const grazing = !p || -rc.ray.direction.dot(p.clone().normalize()) < ZOOM_GRAZE_MIN;
+        if (fresh) s.zoomGesture = { centre: grazing, t: now };
+        s.zoomGesture.t = now;
+        if (s.zoomGesture.centre || grazing) { s.zoomAnchor = null; return; }
         if (p && !(s.zoomAnchor && now - s.zoomAnchor.t < 450 && Math.hypot(s.zoomAnchor.x - e.clientX, s.zoomAnchor.y - e.clientY) < 3)) s.zoomAnchor = { p: p.normalize(), x: e.clientX, y: e.clientY, t: now };
         else if (p && s.zoomAnchor) s.zoomAnchor.t = now;
         else if (!p) s.zoomAnchor = null;
