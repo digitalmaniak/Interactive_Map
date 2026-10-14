@@ -2,11 +2,11 @@
 // Quick add search: type a place, pick a suggestion, the camera flies there and the
 // existing add stop form opens prefilled. Nothing is saved here; the form's own confirm
 // button runs the existing pin create path.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { QUICK_ADD, debounce, geocode, makeRateGate, nextIndex, shouldSearch } from "../../lib/geocode/quickAdd";
 
-export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCancel }) {
-  const [q, setQ] = useState("");
+export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCancel, inline = false, placeholder, ariaLabel, clearOnPick = false, autoFocus = false, initialQuery = "" }) {
+  const [q, setQ] = useState(initialQuery);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -40,11 +40,11 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
   }, [gate]);
 
   // Dialog mode (Add entry): focus on open.
-  useEffect(() => { if (dialog) input.current?.focus(); }, [dialog]);
+  useEffect(() => { if (dialog || autoFocus) input.current?.focus(); }, [dialog, autoFocus]);
 
   // '/' focuses the search from anywhere except while typing in a field.
   useEffect(() => {
-    if (dialog) return undefined;
+    if (dialog || inline) return undefined;
     const onKey = (e) => {
       if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target;
@@ -55,7 +55,7 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dialog]);
+  }, [dialog, inline]);
 
   // Search runs off the native input event (typing, paste, autofill, IME and the clear
   // button all fire it), debounced. React's onChange only mirrors the value.
@@ -76,10 +76,10 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
 
   const pick = useCallback((r) => {
     if (!r) return;
-    setOpen(false); setQ(r.name); setResults([]); setSel(-1);
+    setOpen(false); setQ(clearOnPick ? "" : r.name); setResults([]); setSel(-1);
     input.current?.blur();
     onPick?.(r);
-  }, [onPick]);
+  }, [onPick, clearOnPick]);
 
   const onKeyDown = (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -95,16 +95,17 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
     }
   };
 
-  const listId = "v2-quickadd-list";
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const listId = `v2-quickadd-list-${uid}`;
   const showList = open && (results.length > 0 || error || (!busy && shouldSearch(q)));
   const box = (
-    <div className={dialog ? "v2-quickadd v2-quickadd-dialog" : "v2-quickadd"} onPointerDown={(e) => e.stopPropagation()}>
+    <div className={dialog ? "v2-quickadd v2-quickadd-dialog" : inline ? "v2-quickadd v2-quickadd-inline" : "v2-quickadd"} onPointerDown={(e) => e.stopPropagation()}>
       <input
         ref={input}
         type="search"
         className="v2-quickadd-input"
-        placeholder={inTrip ? "Add a stop to this trip  ( / )" : "Search a place to add  ( / )"}
-        aria-label={inTrip ? "Search a place to add to this trip" : "Search a place to add"}
+        placeholder={placeholder || (inTrip ? "Add a stop to this trip  ( / )" : "Search a place to add  ( / )")}
+        aria-label={ariaLabel || (inTrip ? "Search a place to add to this trip" : "Search a place to add")}
         role="combobox"
         aria-expanded={!!showList}
         aria-controls={listId}
@@ -115,6 +116,7 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
         onKeyDown={onKeyDown}
         onFocus={() => { if (results.length) setOpen(true); }}
         onBlur={() => { if (!dialog) setTimeout(() => setOpen(false), 150); }}
+        onKeyUp={(e) => { if (inline && e.key === "Escape") e.stopPropagation(); }}
         autoComplete="off"
         spellCheck={false}
       />

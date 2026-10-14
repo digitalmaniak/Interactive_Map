@@ -77,6 +77,7 @@ export default function JournalsPanel({
   onSelectPin,
   onSelectJourney,
   onBackFromJourney,
+  onTypeTrip,
   onBackFromCluster,
   onCreateJourney,
   onUpdateJourney,
@@ -275,6 +276,7 @@ export default function JournalsPanel({
           onStopSharingJourney={onStopSharingJourney}
           draftCounts={draftCounts}
           onReviewLegs={(journey) => setReviewJourneyId(journey.id)}
+          onTypeTrip={onTypeTrip}
           onOpenReview={() => setReviewAll(true)}
         />
       )}

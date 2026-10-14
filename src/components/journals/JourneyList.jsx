@@ -31,6 +31,7 @@ export default function JourneyList({
   onStopSharingJourney,
   draftCounts = {},
   onReviewLegs,
+  onTypeTrip,
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState(emptyForm());
@@ -143,6 +144,12 @@ export default function JourneyList({
       <p style={{ fontSize: "0.85rem", color: "var(--v2-text-dim)", margin: 0, flexShrink: 0, paddingRight: "0.5rem" }}>
         Your trips and collections. Open one to see its places.
       </p>
+      {onTypeTrip && (
+        <div style={{ display: "flex", gap: "1rem", flexShrink: 0, marginTop: "0.35rem" }}>
+          <button type="button" className="v2-link" onClick={() => onTypeTrip("start")}>Type a trip</button>
+          <button type="button" className="v2-link" onClick={() => onTypeTrip("guided")}>Build a trip step by step</button>
+        </div>
+      )}
 
       {showCreate && (
         <form onSubmit={submitCreate} style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: "var(--v2-radius)", border: "1px solid var(--v2-hairline)", background: "var(--v2-surface)", flexShrink: 0 }}>

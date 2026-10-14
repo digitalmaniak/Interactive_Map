@@ -30,6 +30,18 @@ import JournalsPanel from "./journals/JournalsPanel";
 import { fetchTripRanges, fetchUndatedCount } from "../lib/timeline/api";
 import GlobeScene from "./map/scene";
 import MapLoader from "./map/MapLoader";
+import TripDraft, { syncLegs } from "./draft/TripDraft";
+import { emptyDraft, hasLocation } from "../lib/draft/draft";
+import { parseTrip, saveDraft } from "../lib/draft/api";
+
+// Trip draft kept in localStorage so leaving the page loses nothing.
+const DRAFT_KEY = "odyssey.tripDraft.v1";
+const readStoredDraft = () => {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(DRAFT_KEY) || "null");
+    return v && v.draft && Array.isArray(v.draft.stops) ? v : null;
+  } catch { return null; }
+};
 
 /**
  * Thin composer: hooks + AuthGate + MapLoader + GlobeScene (R3F) + AppShell + JournalsPanel.
@@ -79,6 +91,68 @@ export default function MapCanvas() {
   // Journeys + flat pins (GlobeScene) — useTravelData
   const { journeys, pins, setPins, reload: reloadTravelData, journeysLoaded } = useTravelData(session);
 
+  // ---- Trip draft (items 3 and 4) ----
+  // face: null (closed), "start" (textarea card) or "edit" (guided build or typed preview).
+  const [tripDraft, setTripDraftState] = useState(() => readStoredDraft() || { face: null, draft: emptyDraft(), text: "", playKey: null, stub: false });
+  const setTripDraft = (fn) => setTripDraftState((cur) => {
+    const next = typeof fn === "function" ? fn(cur) : fn;
+    try {
+      // Kept while it holds anything (open, or closed with stops or text); cleared on save or discard.
+      if (next.face || next.draft?.stops?.length || next.text?.trim()) window.localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+      else window.localStorage.removeItem(DRAFT_KEY);
+    } catch { /* storage full or blocked: the draft still lives in memory */ }
+    return next;
+  });
+  const [draftBusy, setDraftBusy] = useState({ parsing: false, saving: false, error: "", saveError: "" });
+  const [dataVersion, setDataVersion] = useState(0);
+  // New account: no trips (an empty Imported bucket does not count) and no pins.
+  const accountEmpty = Boolean(session) && journeysLoaded && pins.length === 0 && journeys.every((j) => j.title === "Imported" && !(j.places || j.pins || []).length);
+  const draftFace = tripDraft.face || (accountEmpty ? "start" : null);
+  const openDraft = (face) => {
+    setDraftBusy({ parsing: false, saving: false, error: "", saveError: "" });
+    setTripDraft((cur) => ({ ...cur, face, draft: face === "edit" && !cur.draft?.stops?.length ? syncLegs(emptyDraft()) : cur.draft }));
+  };
+  const closeDraft = () => setTripDraft((cur) => ({ ...cur, face: null }));
+  const discardDraft = () => setTripDraft({ face: null, draft: emptyDraft(), text: "", playKey: null, stub: false });
+  const submitDraftText = async () => {
+    const text = tripDraft.text.trim();
+    if (!text || draftBusy.parsing) return;
+    setDraftBusy((b) => ({ ...b, parsing: true, error: "" }));
+    const r = await parseTrip(text).catch(() => ({ error: "parse_failed", message: "Could not read that trip. Try rephrasing, or build it step by step." }));
+    if (r.error) { setDraftBusy((b) => ({ ...b, parsing: false, error: r.message })); return; }
+    setDraftBusy((b) => ({ ...b, parsing: false, error: "" }));
+    // Parsed items start as guesses (40% style) until the user touches them.
+    const d = syncLegs({ ...r.draft, stops: r.draft.stops.map((st) => ({ ...st, guessed: true })), legs: r.draft.legs.map((l) => ({ ...l, guessed: true })) });
+    setTripDraft((cur) => ({ ...cur, face: "edit", draft: d, stub: !!r.stub, playKey: Date.now() }));
+    setActiveTab("Map");
+  };
+  const saveTripDraft = async () => {
+    if (draftBusy.saving) return;
+    setDraftBusy((b) => ({ ...b, saving: true, saveError: "" }));
+    const r = await saveDraft(tripDraft.draft).catch((e) => ({ error: e?.message || "save_failed" }));
+    if (r.error) { setDraftBusy((b) => ({ ...b, saving: false, saveError: "Could not save this trip. Please try again." })); return; }
+    setDraftBusy((b) => ({ ...b, saving: false }));
+    setTripDraft({ face: null, draft: emptyDraft(), text: "", playKey: null, stub: false });
+    await reloadTravelData();
+    setDataVersion((v) => v + 1);
+    if (r.id) { setActiveJourneyId(r.id); setActiveTab("Journals"); }
+  };
+  // Globe data for the open draft: located stops become pins, consecutive located stops get legs.
+  const draftOpen = tripDraft.face === "edit";
+  const draftGlobe = (() => {
+    if (!draftOpen) return null;
+    const d = tripDraft.draft;
+    const located = d.stops.map((st, i) => ({ st, i })).filter(({ st }) => hasLocation(st));
+    const key = `draft:${located.length}:${tripDraft.playKey || 0}`;
+    const dpins = located.map(({ st, i }) => ({ id: `draft:${i}`, journey_id: key, latitude: st.lat, longitude: st.lng, title: st.name, location_name: st.name, logs: [] }));
+    const ok = new Set(located.map(({ i }) => i));
+    const legs = d.legs.filter((l) => ok.has(l.from_stop) && ok.has(l.to_stop)).map((l, k) => ({
+      id: `draftleg:${k}`, from_pin_id: `draft:${l.from_stop}`, to_pin_id: `draft:${l.to_stop}`, from_label: l.from_label, to_label: l.to_label,
+      from_lat: null, from_lng: null, to_lat: null, to_lng: null, mode: l.mode || "other", status: l.guessed || !l.mode ? "draft" : "confirmed", sort_order: k, depart_at: null, arrive_at: null,
+    }));
+    return { key, pins: dpins, legs, title: d.journey.title || "New trip" };
+  })();
+
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showFlightPaths, setShowFlightPaths] = useState(false);
   const [activeTab, setActiveTab] = useState("Map");
@@ -123,7 +197,7 @@ export default function MapCanvas() {
     fetchTripRanges(ctl.signal).then(({ rows, error }) => { if (!ctl.signal.aborted && !error) setTripRanges(rows); }).catch(() => {});
     fetchUndatedCount(ctl.signal).then(({ count, error }) => { if (!ctl.signal.aborted && !error) setUndatedCount(count); }).catch(() => {});
     return () => ctl.abort();
-  }, [session, reviewOpen]);
+  }, [session, reviewOpen, dataVersion]);
 
   const activePinRef = useRef(activePin);
   const isAddingEntryRef = useRef(isAddingEntry);
@@ -224,6 +298,7 @@ export default function MapCanvas() {
   // Clicking the map closes the panel when open; clicking land (when closed)
   // starts a new memory at that spot; clicking open ocean does nothing.
   const handleMapClick = ({ lat, lon, isLand, offGlobe }) => {
+    if (tripDraft.face === "edit") return; // the draft card owns the globe while open
     // Empty globe, ocean or space while a trip is open (or the panel is open) exits to the map.
     if (activeTab === "Journals" || activeJourneyId != null || activePin) {
       closeJournalPanel();
@@ -673,7 +748,7 @@ export default function MapCanvas() {
   };
 
   return (
-    <div className={`app-container${sheetOpen ? ` is-sheet-open${sheetCollapsed ? " is-sheet-collapsed" : ""}` : ""}`} style={sheetOpen ? { "--sheet-min": `${sheetHeaderPx}px` } : undefined}>
+    <div className={`app-container${sheetOpen ? ` is-sheet-open${sheetCollapsed ? " is-sheet-collapsed" : ""}` : ""}${draftFace ? " is-draft-open" : ""}${draftOpen ? " is-draft-edit" : ""}`} style={sheetOpen ? { "--sheet-min": `${sheetHeaderPx}px` } : undefined}>
       <AuthGate
         authLoading={authLoading}
         authBusy={authBusy}
@@ -698,18 +773,20 @@ export default function MapCanvas() {
         {isLoaded && geoJsonData && (
           <GlobeScene
             geoJson={geoJsonData}
-            pins={pins}
-            activePinId={activePin?.id || null}
-            focusJourneyId={activeJourneyId}
+            pins={draftGlobe ? [...pins, ...draftGlobe.pins] : pins}
+            activePinId={draftGlobe ? null : activePin?.id || null}
+            focusJourneyId={draftGlobe ? (draftGlobe.pins.length ? draftGlobe.key : null) : activeJourneyId}
+            draftLegs={draftGlobe ? draftGlobe.legs : null}
+            draftPlayKey={draftGlobe ? tripDraft.playKey : null}
             flyTo={flyTo}
-            focusIsCollection={activeJourneyIsCollection}
-            focusTitle={activeJourney?.title || null}
+            focusIsCollection={draftGlobe ? false : activeJourneyIsCollection}
+            focusTitle={draftGlobe ? draftGlobe.title : activeJourney?.title || null}
             onPinClick={handlePinClick}
             onMapClick={handleMapClick}
             onHoverRegion={handleHoverRegion}
-            panelOpen={Boolean(session) && activeTab === "Journals"}
-            panelWidth={viewport.mobile ? 0 : 350}
-            sheetInset={sheetInset}
+            panelOpen={draftGlobe ? !viewport.mobile : Boolean(session) && activeTab === "Journals"}
+            panelWidth={viewport.mobile ? 0 : draftGlobe ? 452 : 350}
+            sheetInset={draftGlobe && viewport.mobile ? Math.round(viewport.h * 0.5) : sheetInset}
             timeline={session ? timelineProps : null}
           />
         )}
@@ -717,6 +794,29 @@ export default function MapCanvas() {
 
       {session && (
         <QuickAdd onPick={handleQuickAddPick} inTrip={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection} />
+      )}
+
+      {session && draftFace && !addSearchOpen && (
+        <TripDraft
+          face={draftFace === "edit" ? "edit" : "start"}
+          text={tripDraft.text}
+          setText={(t) => setTripDraft((cur) => ({ ...cur, text: t }))}
+          onSubmitText={submitDraftText}
+          parsing={draftBusy.parsing}
+          error={draftBusy.error}
+          stub={tripDraft.stub}
+          onStartGuided={() => { openDraft("edit"); setActiveTab("Map"); }}
+          onAddSingle={() => { if (tripDraft.face) closeDraft(); setAddSearchOpen(true); }}
+          draft={tripDraft.draft}
+          setDraft={(fn) => setTripDraft((cur) => ({ ...cur, draft: typeof fn === "function" ? fn(cur.draft) : fn }))}
+          onSave={saveTripDraft}
+          saving={draftBusy.saving}
+          saveError={draftBusy.saveError}
+          onClose={tripDraft.face ? closeDraft : null}
+          onDiscard={discardDraft}
+          resumable={!tripDraft.face && tripDraft.draft.stops.length > 0}
+          onResume={() => openDraft("edit")}
+        />
       )}
 
       {session && addSearchOpen && (
@@ -804,6 +904,7 @@ export default function MapCanvas() {
               setActivePin(null);
             }}
             onBackFromJourney={() => setActiveJourneyId(null)}
+            onTypeTrip={(face) => { openDraft(face === "guided" ? "edit" : "start"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}
             onBackFromCluster={() => setClusterPins(null)}
             onCreateJourney={handleCreateJourney}
             onUpdateJourney={handleUpdateJourney}
