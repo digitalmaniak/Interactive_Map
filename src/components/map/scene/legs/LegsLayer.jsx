@@ -10,6 +10,8 @@ import { isShortLeg, legKm, shortLegLabel, snapShortLegs } from "../../../../lib
 // three-stdlib's Line2 (the same one drei's <Line> uses) supports RGBA vertex colours,
 // needed for the fly end fade and the wake fade.
 import { Line2, LineGeometry, LineMaterial, LineSegments2, LineSegmentsGeometry } from "three-stdlib";
+import { flyoverCine } from "../flyover/flyoverState";
+import { legDrawAt } from "../flyover/cinematicPlan";
 import { llToUnit, flyArc, surfacePath, surfaceLiftScale, flyScaleFor, FLY_TRIP_SCALE } from "./legGeometry";
 
 // Journey legs on the globe (DESIGN.md "Leg mode styles", v1 build spec). All widths
@@ -52,7 +54,7 @@ function makeSegs(px) {
   return l;
 }
 
-export default function LegsLayer({ legs: rawLegs, activePinId, activeLegId, tripBlend, reducedMotion, lite = false }) {
+export default function LegsLayer({ cinematic = false, legs: rawLegs, activePinId, activeLegId, tripBlend, reducedMotion, lite = false }) {
   const { camera, size, gl } = useThree();
   const surfaceGroup = useRef();
   const flyGroup = useRef();
@@ -73,6 +75,8 @@ export default function LegsLayer({ legs: rawLegs, activePinId, activeLegId, tri
     });
   }, [rawLegs]);
 
+  // Leg order in the flyover plan (same sort as the plan) for the cinematic draw.
+  const legOrder = useMemo(() => new Map([...(legs || [])].filter((l) => !l.preview).sort((x, y) => (x.sort ?? 0) - (y.sort ?? 0)).map((l, i) => [l.id, i])), [legs]);
   // Build lines once per leg set / active stop.
   const built = useMemo(() => {
     const out = [];
@@ -92,10 +96,10 @@ export default function LegsLayer({ legs: rawLegs, activePinId, activeLegId, tri
       path.points.forEach((_, i) => colors.push(col.r, col.g, col.b, path.alpha ? (active ? Math.max(path.alpha[i], 0.4) : path.alpha[i] * baseA) : baseA));
       const line = makeLine(path.points, colors, s.px * (active ? 1.5 : 1), !!s.dash);
       line.renderOrder = fly ? 6 : 4;
-      out.push({ leg, s, fly, active, line, points: path.points, arcScale: FLY_TRIP_SCALE });
+      out.push({ leg, s, fly, active, line, points: path.points, arcScale: FLY_TRIP_SCALE, order: legOrder.get(leg.id) ?? -1 });
     }
     return out;
-  }, [legs, activePinId, activeLegId]);
+  }, [legs, activePinId, activeLegId, legOrder]);
 
   // Short legs (under 2 km): one dot per midpoint, hover label "Walk · 0.8 km".
   const shortDots = useMemo(() => {
@@ -180,7 +184,14 @@ export default function LegsLayer({ legs: rawLegs, activePinId, activeLegId, tri
       if (b.line.material.userData.px == null) b.line.material.userData.px = b.line.material.linewidth;
       b.line.material.linewidth = Math.max(b.line.material.userData.px, 1 / Math.min(1, gl.getPixelRatio()));
       const n = b.points.length - 1;
-      b.line.geometry.instanceCount = Math.max(0, Math.round(progress * n));
+      // Share cinematic: each leg draws with its move (head ~8% ahead), later legs hidden.
+      const cine = cinematic ? flyoverCine.current : null;
+      let frac = progress;
+      if (cine?.on) {
+        const o = b.order;
+        frac = o < cine.preDrawn || o < cine.legIndex ? 1 : o > cine.legIndex ? 0 : cine.kind === "move" ? legDrawAt(cine.t) : 1;
+      }
+      b.line.geometry.instanceCount = Math.max(0, Math.round(frac * n));
       if (b.s.dash) {
         // Dash pattern in screen px at the leg's middle distance.
         const w = pxw(b.points[Math.floor(n / 2)]);

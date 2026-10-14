@@ -7,15 +7,52 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { buildFlyoverPlan } from "./flyoverPlan";
 import { FLYOVER, easeInOutCubic } from "./flyoverTiming";
-import { flyoverActive } from "./flyoverState";
+import { flyoverActive, flyoverCine } from "./flyoverState";
+import { buildCinematicPlan, CINE, easeInOutSine } from "./cinematicPlan";
+import { flyHeight, FLY_TRIP_SCALE } from "../legs/legGeometry";
+
+const linear = (t) => t;
+// Opening/end view: 3x the trip fit's altitude, kept inside the trip view's max distance.
+const openD = (D) => Math.min(CINE.openMaxD, 1 + ((D ?? 1.6) - 1) * CINE.openDistK);
+const D2R = THREE.MathUtils.degToRad;
 
 const IDLE = { playing: false, paused: false, done: false, legIndex: -1, stopIndex: -1, pinId: null, legId: null };
 
-export default function useFlyover({ legs, enabled, tripKey, reducedMotion, moveRef, fov, endGoal, timing }) {
+export default function useFlyover({ legs, enabled, tripKey, reducedMotion, moveRef, fov, endGoal, timing, cinematic = false }) {
   // State is tagged with the trip it belongs to; another trip (or none) always reads as
   // idle, so a flyover can never carry over into the next journal.
   const [state, setState] = useState({ ...IDLE, key: null });
-  const r = useRef({ plan: null, i: 0, t0: 0, elapsed: 0, issued: null, playing: false, raf: 0 });
+  const r = useRef({ plan: null, i: 0, t0: 0, elapsed: 0, issued: null, playing: false, raf: 0, heading: 0, pushed: false });
+  const makePlan = useCallback(() => (cinematic
+    ? buildCinematicPlan(legs, { reducedMotion })
+    : buildFlyoverPlan(legs, { reducedMotion, ...(timing ? { timing } : {}) })), [cinematic, legs, reducedMotion, timing]);
+  // Cinematic: one goal per step, written to moveRef; the leg draw reads cineRef each frame.
+  const cineGoal = useCallback((step, msLeft) => {
+    const f = r.current, C = CINE;
+    const stop = f.plan.stops[step.stopIndex];
+    const at = (extra) => ({ n: stop.v.clone().normalize(), D: FLYOVER.stopDist, tilt: D2R(C.tiltStopDeg), heading: f.heading, fov, trip: true, ...extra });
+    if (step.kind === "open") {
+      const g = endGoal();
+      return { ...g, D: openD(g.D), ms: 1, heading: 0 };
+    }
+    if (step.kind === "move") {
+      const leg = f.plan.legs[step.legIndex];
+      const ang = leg.a.v.angleTo(leg.b.v);
+      const arcH = leg.mode === "fly" ? flyHeight(ang) * FLY_TRIP_SCALE : 0.35 * ang;
+      return at({ ms: reducedMotion ? 1 : msLeft, ease: easeInOutSine, ...(step.short || reducedMotion ? { noBump: true } : { peakD: Math.max(FLYOVER.stopDist, 1 + C.peakK * arcH), tiltPeak: D2R(C.tiltPeakDeg) }) });
+    }
+    if (step.kind === "hold") {
+      // Slow linear orbit, 6 degrees over the hold.
+      const frac = step.ms ? msLeft / step.ms : 0;
+      f.heading += reducedMotion ? 0 : D2R(C.orbitDeg) * frac;
+      return at({ ms: reducedMotion ? 1 : Math.max(1, msLeft), ease: linear, noBump: true });
+    }
+    if (step.kind === "end") {
+      const g = endGoal();
+      return { ...g, D: openD(g.D), heading: 0, ms: reducedMotion ? 1 : msLeft, ease: easeInOutSine, noBump: true };
+    }
+    return null;
+  }, [endGoal, fov, reducedMotion]);
 
   const publish = useCallback((patch) => {
     setState((prev) => {
@@ -29,6 +66,7 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
 
   const issue = useCallback((step, msLeft) => {
     const f = r.current;
+    if (f.plan?.cinematic) { const g = cineGoal(step, msLeft); if (g) { f.issued = g; moveRef.current = g; } return; }
     if (step.kind === "end") {
       f.issued = { ...endGoal(), ms: msLeft, ease: easeInOutCubic };
     } else if (step.kind === "move") {
@@ -39,15 +77,16 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
       };
     } else return;
     moveRef.current = f.issued;
-  }, [endGoal, fov, moveRef]);
+  }, [endGoal, fov, moveRef, cineGoal]);
 
   const enter = useCallback((i, msLeft) => {
     const f = r.current;
     const step = f.plan.steps[i];
     f.i = i; f.t0 = performance.now(); f.elapsed = step.ms - msLeft;
-    if (step.kind !== "hold") issue(step, Math.max(reducedMotion ? 1 : 600, msLeft));
+    if (f.plan.cinematic) { if (i === 0) f.heading = 0; f.pushed = false; issue(step, Math.max(1, msLeft)); }
+    else if (step.kind !== "hold") issue(step, Math.max(reducedMotion ? 1 : 600, msLeft));
     const stop = f.plan.stops[step.stopIndex];
-    publish({ legIndex: step.legIndex, stopIndex: step.stopIndex, pinId: step.kind === "end" ? null : stop?.pinId ?? null, legId: step.kind === "end" ? null : step.legId });
+    publish({ kind: step.kind, stepMs: msLeft, stepI: i, legIndex: step.legIndex, stopIndex: step.stopIndex, stopPinId: stop?.pinId ?? null, pinId: step.kind === "end" ? null : stop?.pinId ?? null, legId: step.kind === "end" ? null : step.legId });
   }, [issue, publish, reducedMotion]);
 
   const tick = useCallback(() => {
@@ -61,16 +100,28 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
       return;
     }
     const t = f.elapsed + performance.now() - f.t0;
+    if (f.plan.cinematic) {
+      const C = CINE;
+      // Opening: after the fade and the hold, push in to the first place.
+      if (step.kind === "open" && !f.pushed && !reducedMotion && t >= C.fadeMs + C.openHoldMs) {
+        f.pushed = true;
+        const stop = f.plan.stops[step.stopIndex];
+        f.issued = { n: stop.v.clone().normalize(), D: FLYOVER.stopDist, tilt: D2R(C.tiltStopDeg), heading: 0, fov, trip: true, ms: Math.max(1, step.ms - t), ease: easeInOutCubic, noBump: true };
+        moveRef.current = f.issued;
+      }
+      flyoverCine.current = { on: true, i: f.i, kind: step.kind, legIndex: step.legIndex, t: Math.min(1, t / Math.max(1, step.ms)), tMs: t, stepMs: step.ms, preDrawn: f.plan.steps[0].preDrawn || 0 };
+    }
     if (t >= step.ms) {
       if (f.i + 1 >= f.plan.steps.length) {
         f.playing = false; f.issued = null;
+        flyoverCine.current = { on: false, done: true };
         publish({ playing: false, paused: false, done: true, legIndex: -1, stopIndex: -1, pinId: null, legId: null });
         return;
       }
       enter(f.i + 1, f.plan.steps[f.i + 1].ms);
     }
     f.raf = requestAnimationFrame(() => r.current.tickRef());
-  }, [enter, moveRef, publish]);
+  }, [enter, moveRef, publish, fov, reducedMotion]);
   useEffect(() => { r.current.tickRef = tick; }, [tick]);
 
   const play = useCallback(() => {
@@ -78,7 +129,7 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
     if (!enabled || f.playing) return;
     const cur = state.key === tripKey ? state : IDLE;
     if (!f.plan || cur.done || !cur.paused) {
-      f.plan = buildFlyoverPlan(legs, { reducedMotion, ...(timing ? { timing } : {}) });
+      f.plan = makePlan();
       if (!f.plan.steps.length) return;
       f.playing = true;
       publish({ playing: true, paused: false, done: false });
@@ -93,7 +144,7 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
     }
     cancelAnimationFrame(f.raf);
     f.raf = requestAnimationFrame(() => r.current.tickRef());
-  }, [enabled, legs, reducedMotion, state, tripKey, enter, publish, timing]);
+  }, [enabled, state, tripKey, enter, publish, makePlan]);
 
   const pause = useCallback(() => {
     const f = r.current;
@@ -112,6 +163,7 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
     const was = f.playing || (state.key === tripKey && state.paused);
     f.playing = false; cancelAnimationFrame(f.raf); f.raf = 0;
     f.plan = null; f.issued = null;
+    flyoverCine.current = { on: false };
     publish({ ...IDLE });
     if (was && enabled) moveRef.current = { ...endGoal() };
   }, [enabled, endGoal, moveRef, publish, state, tripKey]);
@@ -120,9 +172,9 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
   // point between stops. Reuses the plan, timings and the single CameraController.
   const planNow = useCallback(() => {
     const f = r.current;
-    if (!f.plan) f.plan = buildFlyoverPlan(legs, { reducedMotion, ...(timing ? { timing } : {}) });
+    if (!f.plan) f.plan = makePlan();
     return f.plan;
-  }, [legs, reducedMotion, timing]);
+  }, [makePlan]);
   const timeNow = useCallback(() => {
     const f = r.current;
     if (!f.plan) return 0;
@@ -176,6 +228,19 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
     return true;
   }, [enabled, planNow, seek]);
 
+  // Skip to the end frame (share cinematic): Esc, a click or a drag.
+  const finish = useCallback(() => {
+    const f = r.current;
+    if (!enabled) return;
+    f.playing = false; cancelAnimationFrame(f.raf); f.raf = 0;
+    const cine = !!f.plan?.cinematic || cinematic;
+    f.plan = null; f.issued = null;
+    flyoverCine.current = { on: false };
+    publish({ ...IDLE, done: true });
+    const g = endGoal();
+    moveRef.current = cine ? { ...g, D: openD(g.D), heading: 0, ms: reducedMotion ? 1 : 900, ease: easeInOutSine, noBump: true } : { ...g };
+  }, [enabled, cinematic, endGoal, moveRef, publish, reducedMotion]);
+
   const toggle = useCallback(() => { if (r.current.playing) pause(); else play(); }, [pause, play]);
 
   // Changing trips, leaving trip view or unmounting: cancel the timer, drop the plan and
@@ -187,6 +252,7 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
       if (f.issued && moveRef.current === f.issued) moveRef.current = null;
       f.issued = null;
       flyoverActive.current = false;
+      flyoverCine.current = { on: false };
       if (typeof window !== "undefined") window.__flyoverDebug = { playing: false, paused: false, legIndex: -1, stopIndex: -1, done: false };
     };
   }, [enabled, tripKey, moveRef]);
@@ -194,5 +260,5 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
   // Outside trip view the flyover always reads as idle (refs were reset above).
   const live = enabled && state.key === tripKey ? state : IDLE;
   useEffect(() => { flyoverActive.current = !!(live.playing || live.paused); }, [live.playing, live.paused]);
-  return { state: live, play, pause, stop, toggle, seek, seekStop, timeNow, planNow };
+  return { state: live, play, pause, stop, finish, toggle, seek, seekStop, timeNow, planNow };
 }

@@ -381,7 +381,8 @@ function sampleTween(tw, now) {
   }
   let D = lerp(a.D, b.D, e) + tw.bump * Math.sin(Math.PI * raw);
   let tilt;
-  if (tw.bump > 0) tilt = raw < 0.5 ? lerp(a.tilt, 0, easeMove(raw * 2)) : lerp(0, b.tilt, easeMove(raw * 2 - 1));
+  const tp = tw.tiltPeak ?? 0;
+  if (tw.bump > 0) tilt = raw < 0.5 ? lerp(a.tilt, tp, easeMove(raw * 2)) : lerp(tp, b.tilt, easeMove(raw * 2 - 1));
   else tilt = lerp(a.tilt, b.tilt, e);
   if (tw.zoomOnly) D = Math.min(D, a.D);
   return {
@@ -405,7 +406,10 @@ function makeTween(from, goal, now, reducedMotion) {
   if (goal.zoomOnly) to.D = Math.min(to.D, from.D);
   const d = from.n.angleTo(to.n);
   const hPeak = Math.min(LIFT_CAP, Math.max(from.D, to.D, from.D + 1.2 * d));
-  const bump = reducedMotion || d < 0.05 || goal.zoomOnly ? 0 : Math.max(0, hPeak - Math.max(from.D, to.D));
+  // Cinematic share flyover: an explicit peak distance (or none) per move.
+  const bump = reducedMotion || goal.noBump || goal.zoomOnly ? 0
+    : goal.peakD != null ? Math.max(0, goal.peakD - Math.max(from.D, to.D))
+    : d < 0.05 ? 0 : Math.max(0, hPeak - Math.max(from.D, to.D));
   const ms = goal.ms ?? THREE.MathUtils.clamp(700 + 900 * Math.sqrt(d / Math.PI) + 250 * Math.abs(Math.log2(to.D / from.D)), 600, 2200);
   return {
     from, to, d, bump, ms, t0: now,
@@ -413,6 +417,7 @@ function makeTween(from, goal, now, reducedMotion) {
     dh: wrapPi(to.heading - from.heading),
     zoomOnly: !!goal.zoomOnly,
     ease: goal.ease || null,
+    tiltPeak: goal.tiltPeak ?? null,
     goal,
   };
 }
@@ -947,6 +952,7 @@ export default function GlobeScene({
   draftPlayKey = null, // changes when a parsed draft should play its fast flyover
   legsOverride = null, // share view: leg rows read by the page (share token client), no fetch here
   autoPlayKey = null, // share view: plays the normal flyover once per key
+  cinematic = false, // share view: Prism's cinematic flyover (also plays with reduced motion, as cuts)
   onFlyState, // share view: called with the flyover state on every change
   flyApiRef = null, // share view: filled with { play, stop, seekLeg }
   flyTo = null,
@@ -1269,7 +1275,7 @@ export default function GlobeScene({
     for (const key of ["shortLegMs", "longFlightMs", "holdMs", "introMs", "outroMs"]) t[key] = Math.max(120, Math.round(FLYOVER[key] * k));
     return t;
   }, [isDraft, legs]);
-  const fly = useFlyover({ legs, enabled: flyEnabled, tripKey: tripKeyForLegs, reducedMotion, moveRef, fov: TRIP_KEY.fov, endGoal: flyEndGoal, timing: draftTiming });
+  const fly = useFlyover({ legs, enabled: flyEnabled, tripKey: tripKeyForLegs, reducedMotion, moveRef, fov: TRIP_KEY.fov, endGoal: flyEndGoal, timing: draftTiming, cinematic });
   // A parsed draft plays its fast flyover after the trip fit has had a moment to start.
   const playedRef = useRef(null);
   const flyPlayRef = useRef(null);
@@ -1284,16 +1290,20 @@ export default function GlobeScene({
   // Share view: the normal flyover plays once per autoPlayKey after the trip fit starts.
   useEffect(() => {
     const k = `${autoPlayKey}|${tripKeyForLegs}`;
-    if (!autoPlayKey || !flyEnabled || reducedMotion || playedRef.current === k) return undefined;
-    const t = setTimeout(() => { playedRef.current = k; flyPlayRef.current?.(); }, 1200);
+    if (!autoPlayKey || !flyEnabled || (reducedMotion && !cinematic) || playedRef.current === k) return undefined;
+    const t = setTimeout(() => { playedRef.current = k; flyPlayRef.current?.(); }, cinematic ? 300 : 1200);
     return () => clearTimeout(t);
-  }, [autoPlayKey, flyEnabled, tripKeyForLegs, reducedMotion]);
+  }, [autoPlayKey, flyEnabled, tripKeyForLegs, reducedMotion, cinematic]);
   useEffect(() => { onFlyState?.(fly.state); }, [fly.state, onFlyState]);
   useEffect(() => {
     if (!flyApiRef) return;
     flyApiRef.current = {
       play: fly.play,
       stop: fly.stop,
+      toggle: fly.toggle,
+      finish: fly.finish,
+      stops: () => fly.planNow().stops || [],
+      totalMs: () => fly.planNow().totalMs || 0,
       // Jump to the start of a leg and pause there (same seek as the timeline dots).
       seekLeg: (legId) => {
         const plan = fly.planNow();
@@ -1497,7 +1507,7 @@ export default function GlobeScene({
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} cheap={force3d} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
         <HomeRings home={home} still={reducedMotion || (force3d && !pulseQA)} />
-        <LegsLayer legs={legs} activePinId={shownActivePinId} activeLegId={activeLegId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
+        <LegsLayer cinematic={cinematic} legs={legs} activePinId={shownActivePinId} activeLegId={activeLegId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
         <Stops
           beamHeightRef={beamHeightRef}
           hideBeams={force3d}

@@ -567,3 +567,29 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 @media (max-width: 480px) { .v2-stats-backdrop { align-items: flex-end; padding: 0; } .v2-stats { border-radius: 8px 8px 0 0; } }
 .v2-stats-open { flex-shrink: 0; height: 24px; padding: 0 10px; background: none; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 3px; color: var(--v2-text-dim); font: 400 10px/1 var(--v2-mono); letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; }
 .v2-stats-open:hover, .v2-stats-open:focus-visible { color: #00E5FF; border-color: #00E5FF; }
+
+/* Share cinematic flyover */
+.share-globe-page.is-cine .v2-trip-title { opacity: 0 !important; pointer-events: none; }
+.share-cine-black { position: fixed; inset: 0; z-index: 4; background: #000; pointer-events: none; animation: share-cine-black 800ms linear forwards; }
+@keyframes share-cine-black { from { opacity: 1; } to { opacity: 0; } }
+.share-cine-title { position: fixed; left: 0; top: 0; bottom: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; pointer-events: none; text-align: center; padding: 0 24px; opacity: 0; animation: share-cine-title 2400ms linear forwards; }
+.share-cine-title h1 { margin: 0; font: 400 clamp(26px, 4vw, 44px)/1.1 var(--v2-serif, Georgia, serif); letter-spacing: 0.2em; text-transform: uppercase; color: var(--v2-text); }
+.share-cine-title p { margin: 0; font: 400 12px/1.3 var(--v2-mono); letter-spacing: 0.18em; color: rgba(255, 255, 255, 0.6); }
+@keyframes share-cine-title { 0%, 25% { opacity: 0; } 37.5% { opacity: 1; } 87.5% { opacity: 1; } 100% { opacity: 0; } }
+.share-cine-title.is-end { animation: share-cine-end 2000ms ease-out forwards; }
+@keyframes share-cine-end { 0%, 60% { opacity: 0; } 100% { opacity: 1; } }
+.share-cine-title.is-still, .share-cine-title.is-end.is-still { animation: none; opacity: 1; }
+.share-cine-title:not(.is-end).is-still { opacity: 0; }
+.share-cine-actions { display: flex; gap: 8px; margin-top: 14px; pointer-events: auto; }
+.share-cine-btn { height: 40px; padding: 0 18px; background: rgba(7, 9, 11, 0.6); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 3px; color: var(--v2-text); font: 400 13px/1 var(--v2-mono); cursor: pointer; }
+.share-cine-btn:hover, .share-cine-btn:focus-visible { color: #00E5FF; border-color: #00E5FF; }
+.share-stop-card { position: fixed; left: 24px; bottom: 32px; z-index: 5; min-width: 180px; padding: 12px 14px; background: rgba(7, 9, 11, 0.82); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 6px; pointer-events: none; animation: share-card-in 300ms ease-out forwards; transition: opacity 300ms linear; }
+.share-stop-card.is-out { opacity: 0; }
+@keyframes share-card-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.share-stop-card.is-still { animation: none; transition: none; }
+.share-stop-city { font: 600 15px/1.2 var(--v2-sans, system-ui); color: var(--v2-text); }
+.share-stop-country { font: 400 12px/1.3 var(--v2-mono); color: var(--v2-text-dim); margin-top: 2px; }
+.share-stop-dates { font: 400 11px/1.3 var(--v2-mono); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 6px; color: var(--v2-text); }
+.share-stop-dates.v2-date-est { color: rgba(230, 237, 240, 0.6); }
+@media (prefers-reduced-motion: reduce) { .share-cine-black, .share-stop-card { animation: none; } }
+

@@ -1,0 +1,30 @@
+// Share cinematic flyover plan: timing per Prism's spec, Costa Rica comes out around 25 s.
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import * as THREE from "three";
+import { buildCinematicPlan, cineLegMs, legDrawAt, CINE } from "../src/components/map/scene/flyover/cinematicPlan.js";
+const unit = (lat, lon) => { const p = THREE.MathUtils.degToRad(lat), l = THREE.MathUtils.degToRad(lon); return new THREE.Vector3(Math.cos(p) * Math.sin(l), Math.sin(p), Math.cos(p) * Math.cos(l)); };
+const raw = JSON.parse(fs.readFileSync(new URL("./fixtures-costa-rica-legs.json", import.meta.url)));
+const legs = raw.map((l) => ({ ...l, a: { lat: l.a[0], lon: l.a[1], v: unit(l.a[0], l.a[1]) }, b: { lat: l.b[0], lon: l.b[1], v: unit(l.b[0], l.b[1]) } }));
+assert.equal(cineLegMs(0.8), 600, "under 2 km cuts in 0.6 s");
+assert.equal(cineLegMs(1000), 1850, "1.6 s + 0.25 s per 1,000 km");
+assert.equal(cineLegMs(20000), 4500, "capped at 4.5 s");
+assert.ok(legDrawAt(0) === 0 && legDrawAt(0.5) > 0.5 && legDrawAt(0.92) === 1, "leg head leads the camera by ~8%");
+const p = buildCinematicPlan(legs);
+const open = p.steps[0];
+assert.equal(open.kind, "open"); assert.equal(open.ms, 2400, "opening is 2.4 s");
+assert.equal(open.preDrawn, 1, "home is not a stop on the way out: the outbound flight is drawn at the open");
+assert.equal(p.steps.at(-1).kind, "end"); assert.equal(p.steps.at(-1).ms, 2000);
+const holds = p.steps.filter((s) => s.kind === "hold");
+assert.ok(holds.every((s) => s.ms === 2200), "holds 2.2 s");
+assert.equal(holds.length, 4, "holds only at places (Alajuela, Puerto Viejo, Bocas, Alajuela), none at waypoints or home");
+const total = p.totalMs / 1000;
+console.log(`Costa Rica cinematic runtime: ${total.toFixed(1)} s (${p.steps.length} steps)`);
+assert.ok(total > 22 && total < 28, "Costa Rica around 25 s");
+// Over 40 s: holds scale down evenly.
+const many = Array.from({ length: 20 }, (_, i) => ({ id: `l${i}`, sort: i, mode: "drive", fromPinId: `p${i}`, toPinId: `p${i + 1}`, distanceKm: 300, a: { lat: 0, lon: i, v: unit(0, i) }, b: { lat: 0, lon: i + 1, v: unit(0, i + 1) } }));
+const big = buildCinematicPlan(many);
+assert.ok(Math.abs(big.totalMs - CINE.maxTotalMs) < 50, `capped at 40 s (${big.totalMs})`);
+const rm = buildCinematicPlan(legs, { reducedMotion: true });
+assert.ok(rm.steps.filter((s) => s.kind === "move").every((s) => s.ms === CINE.reducedCutMs) && rm.steps.filter((s) => s.kind === "hold").every((s) => s.ms === 2200), "reduced motion: cuts, 2.2 s holds");
+console.log("check-cinematic: ok");

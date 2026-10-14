@@ -7,7 +7,10 @@ import MapLoader from "../map/MapLoader";
 import ModeIcon from "../shell/ModeIcon";
 import { loadSharedJourney } from "../../lib/journeys/share";
 import { homeLegIdFromRows } from "../../lib/legs/homeLeg";
-import { legDate, legLine, shareLegs, tripDates } from "../../lib/journeys/shareItinerary";
+import { legDate, legEnds, legLine, shareLegs, tripDates } from "../../lib/journeys/shareItinerary";
+import { haversineKm } from "../../lib/legs/shortLeg";
+import { fmtMonthYear, stopDateOrTrip } from "../../lib/dates/calendar";
+import { CINE } from "../map/scene/flyover/cinematicPlan";
 
 const IDLE = { playing: false, paused: false, done: false, legIndex: -1, legId: null };
 
@@ -61,6 +64,46 @@ export default function ShareView({ token }) {
   const legs = useMemo(() => (journey ? shareLegs(journey.legs, pins) : []), [journey, pins]);
   const homeId = useMemo(() => homeLegIdFromRows(legs, pins), [legs, pins]);
   const onFlyState = useCallback((s) => setFly(s || IDLE), []);
+  // Title card line: "SEP 2023 · 3 STOPS · 7,596 KM".
+  const statsLine = useMemo(() => {
+    if (!journey) return "";
+    const km = legs.reduce((a, l) => {
+      const d = Number(l.distance_km);
+      if (l.distance_km != null && Number.isFinite(d)) return a + d;
+      const e = legEnds(l, pinsById);
+      return a + (e ? haversineKm(e.a[1], e.a[0], e.b[1], e.b[0]) : 0);
+    }, 0);
+    const n = pins.length;
+    return [fmtMonthYear(journey.date_start), `${n} ${n === 1 ? "STOP" : "STOPS"}`, km > 0 ? `${Math.round(km).toLocaleString("en-US")} KM` : ""].filter(Boolean).join(" · ").toUpperCase();
+  }, [journey, legs, pins, pinsById]);
+  // Stop card: shown on each hold, out 0.3 s before the next move.
+  const [outStep, setOutStep] = useState(-1);
+  useEffect(() => {
+    if (fly.kind !== "hold" || !fly.playing) return undefined;
+    const i = fly.stepI;
+    const t = setTimeout(() => setOutStep(i), Math.max(0, (fly.stepMs || 0) - CINE.cardOutLeadMs));
+    return () => clearTimeout(t);
+  }, [fly.kind, fly.stepI, fly.playing, fly.stepMs]);
+  const cardOut = outStep === fly.stepI;
+  const cardPin = fly.kind === "hold" && fly.stopPinId ? pinsById[fly.stopPinId] : null;
+  const cardDate = cardPin ? stopDateOrTrip(cardPin, journey) : null;
+  // Controls: Space pauses, Esc / click / drag skips to the end frame.
+  const cineLive = fly.playing || fly.paused;
+  useEffect(() => {
+    if (!cineLive) return undefined;
+    const onKey = (e) => {
+      if (e.target?.closest?.("input, textarea, select, [contenteditable]")) return;
+      if (e.code === "Space" || e.key === " ") { e.preventDefault(); e.stopPropagation(); flyApiRef.current?.toggle?.(); }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); flyApiRef.current?.finish?.(); }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [cineLive]);
+  const onStagePointer = (e) => {
+    if (!cineLive) return;
+    if (e.target?.closest?.(".share-itin, button, a")) return;
+    flyApiRef.current?.finish?.();
+  };
 
   // Reduced motion: whole route and a static list, nothing highlighted.
   const live = !reduced && (fly.playing || fly.paused);
@@ -81,6 +124,7 @@ export default function ShareView({ token }) {
     if (fly.paused) api.play();
     else { api.stop(); setTimeout(() => flyApiRef.current?.play(), 50); }
   };
+  const restart = () => { const api = flyApiRef.current; if (!api) return; api.stop(); setTimeout(() => flyApiRef.current?.play(), 50); };
   const [sheetOpen, setSheetOpen] = useState(false);
   // Open the trip once the globe has drawn its first frame, so the opening fit (and the
   // reduced motion cut to the final frame) is not lost to the globe's own start up.
@@ -117,7 +161,7 @@ export default function ShareView({ token }) {
   const dates = tripDates(journey);
 
   return (
-    <main className="share-globe-page">
+    <main className={`share-globe-page${cineLive || fly.done ? " is-cine" : ""}`} onPointerDownCapture={onStagePointer}>
       <MapLoader>
         {({ isLoaded, geoJsonData }) => isLoaded && (
           <>
@@ -129,6 +173,7 @@ export default function ShareView({ token }) {
             focusTitle={journey.title}
             legsOverride={legs}
             autoPlayKey={`share:${journey.id}`}
+            cinematic
             onFlyState={onFlyState}
             flyApiRef={flyApiRef}
             onPinClick={() => {}}
@@ -143,10 +188,26 @@ export default function ShareView({ token }) {
       </MapLoader>
       <div className="v2-wordmark share-globe-mark">Odyssey</div>
 
-      {fly.done && !reduced && (
-        <div className="share-end" style={mobile ? undefined : { right: 380 + 24 }}>
-          <button type="button" className="v2-flyover-btn" onClick={replay}>Replay</button>
-          <button type="button" className="v2-flyover-btn is-dim" onClick={viewItinerary}>View itinerary</button>
+      {/* Opening: from black, the globe fades in over 0.8 s. */}
+      {fly.kind === "open" && cineLive && !reduced && <div key={`b${fly.stepI}`} className="share-cine-black" aria-hidden="true" />}
+      {/* Title card: in at 0.6 s, out as the push-in ends; back on the end frame with the buttons. */}
+      {((fly.kind === "open" && cineLive) || fly.done) && (
+        <div key={fly.done ? "end" : `t${fly.stepI}`} className={`share-cine-title${fly.done ? " is-end" : ""}${reduced ? " is-still" : ""}`} style={mobile ? { bottom: sheetH + 24 } : { right: 380 }}>
+          <h1>{journey.title}</h1>
+          {statsLine && <p>{statsLine}</p>}
+          {fly.done && (
+            <div className="share-cine-actions">
+              <button type="button" className="share-cine-btn" onClick={restart}>Replay</button>
+              <button type="button" className="share-cine-btn" onClick={viewItinerary}>View itinerary</button>
+            </div>
+          )}
+        </div>
+      )}
+      {cardPin && cineLive && (
+        <div key={`c${fly.stepI}`} className={`share-stop-card${cardOut ? " is-out" : ""}${reduced ? " is-still" : ""}`} style={mobile ? { bottom: sheetH + 16 } : { right: 380 + 24 }}>
+          <div className="share-stop-city">{(cardPin.title || cardPin.location_name || "").split(",")[0]}</div>
+          <div className="share-stop-country">{(cardPin.location_name || "").split(",").slice(1).join(",").trim()}</div>
+          {cardDate?.text && <div className={`share-stop-dates${cardDate.fallback ? " v2-date-est" : ""}`}>{cardDate.text}{cardDate.fallback ? " (trip dates)" : ""}</div>}
         </div>
       )}
 
