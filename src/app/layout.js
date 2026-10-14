@@ -16,6 +16,8 @@ const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 const jetbrainsMono = JetBrains_Mono({ variable: "--font-jetbrains-mono", subsets: ["latin"] });
 
 export const metadata = {
+  // Absolute og:image URLs on share links.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000")),
   title: "Spatial Location Ledger - Interactive Spatial Journal",
   description: "An interactive spatial journal map for recording and exploring the places you've been.",
 };
