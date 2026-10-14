@@ -194,7 +194,9 @@ export function nearestStop(dots, x) {
 // 14 px each with a 4 px gap. Greedy in start order: each trip takes the first lane that is
 // free at its start (bars and dots alike, by hit extent). A trip that would need a 4th lane
 // rides on the mark it overlaps as "+N" (click picks the nearest of them).
-export const LANES = { count: 3, heightPx: 14, gapPx: 4, dotHitPx: 14, centers: [38, 56, 20] };
+// Rows 0 and 1 form one group centred on the year ticks (y 22 to 46, centre 34): 6 px dots,
+// 6 px apart, 3 px of room above and below. A rare third row sits below.
+export const LANES = { count: 3, heightPx: 14, gapPx: 6, dotHitPx: 14, centers: [28, 40, 52] };
 export function laneMarks(marks) {
   const ext = (m) => (m.dot ? [m.cx - LANES.dotHitPx / 2, m.cx + LANES.dotHitPx / 2] : [m.x0, Math.max(m.x1, m.x0 + STRIP.minBarPx)]);
   const order = marks.map((m, i) => ({ m, i, e: ext(m) })).sort((a, b) => a.e[0] - b.e[0] || a.i - b.i);

@@ -348,7 +348,7 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 .v2-tl-stop { position: absolute; padding: 0; border: 0; border-radius: 50%; background: #E6EDF0; cursor: pointer; }
 .v2-tl-stop.is-current { background: #FF3311; box-shadow: 0 0 0 4px rgba(255, 51, 17, 0.25); }
 .v2-tl-head { position: absolute; left: 0; top: 8px; bottom: 8px; width: 1px; background: #FF3311; pointer-events: none; }
-.v2-tl-chip { position: absolute; right: 12px; top: 20px; height: 24px; padding: 0 10px; font: 500 10px/24px var(--v2-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--v2-text); background: rgba(7, 9, 11, 0.6); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--v2-radius); cursor: pointer; }
+.v2-tl-chip { position: absolute; right: 12px; top: 22px; height: 24px; padding: 0 10px; font: 500 10px/24px var(--v2-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--v2-text); background: rgba(7, 9, 11, 0.6); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--v2-radius); cursor: pointer; }
 .v2-tl-chip:focus-visible, .v2-tl-trip:focus-visible, .v2-tl-stop:focus-visible { outline: 2px solid var(--v2-route); outline-offset: 2px; }
 .v2-tl-more { position: absolute; left: 50%; bottom: calc(100% + 3px); transform: translateX(-50%); padding: 0 3px; font: 500 9px/12px var(--v2-mono); letter-spacing: 0.04em; color: var(--v2-text); background: rgba(7, 9, 11, 0.8); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 2px; white-space: nowrap; pointer-events: none; }
 .v2-tl-tip.is-stop { top: 44px; width: 160px; }
@@ -528,3 +528,5 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 .v2-trip-actions .v2-quickadd-link:hover, .v2-trip-actions .v2-quickadd-link:focus-visible { color: #00E5FF; border-color: #00E5FF; }
 /* 16px above the Journeys buttons: the panel column gap is 16px on desktop, 12px on phones. */
 @media (max-width: 767px) { .v2-trip-actions.is-journeys { margin-top: 4px; } }
+/* Show my trip, before anyone types: still the main button, cyan at 35%. */
+.v2-btn-primary.v2-draft-go:disabled, .v2-btn-primary.v2-draft-go[aria-disabled="true"] { background: var(--v2-route); border-color: var(--v2-route); color: #041014; opacity: 0.35; }
