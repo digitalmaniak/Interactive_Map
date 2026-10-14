@@ -73,8 +73,9 @@ export default function ShareView({ token }) {
       const e = legEnds(l, pinsById);
       return a + (e ? haversineKm(e.a[1], e.a[0], e.b[1], e.b[0]) : 0);
     }, 0);
-    const n = pins.length;
-    return [fmtMonthYear(journey.date_start), `${n} ${n === 1 ? "STOP" : "STOPS"}`, km > 0 ? `${Math.round(km).toLocaleString("en-US")} KM` : ""].filter(Boolean).join(" · ").toUpperCase();
+    // Counted from the legs loaded on this page (home legs already left out), not trip totals.
+    const n = pins.length, fl = legs.filter((l) => l.mode === "fly").length;
+    return [fmtMonthYear(journey.date_start), `${n} ${n === 1 ? "STOP" : "STOPS"}`, fl ? `${fl} ${fl === 1 ? "FLIGHT" : "FLIGHTS"}` : "", km > 0 ? `${Math.round(km).toLocaleString("en-US")} KM` : ""].filter(Boolean).join(" · ").toUpperCase();
   }, [journey, legs, pins, pinsById]);
   // Stop card: shown on each hold, out 0.3 s before the next move.
   const [outStep, setOutStep] = useState(-1);

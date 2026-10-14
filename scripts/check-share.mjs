@@ -35,5 +35,30 @@ ok(r.segs[0].cx != null && r.segs[1].cx == null, "fly gets an arc control point"
 const pac = projectRoute([{ mode: "fly", from_lat: 35.55, from_lng: 139.78, to_lat: 21.32, to_lng: -157.92 }], [], { width: W, height: H });
 ok(pac.segs[0].x2 > pac.segs[0].x1, "antimeridian unwrap: Tokyo to Honolulu goes east");
 ok(projectRoute([], [], { width: W, height: H }).dots.length === 0, "empty route");
+// Home stays private: home-to-airport drives are dropped, the route starts and ends at the airport.
+{
+  const { dropHomeLegs } = await import("../src/lib/journeys/shareItinerary.js");
+  const H = { lat: 40.8043, lng: -74.0121 }, EWR = { lat: 40.6895, lng: -74.1745 };
+  const P = [{ id: "a", latitude: 10.0, longitude: -84.2 }];
+  const legs = [
+    { id: "d1", mode: "drive", from_lat: H.lat, from_lng: H.lng, to_lat: EWR.lat, to_lng: EWR.lng },
+    { id: "f1", mode: "fly", from_lat: EWR.lat, from_lng: EWR.lng, to_pin_id: "a" },
+    { id: "f2", mode: "fly", from_pin_id: "a", to_lat: EWR.lat, to_lng: EWR.lng },
+    { id: "d2", mode: "drive", from_lat: EWR.lat, from_lng: EWR.lng, to_lat: H.lat, to_lng: H.lng },
+  ];
+  ok(dropHomeLegs(legs, P).map((l) => l.id).join() === "f1,f2", "home drives dropped, route is airport to airport");
+  ok(dropHomeLegs(legs.slice(1), P).map((l) => l.id).join() === "f1,f2", "drive home dropped when it follows the flight back");
+  const flyHome = [{ id: "f0", mode: "fly", from_lat: H.lat, from_lng: H.lng, to_pin_id: "a" }, { id: "x", mode: "drive", from_pin_id: "a", to_pin_id: "a" }];
+  ok(dropHomeLegs(flyHome, P).length === 2, "a flight straight from home is kept");
+  const roadTrip = [{ id: "r1", mode: "drive", from_pin_id: "a", to_pin_id: "a" }, { id: "r2", mode: "drive", from_pin_id: "a", to_pin_id: "a" }];
+  ok(dropHomeLegs(roadTrip, P).length === 2, "stop-to-stop legs untouched");
+}
+{
+  const { isMissingRpc, labelSnapped } = await import("../src/lib/journeys/sharedLegsRpc.js");
+  ok(isMissingRpc({ code: "PGRST202" }, 404) && isMissingRpc({ code: "42883" }) && !isMissingRpc({ code: "42501" }, 401), "only a missing get_shared_legs falls back to the direct read");
+  ok(labelSnapped({ snapped_end: "from", from_lat: 40.6895, from_lng: -74.1745, to_pin_id: "a" }).from_label === "Newark (EWR)", "snapped end labelled EWR");
+  ok(labelSnapped({ snapped_end: "to", to_lat: 40.6413, to_lng: -73.7781 }).to_label === "New York (JFK)", "snapped end labelled JFK");
+  ok(labelSnapped({ id: "x", from_label: "Lisbon" }).from_label === "Lisbon", "unsnapped rows untouched");
+}
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);

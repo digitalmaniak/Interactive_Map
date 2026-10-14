@@ -51,9 +51,40 @@ export function legDate(leg, pinsById = {}) {
  * Legs for the share view. Real leg rows when the share token can read them. Otherwise
  * stop to stop in pin order, with mode "other", so the list and route still show.
  */
+// Home stays private on share (backup to Harbor's server-side filter). Only ground legs
+// (drive, walk, boat, rail, other) that start or end at home are dropped; a flight never is.
+// A leg end is "home" when it is not a trip stop (no pin) and either the route is a loop
+// (first leg's origin within 50 km of the last leg's destination) or that ground leg only
+// feeds a flight (drive to the airport, then fly). The route then starts and ends at the airport.
+const HOME_KM = 50;
+function endPoint(leg, side, byId) {
+  const p = byId[leg[`${side}_pin_id`]];
+  if (p) return null; // a trip stop is never home
+  const lat = num(leg[`${side}_lat`]), lng = num(leg[`${side}_lng`]);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+const kmBetween = (a, b) => {
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lng - a.lng) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+};
+export function dropHomeLegs(sorted, pins) {
+  if (sorted.length < 2) return sorted;
+  const byId = Object.fromEntries((pins || []).map((p) => [p.id, p]));
+  const first = sorted[0], last = sorted[sorted.length - 1];
+  const o = endPoint(first, "from", byId), d = endPoint(last, "to", byId);
+  const loop = o && d && kmBetween(o, d) <= HOME_KM;
+  const ground = (l) => l.mode !== "fly";
+  let out = sorted;
+  if (o && ground(first) && (loop || sorted[1]?.mode === "fly")) out = out.slice(1);
+  const lastNow = out[out.length - 1];
+  if (out.length > 1 && lastNow === last && d && ground(last) && (loop || out[out.length - 2]?.mode === "fly")) out = out.slice(0, -1);
+  return out;
+}
+
 export function shareLegs(legRows, pins) {
   const rows = (legRows || []).filter((l) => !l.deleted_at);
-  if (rows.length) return [...rows].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  if (rows.length) return dropHomeLegs([...rows].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)), pins);
   const stops = [...(pins || [])]
     .filter((p) => Number.isFinite(num(p.latitude)) && Number.isFinite(num(p.longitude)))
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
