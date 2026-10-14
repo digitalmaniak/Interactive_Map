@@ -521,3 +521,10 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 .v2-mode-btn:hover, .v2-mode-btn:focus-visible { color: var(--v2-text); outline: none; border-color: var(--v2-hairline); }
 .v2-mode-btn.is-on { color: #00E5FF; border-color: rgba(0, 229, 255, 0.5); }
 .v2-nodate { margin: -0.25rem 0 0.5rem; font: 400 11px/1.4 var(--v2-mono); color: #FFB547; }
+
+/* Trip action buttons (Journeys panel, typed trip box): equal halves, 8px gap, full width. */
+.v2-trip-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; box-sizing: border-box; }
+.v2-trip-actions .v2-quickadd-link { width: 100%; height: 40px; min-height: 40px; padding: 0 6px; background: transparent; color: var(--v2-text-dim); font-weight: 400; text-transform: none; letter-spacing: normal; }
+.v2-trip-actions .v2-quickadd-link:hover, .v2-trip-actions .v2-quickadd-link:focus-visible { color: #00E5FF; border-color: #00E5FF; }
+/* 16px above the Journeys buttons: the panel column gap is 16px on desktop, 12px on phones. */
+@media (max-width: 767px) { .v2-trip-actions.is-journeys { margin-top: 4px; } }

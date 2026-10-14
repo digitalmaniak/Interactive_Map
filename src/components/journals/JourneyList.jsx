@@ -145,9 +145,9 @@ export default function JourneyList({
         Your trips and collections. Open one to see its places.
       </p>
       {onTypeTrip && (
-        <div style={{ display: "flex", gap: "1rem", flexShrink: 0, marginTop: "0.35rem" }}>
-          <button type="button" className="v2-link" onClick={() => onTypeTrip("start")}>Type a trip</button>
-          <button type="button" className="v2-link" onClick={() => onTypeTrip("guided")}>Build a trip</button>
+        <div className="v2-trip-actions is-journeys" style={{ flexShrink: 0 }}>
+          <button type="button" className="v2-quickadd-link" onClick={() => onTypeTrip("start")}>Type a trip</button>
+          <button type="button" className="v2-quickadd-link" onClick={() => onTypeTrip("guided")}>Build a trip</button>
         </div>
       )}
 

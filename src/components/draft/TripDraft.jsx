@@ -61,11 +61,11 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
         {error && <p className="v2-draft-error" role="alert">{error}</p>}
         <button type="button" className="v2-btn v2-btn-primary v2-draft-go" disabled={!text.trim() || parsing} onClick={onSubmitText}>{parsing ? "Reading your trip" : "Show my trip"}</button>
         {showLinks && (
-          <div className="v2-draft-links">
-            <button type="button" className="v2-link" onClick={onAddSingle}>Add a single place</button>
+          <div className="v2-draft-links v2-trip-actions">
+            <button type="button" className="v2-quickadd-link" onClick={onAddSingle}>Add a single place</button>
             {resumable
-              ? <button type="button" className="v2-link" onClick={onResume}>Continue your draft</button>
-              : <button type="button" className="v2-link" onClick={onStartGuided}>Build a trip</button>}
+              ? <button type="button" className="v2-quickadd-link" onClick={onResume}>Continue your draft</button>
+              : <button type="button" className="v2-quickadd-link" onClick={onStartGuided}>Build a trip</button>}
           </div>
         )}
       </div>
