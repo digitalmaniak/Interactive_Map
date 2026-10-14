@@ -12,7 +12,7 @@ import { OrbitControls, PerformanceMonitor } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { geoContains } from "d3-geo";
 import { GLOBE_R, rewindGeo, lonLatToVec3, vec3ToLonLat, buildLandTexture, buildCoastGeometry } from "./geometry";
-import { createGlobeMaterial, createAtmosphereMaterial, createBeamMaterial } from "./GlobeMaterial";
+import { createGlobeMaterial, createAtmosphereMaterial, createBeamMaterial, LAND_RELIEF } from "./GlobeMaterial";
 import { tokens, tiers, bezier } from "./tokens";
 import { detectRenderTier } from "./renderTier";
 import { supabase } from "../../../lib/supabase/client";
@@ -137,7 +137,7 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
       const k = THREE.MathUtils.smoothstep(Math.log(Math.max(alt, 1e-6)), Math.log(TRIP_MIN_ALT), Math.log(HOME_DIST - GLOBE_R));
       coastRef.current.scale.setScalar(1 + BORDER_LIFT_MAX * k);
     }
-    material.uniforms.uReliefMix.value = THREE.MathUtils.smoothstep(alt, RELIEF_FADE_ALT * 0.25, RELIEF_FADE_ALT);
+    material.uniforms.uReliefMix.value = !LAND_RELIEF ? 0 : THREE.MathUtils.smoothstep(alt, RELIEF_FADE_ALT * 0.25, RELIEF_FADE_ALT);
     material.uniforms.uHatchSpacing.value = THREE.MathUtils.lerp(tokens.hatch.spacingPx.globe, tokens.hatch.spacingPx.trip, b);
   });
   void size;

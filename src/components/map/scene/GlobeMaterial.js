@@ -7,6 +7,12 @@ const C = tokens.color;
 // (R = land, G = relief). Ocean: fill darkening to the limb plus a screen space
 // diagonal hatch at 35 degrees, computed from gl_FragCoord so it stays crisp at any zoom.
 // opts.cheap: no ocean hatch (force3d on software graphics).
+// Soft land relief (lighter blotches over high ground) and its edge shading. Off for now:
+// land is one flat, unlit colour (LAND_FLAT_COLOR) everywhere, with no falloff toward the
+// limb. Set true to bring the baked relief and shading back; the mask still carries it.
+export const LAND_RELIEF = false;
+export const LAND_FLAT_COLOR = "#2B2D31";
+
 export function createGlobeMaterial(landTex, opts = {}) {
   const a = THREE.MathUtils.degToRad(tokens.hatch.angleDeg);
   return new THREE.ShaderMaterial({
@@ -27,7 +33,9 @@ export function createGlobeMaterial(landTex, opts = {}) {
       uHatchDir: { value: new THREE.Vector2(-Math.sin(a), Math.cos(a)) },
       uHatchSpacing: { value: tokens.hatch.spacingPx.globe },
       uDpr: { value: 1 },
-      uReliefMix: { value: 1 },
+      uReliefMix: { value: LAND_RELIEF ? 1 : 0 },
+      uLandFlat: { value: LAND_RELIEF ? 0 : 1 },
+      uFlat: { value: new THREE.Color(LAND_FLAT_COLOR) },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -43,8 +51,8 @@ export function createGlobeMaterial(landTex, opts = {}) {
     `,
     fragmentShader: /* glsl */ `
       uniform sampler2D uLand;
-      uniform vec3 uLow, uHigh, uRidge, uOcean, uLimb, uHatch;
-      uniform float uHatchOpacity, uHatchSpacing, uDpr, uReliefMix;
+      uniform vec3 uLow, uHigh, uRidge, uOcean, uLimb, uHatch, uFlat;
+      uniform float uHatchOpacity, uHatchSpacing, uDpr, uReliefMix, uLandFlat;
       uniform vec2 uHatchDir;
       varying vec2 vUv;
       varying vec3 vNormalW;
@@ -77,6 +85,8 @@ export function createGlobeMaterial(landTex, opts = {}) {
         vec3 ground = mix(uLow, uHigh, smoothstep(0.0, 0.8, relief));
         ground = mix(ground, uRidge, smoothstep(0.85, 1.0, relief) * 0.6);
         ground *= mix(0.82, 1.0, facing);
+        // Flat land: one unlit colour, no relief and no limb falloff.
+        ground = mix(ground, uFlat, uLandFlat);
         gl_FragColor = vec4(mix(ocean, ground, land), 1.0);
         #include <colorspace_fragment>
       }
