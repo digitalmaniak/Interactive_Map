@@ -45,7 +45,7 @@ export function previewLabel(stub, reason) {
   return reason === "daily_limit" ? `${base} · Daily AI limit reached` : base;
 }
 
-export default function TripDraft({ face, text, setText, onSubmitText, parsing, error, stub, onStartGuided, onAddSingle, draft, setDraft, onSave, saving, saveError, onClose, onDiscard, stubReason = null, resumable = false, onResume, showLinks = true }) {
+export default function TripDraft({ face, text, setText, onSubmitText, parsing, error, stub, onStartGuided, onAddSingle, draft, setDraft, onSave, saving, saveError, onClose, onDiscard, stubReason = null, source = null, resumable = false, onResume, showLinks = true }) {
   const [openWarn, setOpenWarn] = useState(null);
   const [changing, setChanging] = useState(null); // stop index whose place is being changed
 
@@ -89,7 +89,7 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
   return (
     <div className="v2-draft v2-draft-edit" role="dialog" aria-label="Trip draft" onPointerDown={(e) => e.stopPropagation()}>
       <button type="button" className="v2-draft-x" aria-label="Close and keep the draft" onClick={onClose}>×</button>
-      <p className="v2-draft-note">{previewLabel(stub, stubReason)}</p>
+      {source && <p className="v2-draft-note">{previewLabel(source === "offline", stubReason)}</p>}
       <input className="v2-draft-name panel-input" placeholder="Trip name" aria-label="Trip name" value={d.journey.title}
         onChange={(e) => setDraft((cur) => ({ ...cur, journey: { ...cur.journey, title: e.target.value } }))} />
       <div className="v2-draft-dates">

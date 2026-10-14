@@ -118,7 +118,7 @@ export default function MapCanvas() {
   const draftFace = tripDraft.face || (accountEmpty ? "start" : null);
   const openDraft = (face) => {
     setDraftBusy({ parsing: false, saving: false, error: "", saveError: "" });
-    setTripDraft((cur) => ({ ...cur, face, draft: face === "edit" && !cur.draft?.stops?.length ? syncLegs(emptyDraft()) : cur.draft }));
+    setTripDraft((cur) => (face === "edit" && !cur.draft?.stops?.length ? { ...cur, face, draft: syncLegs(emptyDraft()), source: null } : { ...cur, face }));
   };
   const closeDraft = () => setTripDraft((cur) => ({ ...cur, face: null }));
   // Discard at once, keep the draft for 5 s so Undo can restore it and reopen the panel.
@@ -142,7 +142,7 @@ export default function MapCanvas() {
     setDraftBusy((b) => ({ ...b, parsing: false, error: "" }));
     // Parsed items start as guesses (40% style) until the user touches them.
     const d = syncLegs({ ...r.draft, stops: r.draft.stops.map((st) => ({ ...st, guessed: true })), legs: r.draft.legs.map((l) => ({ ...l, guessed: true })) });
-    setTripDraft((cur) => ({ ...cur, face: "edit", draft: d, stub: !!r.stub, stubReason: r.reason || null, playKey: Date.now() }));
+    setTripDraft((cur) => ({ ...cur, face: "edit", draft: d, stub: !!r.stub, stubReason: r.reason || null, source: r.stub ? "offline" : "ai", playKey: Date.now() }));
     setActiveTab("Map");
   };
   const saveTripDraft = async () => {
@@ -885,6 +885,7 @@ export default function MapCanvas() {
           error={draftBusy.error}
           stub={tripDraft.stub}
           stubReason={tripDraft.stubReason || null}
+          source={tripDraft.source || null}
           onStartGuided={() => { openDraft("edit"); setActiveTab("Map"); }}
           onAddSingle={() => { if (tripDraft.face) closeDraft(); setAddSearchOpen(true); }}
           draft={tripDraft.draft}
