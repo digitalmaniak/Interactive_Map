@@ -5,7 +5,7 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
-import { EDGE, avoidBox, edgePoint, estWidth, kmText, mergeTags, nudgeTags, roundedKm, shortName } from "./edgeTagsMath";
+import { EDGE, avoidBox, edgePoint, estWidth, kmText, fitTags, mergeTags, roundedKm, shortName } from "./edgeTagsMath";
 
 export function useEdgeTagsStore() {
   return useMemo(() => ({ els: [], targets: Array.from({ length: EDGE.max }, () => null), pos: Array.from({ length: EDGE.max }, () => null) }), []);
@@ -55,26 +55,35 @@ export function EdgeTagsDriver({ store, itemsRef, safe, reducedMotion, enabled =
       tags.push(t);
     }
     tags.sort((a, b) => a.km - b.km);
-    const merged = mergeTags(tags.slice(0, EDGE.max * 2)).slice(0, EDGE.max);
+    const close = mergeTags(tags.slice(0, EDGE.max * 2)).slice(0, EDGE.max);
+    // Obstacles, refreshed every few frames in the tags' own coordinates: visible map labels
+    // and the region readout (its last known box is kept, so tags don't jump when it shows).
+    if (obs.current.n++ % 6 === 0) {
+      const host = els.find(Boolean)?.offsetParent, hr = host?.getBoundingClientRect();
+      const rel = (b) => ({ x0: b.left - hr.left, x1: b.right - hr.left, y0: b.top - hr.top, y1: b.bottom - hr.top });
+      obs.current.rects = hr ? [...document.querySelectorAll(".v2-pin-label")].filter((el) => el.style.visibility !== "hidden" && Number(el.style.opacity || 1) > 0.05).map((el) => rel(el.getBoundingClientRect())) : [];
+      const reg = document.querySelector(".v2-region");
+      if (reg && hr) { const b = rel(reg.getBoundingClientRect()); obs.current.region = { x0: Math.min(b.x0, W / 2 - 120), x1: Math.max(b.x1, W / 2 + 120), y0: b.y0, y1: b.y1 }; }
+      if (!obs.current.font && els[0]) {
+        const n = els[0].querySelector(".v2-edge-name"), k = els[0].querySelector(".v2-edge-km");
+        const cs = getComputedStyle(n), ck = getComputedStyle(k);
+        obs.current.font = { name: `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`, km: `${ck.fontWeight} ${ck.fontSize} ${ck.fontFamily}`, ls: parseFloat(cs.letterSpacing) || 0 };
+        obs.current.ctx = document.createElement("canvas").getContext("2d");
+      }
+    }
+    const region = obs.current.region || { x0: W / 2 - 120, x1: W / 2 + 120, y0: r.y0, y1: r.y0 + 48 };
+    // Real text widths (canvas measureText with the tag's own fonts) plus arrow and padding.
+    const f = obs.current.font, ctx = obs.current.ctx;
+    const textW = (s, font) => { if (!ctx || !f) return 7.2 * s.length; ctx.font = font; return ctx.measureText(s).width + f.ls * s.length; };
+    const widthOf = (t) => Math.ceil(40 + (t.merged ? textW(t.label, f?.name) : textW(t.name, f?.name) + 8 + textW(kmText(t.km), f?.km)));
+    const merged = fitTags(close, [...obs.current.rects, region], r, widthOf);
     // Keep each place in the slot it had last frame so tags slide instead of swapping.
     const slots = Array(EDGE.max).fill(null), free = [];
     merged.forEach((t) => { const k = store.targets.findIndex((o, i) => o && o.id === t.id && !slots[i]); if (k >= 0) slots[k] = t; else free.push(t); });
     free.forEach((t) => { const k = slots.findIndex((s, i) => !s && !store.targets[i]); const k2 = k >= 0 ? k : slots.findIndex((s) => !s); if (k2 >= 0) { slots[k2] = t; store.pos[k2] = null; } });
     const a = reducedMotion ? 1 : 1 - Math.exp(-dt / EDGE.smoothMs);
-    // Visible map labels, refreshed every few frames, in the tags' own coordinates.
-    if (obs.current.n++ % 6 === 0) {
-      const host = els.find(Boolean)?.offsetParent, hr = host?.getBoundingClientRect();
-      obs.current.rects = hr ? [...document.querySelectorAll(".v2-pin-label")].filter((el) => el.style.visibility !== "hidden" && Number(el.style.opacity || 1) > 0.05)
-        .map((el) => { const b = el.getBoundingClientRect(); return { x0: b.left - hr.left, x1: b.right - hr.left, y0: b.top - hr.top, y1: b.bottom - hr.top }; }) : [];
-    }
-    // Target boxes, nearest first, then slid along their edge off labels and each other.
-    const order = slots.map((t, i) => (t ? i : -1)).filter((i) => i >= 0).sort((i, j) => (slots[i].km ?? 0) - (slots[j].km ?? 0));
-    const boxes = order.map((i) => {
-      const t = slots[i], w = els[i]?.offsetWidth || t.w || 120, h = EDGE.heightPx;
-      return { i, w, h, cx: Math.min(r.x1 - w / 2, Math.max(r.x0 + w / 2, t.x)), cy: Math.min(r.y1 - h / 2, Math.max(r.y0 + h / 2, t.y)) };
-    });
     const goal = {};
-    nudgeTags(boxes, obs.current.rects, r).forEach((b) => { goal[b.i] = b; });
+    slots.forEach((t, i) => { if (t) goal[i] = t; });
     slots.forEach((t, i) => {
       const el = els[i]; if (!el) return;
       if (!t) { el.classList.remove("is-on"); store.targets[i] = null; return; }
@@ -91,6 +100,7 @@ export function EdgeTagsDriver({ store, itemsRef, safe, reducedMotion, enabled =
         el.querySelector(".v2-edge-km").textContent = dist;
         el.setAttribute("aria-label", t.merged ? `${t.members.length} places off screen` : `${t.name}, ${dist} away`);
       }
+      el.style.width = `${g.w}px`;
       el.style.transform = `translate(${(cx - g.w / 2).toFixed(1)}px, ${(cy - g.h / 2).toFixed(1)}px)`;
       el.querySelector(".v2-edge-arrow").style.transform = `rotate(${t.angle.toFixed(3)}rad)`;
       el.classList.add("is-on");

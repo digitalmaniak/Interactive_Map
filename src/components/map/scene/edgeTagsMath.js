@@ -65,17 +65,44 @@ export function nudgeTags(boxes, obstacles, r, maxShift = 420, step = 6) {
     const dTop = b.cy - hh - r.y0, dBot = r.y1 - (b.cy + hh), dL = b.cx - hw - r.x0, dR = r.x1 - (b.cx + hw);
     const alongX = Math.min(dTop, dBot) <= Math.min(dL, dR); // on the top or bottom edge
     const box = (cx, cy) => ({ x0: cx - hw, x1: cx + hw, y0: cy - hh, y1: cy + hh });
-    let best = { cx: b.cx, cy: b.cy };
+    let best = { cx: b.cx, cy: b.cy, blocked: true };
     for (let k = 0; k <= maxShift / step; k++) {
       let found = null;
       for (const s of k ? [k * step, -k * step] : [0]) {
         const cx = alongX ? clampX(b.cx + s) : b.cx, cy = alongX ? b.cy : clampY(b.cy + s);
         const bx = box(cx, cy);
-        if (!obstacles.some((o) => hits(bx, o)) && !placed.some((o) => hits(bx, o))) { found = { cx, cy }; break; }
+        if (!obstacles.some((o) => hits(bx, o)) && !placed.some((o) => hits(bx, o))) { found = { cx, cy, blocked: false }; break; }
       }
       if (found) { best = found; break; }
     }
     placed.push(box(best.cx, best.cy));
     return { ...b, ...best };
   });
+}
+
+const asMember = (t) => (t.members ? t.members : [t]);
+/**
+ * Slide, and where tags on an edge still can't fit, merge: a tag that finds no free spot is
+ * folded into the nearest tag already placed, which becomes "+N"; repeat until all fit.
+ * widthOf(tag) measures the real text. Returns tags with cx, cy, w, h.
+ */
+export function fitTags(tags, obstacles, r, widthOf, h = EDGE.heightPx) {
+  let list = tags.map((t) => ({ ...t }));
+  for (let guard = 0; guard < 12; guard++) {
+    const boxes = list.map((t) => {
+      const w = widthOf(t);
+      return { t, w, h, cx: Math.min(r.x1 - w / 2, Math.max(r.x0 + w / 2, t.x)), cy: Math.min(r.y1 - h / 2, Math.max(r.y0 + h / 2, t.y)) };
+    });
+    const res = nudgeTags(boxes, obstacles, r);
+    const j = res.findIndex((b) => b.blocked);
+    if (j <= 0) return res.map((b) => ({ ...b.t, cx: b.cx, cy: b.cy, w: b.w, h: b.h }));
+    // Fold the blocked tag into the nearest earlier (closer-by-km) tag.
+    let k = 0, bd = Infinity;
+    for (let i = 0; i < j; i++) { const d = Math.hypot(res[i].cx - boxes[j].cx, res[i].cy - boxes[j].cy); if (d < bd) { bd = d; k = i; } }
+    const host = list[k], add = list[j];
+    const members = [...asMember(host), ...asMember(add)];
+    list[k] = { ...host, id: members.map((m) => m.id).join("+"), members, merged: true, label: `+${members.length}`, x: host.x, y: host.y };
+    list = list.filter((_, i) => i !== j);
+  }
+  return list.map((t) => ({ ...t, cx: t.x, cy: t.y, w: widthOf(t), h }));
 }

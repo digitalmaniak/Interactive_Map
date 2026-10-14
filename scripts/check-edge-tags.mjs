@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { EDGE, avoidBox, edgePoint, kmText, mergeTags, nudgeTags, roundedKm } from "../src/components/map/scene/edgeTagsMath.js";
+import { EDGE, avoidBox, edgePoint, kmText, fitTags, mergeTags, nudgeTags, roundedKm } from "../src/components/map/scene/edgeTagsMath.js";
 const r = { x0: 20, y0: 76, x1: 1000, y1: 800 }, c = { x: 510, y: 438 };
 assert.deepEqual([edgePoint(c, { x: 1, y: 0 }, r).x, edgePoint(c, { x: 1, y: 0 }, r).y], [1000, 438], "right edge");
 assert.equal(edgePoint(c, { x: 0, y: -1 }, r).y, 76, "top edge below the nav");
@@ -26,5 +26,16 @@ assert.equal(EDGE.max, 6);
   assert.ok(b.cy === 37 && Math.abs(a.cx - b.cx) >= 124, "second tag slides off the first");
   const [c] = nudgeTags([{ cx: 1403, cy: 400, w: 34, h: 34 }], [{ x0: 1380, x1: 1420, y0: 380, y1: 420 }], r);
   assert.ok(c.cx === 1403 && c.cy !== 400, "right-edge tag slides vertically");
+}
+{
+  // Three wide tags crowding a short top edge: what can't fit merges into "+N".
+  const r = { x0: 20, y0: 20, x1: 420, y1: 880 };
+  const t = [{ id: "a", x: 200, y: 20, km: 100, name: "Cancun" }, { id: "b", x: 210, y: 20, km: 200, name: "Coastal Strip" }, { id: "c", x: 220, y: 20, km: 300, name: "Jarabacoa" }];
+  const out = fitTags(t, [], r, (x) => (x.merged ? 60 : 180));
+  const hitsAny = out.some((a, i) => out.some((b, j) => j > i && Math.abs(a.cx - b.cx) < (a.w + b.w) / 2 && Math.abs(a.cy - b.cy) < 34));
+  assert.ok(!hitsAny, "no two fitted tags overlap");
+  assert.ok(out.some((x) => x.merged && x.members.length >= 2), "tags that cannot fit merge into +N");
+  const roomy = fitTags(t, [], { x0: 20, y0: 20, x1: 1420, y1: 880 }, () => 180);
+  assert.equal(roomy.length, 3, "with room, nothing merges");
 }
 console.log("check-edge-tags: ok");
