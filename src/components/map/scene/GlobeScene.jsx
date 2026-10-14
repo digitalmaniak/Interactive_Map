@@ -24,6 +24,7 @@ import { tripZoomK } from "./legs/legGeometry";
 import useFlyover from "./flyover/useFlyover";
 import { TRIP_TITLE, titleReservePx, titleBottomPx, CROSSHAIR, HOME_RINGS, pickHomeBase } from "./mockA";
 import { fetchHomeBases } from "../../../lib/homeBases";
+import { tripCounts } from "../../../lib/legs/tripHeader";
 import { poseFor, localFrame, raySphere, solveTripFit, estimateLabelBox } from "./tripFit";
 
 // Trip framing margins: 80 px plus the overlay chrome measured from the DOM (tab bar and
@@ -1175,10 +1176,10 @@ export default function GlobeScene({
     const fmt = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }).toUpperCase();
     const parts = [];
     if (tripDates) parts.push(tripDates.from.slice(0, 7) === tripDates.to.slice(0, 7) ? fmt(tripDates.from) : `${fmt(tripDates.from)} TO ${fmt(tripDates.to)}`);
-    parts.push(`${tripStops.length} ${tripStops.length === 1 ? "STOP" : "STOPS"}`);
-    const km = legs.reduce((a, l) => a + (Number(l.distanceKm) || l.a.v.angleTo(l.b.v) * 6371), 0);
-    const kmText = legs.length && km > 0 ? `${Math.round(km).toLocaleString("en-US")} KM` : "";
-    return { base: parts.join("   "), km: kmText };
+    const c = tripCounts(tripStops.length, legs);
+    const counts = [c.stops, c.flights].filter(Boolean).join(" · ");
+    const kmText = legs.length && c.km ? c.km : "";
+    return { base: parts.join("   "), counts, km: kmText };
   }, [tripStops, tripDates, legs]);
 
   // Timeline strip: shown at 600 px and wider, left of the panel, clear of the profile chip,
@@ -1633,7 +1634,7 @@ function TripTitle({ title, sub, tripBlend, instant = false, lift = 0, sheetBott
       <h2 style={{ fontSize: px, lineHeight: TRIP_TITLE.lineHeight, fontWeight: TRIP_TITLE.weight, letterSpacing: TRIP_TITLE.tracking }}>{lines.map((l, i) => <span key={i} style={{ display: "block" }}>{l}</span>)}</h2>
       {sub && (sub.base || sub.km) && (
         <p style={{ fontSize: TRIP_TITLE.subPx, maxWidth: "100%" }}>
-          {[sub.base, visW >= TRIP_TITLE.narrowPx ? sub.km : ""].filter(Boolean).join("   ")}
+          {[sub.base, [sub.counts, visW >= TRIP_TITLE.narrowPx ? sub.km : ""].filter(Boolean).join(" · ")].filter(Boolean).join("   ")}
         </p>
       )}
     </div>
