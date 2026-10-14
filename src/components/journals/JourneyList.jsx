@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatJourneyDates } from "../../lib/journeys/format";
+import TravelStats from "../stats/TravelStats";
 import { isJourneyShared } from "../../lib/journeys/share";
 import JourneyShareActions from "./JourneyShareActions";
 
@@ -34,6 +35,7 @@ export default function JourneyList({
   onTypeTrip,
 }) {
   const [showCreate, setShowCreate] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [createForm, setCreateForm] = useState(emptyForm());
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(emptyForm());
@@ -141,9 +143,13 @@ export default function JourneyList({
           </button>
         )}
       </div>
-      <p style={{ fontSize: "0.85rem", color: "var(--v2-text-dim)", margin: 0, flexShrink: 0, paddingRight: "0.5rem" }}>
-        Your trips and collections. Open one to see its places.
-      </p>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", flexShrink: 0, paddingRight: "0.5rem" }}>
+        <p style={{ fontSize: "0.85rem", color: "var(--v2-text-dim)", margin: 0, flex: 1, minWidth: 0 }}>
+          Your trips and collections. Open one to see its places.
+        </p>
+        <button type="button" className="v2-stats-open" onClick={() => setShowStats(true)}>Stats</button>
+      </div>
+      {showStats && <TravelStats onClose={() => setShowStats(false)} />}
       {onTypeTrip && (
         <div className="v2-trip-actions is-journeys" style={{ flexShrink: 0 }}>
           <button type="button" className="v2-quickadd-link" onClick={() => onTypeTrip("start")}>Type a trip</button>
