@@ -432,7 +432,7 @@ function blendStates(a, b, w) {
   };
 }
 
-function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDragStart, onDragEndAt, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef, sheetInset = 0 }) {
+function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDragStart, onDragEndAt, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef, sheetInset = 0, tripMaxD = TRIP_MAX_D }) {
   const { camera, size, gl } = useThree();
   const st = useRef({ tw: null, prev: null, seen: null, offset: 0, offsetKey: null, heading: 0, panelTarget: null, applied: null, fade: null, voff: 0, vFrom: 0, vTo: null, vT0: 0 });
   const idleUntil = useRef(0);
@@ -474,7 +474,7 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       controls.zoomSpeed = THREE.MathUtils.clamp(0.7 + (0.4 - alt) * 4, 0.7, 2.2);
       // Trip view zooms toward the cursor or pinch centre (handled below), not the target.
       controls.enableZoom = !tripView.current;
-      controls.maxDistance = surfaceTarget && tripView.current ? TRIP_MAX_D : MAX_DIST;
+      controls.maxDistance = surfaceTarget && tripView.current ? tripMaxD : MAX_DIST;
     }
     // Near plane follows altitude (about 0.1 x altitude) so near ground lines keep depth precision.
     const near = THREE.MathUtils.clamp(alt * 0.1, 0.0001, 0.05);
@@ -633,7 +633,7 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       const off = camera.position.clone().sub(T);
       const d0 = off.length();
       if (d0 < 1e-9) return false;
-      const d = THREE.MathUtils.clamp(d0 * scale, TRIP_MIN_ALT, TRIP_MAX_D);
+      const d = THREE.MathUtils.clamp(d0 * scale, TRIP_MIN_ALT, tripMaxD);
       if (Math.abs(d - d0) < 1e-9) return true;
       moveRef.current = null; // user zoom cancels any tween
       const n = T.clone().normalize();
@@ -682,7 +682,7 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       el.removeEventListener("pointerup", onUp);
       el.removeEventListener("pointercancel", onUp);
     };
-  }, [gl, camera, controlsRef, moveRef, tripView]);
+  }, [gl, camera, controlsRef, moveRef, tripView, tripMaxD]);
 
   useEffect(() => {
     const c = controlsRef.current;
@@ -1202,10 +1202,12 @@ export default function GlobeScene({
   // the trip's first date; globe view uses the current base.
   const [homeBases, setHomeBases] = useState([]);
   useEffect(() => {
+    // Share view: home stays private, so no home base is ever requested there.
+    if (cinematic || autoPlayKey) return undefined;
     let off = false;
     fetchHomeBases().then((b) => { if (!off) setHomeBases(b); }).catch((err) => console.warn("[globe] home bases not loaded", err?.message || err));
     return () => { off = true; };
-  }, []);
+  }, [cinematic, autoPlayKey]);
   const tripStops = useMemo(() => (focusing && !focusIsCollection ? items.filter((it) => !it.dimmed) : []), [focusing, focusIsCollection, items]);
   const tripDates = useMemo(() => {
     const ds = tripStops.flatMap((it) => [it.pin.start_date, it.pin.end_date]).filter(Boolean).map((d) => String(d).slice(0, 10)).sort();
@@ -1544,7 +1546,7 @@ export default function GlobeScene({
         />
         {onFirstFrame && <FirstFrame onFirstFrame={onFirstFrame} />}
         <EdgeTagsDriver store={edgeStore} itemsRef={itemsRef} safe={edgeSafe} reducedMotion={reducedMotion} enabled={edgeOn} />
-        <CameraController sheetInset={sheetInset} pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
+        <CameraController sheetInset={sheetInset} pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} tripMaxD={cinematic ? MAX_DIST : TRIP_MAX_D} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={shownActivePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>
@@ -1566,7 +1568,7 @@ export default function GlobeScene({
           <TripTitle key={String(focusJourneyId)} title={focusTitle} sub={tripSub} tripBlend={tripBlend} instant={force3d || reducedMotion} lift={stripOn ? STRIP.heightPx : 0} sheetBottom={sheetInset ? sheetInset + 68 : 0} />
         )}
       </div>
-      {flyEnabled && (
+      {flyEnabled && !cinematic && (
         <div className="v2-flyover" style={sheetInset
           // Mobile sheet: left of the Add entry button, on the sheet's top edge.
           ? { left: 16, right: "auto", bottom: sheetInset + 12 }

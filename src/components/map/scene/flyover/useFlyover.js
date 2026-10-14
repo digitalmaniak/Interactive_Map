@@ -12,8 +12,8 @@ import { buildCinematicPlan, CINE, easeInOutSine } from "./cinematicPlan";
 import { flyHeight, FLY_TRIP_SCALE } from "../legs/legGeometry";
 
 const linear = (t) => t;
-// Opening/end view: 3x the trip fit's altitude, kept inside the trip view's max distance.
-const openD = (D) => Math.min(CINE.openMaxD, 1 + ((D ?? 1.6) - 1) * CINE.openDistK);
+// Opening/end view: 3x the trip fit's camera distance (the share view lifts the trip cap).
+const openD = (D) => Math.min(CINE.openMaxD, (D ?? 1.6) * CINE.openDistK);
 const D2R = THREE.MathUtils.degToRad;
 
 const IDLE = { playing: false, paused: false, done: false, legIndex: -1, stopIndex: -1, pinId: null, legId: null };

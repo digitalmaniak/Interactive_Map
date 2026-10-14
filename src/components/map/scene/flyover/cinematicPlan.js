@@ -6,7 +6,7 @@ export const CINE = {
   fadeMs: 800, openHoldMs: 400, pushMs: 1200, titleInMs: 600,
   legBaseMs: 1600, legPerKmMs: 0.25, legMaxMs: 4500, shortCutMs: 600, shortKm: 2,
   holdMs: 2200, orbitDeg: 6, cardInMs: 300, cardOutLeadMs: 300,
-  endMs: 2000, maxTotalMs: 40000, openDistK: 3, openMaxD: 2.2, // trip view max distance (TRIP_MAX_D)
+  endMs: 2000, maxTotalMs: 40000, openDistK: 3, openMaxD: 6, // share view lifts the trip cap to MAX_DIST so the 3x pull-back is full
   tiltStopDeg: 35, tiltPeakDeg: 15, peakK: 1.4, headLead: 0.08,
   reducedCutMs: 180,
 };
