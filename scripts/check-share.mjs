@@ -27,7 +27,7 @@ const legs = [
   { mode: "drive", from_pin_id: "nope", to_pin_id: "alsonope" }, // dropped
 ];
 const r = projectRoute(legs, Object.values(pins), { width: W, height: H });
-ok(r.segs.length === 3, "unresolvable leg dropped");
+ok(r.segs.length === 2 && r.shortDots.length === 1, "unresolvable leg dropped, 1.4 km walk becomes a dot");
 const xs = r.segs.flatMap((s) => [s.x1, s.x2]), ys = r.segs.flatMap((s) => [s.y1, s.y2]);
 ok(Math.min(...xs) >= W * 0.15 - 0.5 && Math.max(...xs) <= W * 0.85 + 0.5 && Math.min(...ys) >= H * 0.15 - 0.5 && Math.max(...ys) <= H * 0.85 + 0.5, "fits inside 15% padding");
 ok(Math.abs(Math.min(...xs) - W * 0.15) < 1 || Math.abs(Math.min(...ys) - H * 0.15) < 1, "touches the padding on one axis");

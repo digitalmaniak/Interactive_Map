@@ -58,7 +58,7 @@ export default async function Image({ params }) {
   }
 
   const legs = shareLegs(trip.legs, trip.pins);
-  const { segs, dots } = projectRoute(legs, trip.pins, { width: W, height: H, pad: 0.15 });
+  const { segs, dots, shortDots = [] } = projectRoute(legs, trip.pins, { width: W, height: H, pad: 0.15 });
   const sub = [tripDates(trip.journey), countsLine(legs)].filter(Boolean).join("  ·  ");
   const title = String(trip.journey.title || "Untitled trip");
 
@@ -81,6 +81,9 @@ export default async function Image({ params }) {
           ))}
           {dots.map((d, i) => (
             <circle key={i} cx={d.x} cy={d.y} r="5" fill={CYAN} />
+          ))}
+          {shortDots.map((d, i) => (
+            <circle key={`s${i}`} cx={d.x} cy={d.y} r="3" fill="none" stroke={CYAN} strokeWidth="1.5" />
           ))}
         </svg>
         <div style={{ position: "absolute", left: 56, top: 48, right: 56, display: "flex", flexDirection: "column" }}>

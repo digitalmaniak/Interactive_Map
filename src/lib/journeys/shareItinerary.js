@@ -2,6 +2,7 @@
 // Open Graph card. Pure functions, safe on the edge runtime.
 
 import { homeLegIdFromRows } from "../legs/homeLeg.js";
+import { isShortLeg, legKm } from "../legs/shortLeg.js";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -108,11 +109,16 @@ export function projectRoute(legs, pins, { width, height, pad = 0.15 }) {
   for (const p of pins || []) byId[p.id] = p;
   const homeId = homeLegIdFromRows(legs, pins);
   const raw = [];
-  for (const l of legs || []) { const e = legEnds(l, byId); if (e) raw.push({ mode: l.mode, a: e.a, b: e.b, home: homeId != null && l.id === homeId }); }
+  for (const l of legs || []) {
+    const e = legEnds(l, byId); if (!e) continue;
+    // Under 2 km: a midpoint dot, no line (legEnds points are [lng, lat]).
+    const km = legKm(l.distance_km, { lat: e.a[1], lon: e.a[0] }, { lat: e.b[1], lon: e.b[0] });
+    raw.push({ mode: l.mode, a: e.a, b: e.b, home: homeId != null && l.id === homeId, short: isShortLeg(km) });
+  }
   const lone = [];
   if (!raw.length) for (const p of pins || []) { const la = num(p.latitude), lo = num(p.longitude); if (Number.isFinite(la) && Number.isFinite(lo)) lone.push([lo, la]); }
   const pts = raw.length ? raw.flatMap((s) => [s.a, s.b]) : lone;
-  if (!pts.length) return { segs: [], dots: [] };
+  if (!pts.length) return { segs: [], dots: [], shortDots: [] };
   // Unwrap: when the spread is over 180 degrees, move western points east by 360.
   const lons = pts.map((p) => p[0]);
   const wrap = Math.max(...lons) - Math.min(...lons) > 180;
@@ -127,7 +133,13 @@ export function projectRoute(legs, pins, { width, height, pad = 0.15 }) {
   const cx = ((minX0 + maxX0) / 2) * k, cy = (minY0 + maxY0) / 2;
   const P = (p) => { const q = fix(p); return [width / 2 + (q[0] * k - cx) * s, height / 2 - (q[1] - cy) * s]; };
   const r1 = (v) => Math.round(v * 10) / 10;
-  const segs = raw.map((sg) => {
+  const shortDots = [];
+  for (const sg of raw.filter((x) => x.short)) {
+    const [x1, y1] = P(sg.a), [x2, y2] = P(sg.b);
+    const x = r1((x1 + x2) / 2), y = r1((y1 + y2) / 2);
+    if (!shortDots.some((d) => Math.abs(d.x - x) < 1 && Math.abs(d.y - y) < 1)) shortDots.push({ x, y, mode: sg.mode });
+  }
+  const segs = raw.filter((x) => !x.short).map((sg) => {
     const [x1, y1] = P(sg.a), [x2, y2] = P(sg.b);
     const seg = { mode: sg.mode, home: sg.home, x1: r1(x1), y1: r1(y1), x2: r1(x2), y2: r1(y2) };
     if (sg.mode === "fly") {
@@ -141,5 +153,5 @@ export function projectRoute(legs, pins, { width, height, pad = 0.15 }) {
   const seen = new Set();
   const dots = [];
   for (const p of pts) { const [x, y] = P(p); const key = `${Math.round(x)}:${Math.round(y)}`; if (!seen.has(key)) { seen.add(key); dots.push({ x: r1(x), y: r1(y) }); } }
-  return { segs, dots };
+  return { segs, dots, shortDots };
 }

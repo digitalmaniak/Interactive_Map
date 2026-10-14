@@ -536,3 +536,10 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 .v2-draft-dates > input { flex: 1 1 0; min-width: 0; width: 0; }
 .v2-draft-edit { overflow-x: hidden; }
 .v2-draft-name { width: calc(100% - 24px); }
+
+/* Legs under 2 km: a small dot at the midpoint, label on hover. */
+.v2-short-leg { position: relative; display: block; width: 7px; height: 7px; border-radius: 50%; background: #5CC8E4; box-shadow: 0 0 0 2px rgba(7, 9, 11, 0.7); pointer-events: auto; cursor: default; outline: none; }
+.v2-short-leg::before { content: ""; position: absolute; inset: -6px; }
+.v2-short-leg-tip { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); padding: 4px 8px; white-space: nowrap; font: 400 11px/1.3 var(--v2-mono); color: var(--v2-text); background: rgba(7, 9, 11, 0.92); border: 1px solid var(--v2-hairline-strong); border-radius: 3px; opacity: 0; pointer-events: none; transition: opacity 120ms; }
+.v2-short-leg:hover .v2-short-leg-tip, .v2-short-leg:focus-visible .v2-short-leg-tip { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .v2-short-leg-tip { transition: none; } }

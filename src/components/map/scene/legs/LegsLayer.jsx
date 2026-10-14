@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { ARC_HOME, ARC_HOME_GLOW } from "../../../../lib/legs/homeLeg.js";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
+import { isShortLeg, legKm, shortLegLabel } from "../../../../lib/legs/shortLeg.js";
 // three-stdlib's Line2 (the same one drei's <Line> uses) supports RGBA vertex colours,
 // needed for the fly end fade and the wake fade.
 import { Line2, LineGeometry, LineMaterial, LineSegments2, LineSegmentsGeometry } from "three-stdlib";
@@ -61,6 +63,8 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
   const built = useMemo(() => {
     const out = [];
     for (const leg of legs || []) {
+      // Under 2 km: drawn as a midpoint dot (shortDots), never a line.
+      if (!leg.preview && isShortLeg(legKm(leg.distanceKm, leg.a, leg.b))) continue;
       // Add entry preview leg: always dashed at 40%, never animated.
       const s = leg.preview ? { ...(STYLE[leg.mode] || STYLE.drive), dash: [4, 4], head: false, alpha: 1, chevronPx: 0, tickPx: 0, wake: 0 } : STYLE[leg.mode] || STYLE.drive;
       // Flyover names the active leg directly; otherwise the leg arriving at the active stop.
@@ -78,6 +82,21 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
     }
     return out;
   }, [legs, activePinId, activeLegId]);
+
+  // Short legs (under 2 km): one dot per midpoint, hover label "Walk · 0.8 km".
+  const shortDots = useMemo(() => {
+    const out = [];
+    for (const leg of legs || []) {
+      if (leg.preview) continue;
+      const km = legKm(leg.distanceKm, leg.a, leg.b);
+      if (!isShortLeg(km)) continue;
+      const v = leg.a.v.clone().add(leg.b.v).normalize();
+      if (out.some((d) => d.v.angleTo(v) < 1e-6 && d.label === shortLegLabel(leg.mode, km))) continue;
+      out.push({ id: leg.id, v, pos: v.clone().multiplyScalar(1.0008), label: shortLegLabel(leg.mode, km) });
+    }
+    return out;
+  }, [legs]);
+  const shortRefs = useRef([]);
 
   // Pinless endpoints (airports, stopovers) and cruise ports: 4 px hollow rings, no label.
   const rings = useMemo(() => {
@@ -108,9 +127,13 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
     const s = st.current;
     const blend = tripBlend.current;
     const show = blend > 0.5 && built.length > 0;
+    if (typeof window !== "undefined") window.__shortLegs = shortDots.map((d) => d.label);
     if (surfaceGroup.current) surfaceGroup.current.visible = show;
     if (flyGroup.current) flyGroup.current.visible = show;
     if (fxGroup.current) fxGroup.current.visible = show;
+    // Short-leg dots: shown with the legs, hidden on the far side of the globe.
+    const camDir = camera.position.clone().normalize();
+    shortDots.forEach((d, i) => { const el = shortRefs.current[i]; if (el) el.style.display = blend > 0.5 && d.v.dot(camDir) > 0.15 ? "" : "none"; });
     if (!show) {
       s.start = null;
       if (typeof window !== "undefined") window.__legsDebug = { reducedMotion: !!reducedMotion, lite: !!lite, legCount: built.length, progress: 0, tripBlend: Number(blend.toFixed(3)), headRunning: false, heads: 0 };
@@ -275,6 +298,13 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
         </instancedMesh>
       )}
       </group>
+      {shortDots.map((d, i) => (
+        <Html key={d.id} position={d.pos} center zIndexRange={[5, 0]} style={{ pointerEvents: "none" }}>
+          <span ref={(el) => { shortRefs.current[i] = el; }} className="v2-short-leg" data-short-leg={d.label} tabIndex={0} aria-label={d.label}>
+            <span className="v2-short-leg-tip" role="tooltip">{d.label}</span>
+          </span>
+        </Html>
+      ))}
     </group>
   );
 }
