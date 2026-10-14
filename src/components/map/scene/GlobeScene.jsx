@@ -999,7 +999,8 @@ function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, met
         const want = cluster ? `${items[i].text} +${members.length - 1}` : items[i].text;
         if (place && place.textContent !== want) place.textContent = want;
         el.classList.toggle("is-cluster", cluster);
-        el.style.pointerEvents = cluster ? "auto" : "none";
+        // Clusters are always clickable; in trip view every stop label is (it selects the stop).
+        el.style.pointerEvents = cluster || focusing ? "auto" : "none";
         if (!s.old) {
           el.style.opacity = show ? "1" : "0";
           el.style.visibility = show ? "visible" : "hidden";
@@ -1562,6 +1563,7 @@ export default function GlobeScene({
 
   const handleGlobeClick = useCallback(
     (point) => {
+      if (labelPressRef.current) return; // the press belonged to a label
       if (!tapGuard.isTap()) return;
       if (flyOnRef.current) { flyPause(); return; }
       const ll = vec3ToLonLat(point);
@@ -1580,6 +1582,14 @@ export default function GlobeScene({
   }, [onHoverRegion]);
 
   const hoverPtRef = useRef(null);
+  // Set when a label takes a press; cleared after the pointerup's click has run.
+  const labelPressRef = useRef(false);
+  useEffect(() => {
+    const clear = () => setTimeout(() => { labelPressRef.current = false; }, 0);
+    window.addEventListener("pointerup", clear, true);
+    window.addEventListener("pointercancel", clear, true);
+    return () => { window.removeEventListener("pointerup", clear, true); window.removeEventListener("pointercancel", clear, true); };
+  }, []);
   const dotHoverRef = useRef(false);
   const handleRegionPoint = useCallback((point) => {
     const name = point ? countryAt(vec3ToLonLat(point))?.properties?.name || null : null;
@@ -1797,8 +1807,13 @@ export default function GlobeScene({
             ref={(el) => { labelEls.current[i] = el; }}
             className={`v2-pin-label${it.pin.id === shownActivePinId ? " is-active" : ""}${flyOn && it.pin.id === shownActivePinId ? " is-flyover" : ""}${reducedMotion ? " no-motion" : ""}`}
             style={{ opacity: 0, visibility: "hidden" }}
-            onPointerDown={dragThrough}
-            onClick={(e) => { if (!wasDragged(e)) onClusterTap(i); }}
+            onPointerDown={(e) => { labelPressRef.current = true; dragThrough(e); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (wasDragged(e)) return;
+              if ((clusterRef.current.get(i) || []).length > 1) onClusterTap(i);
+              else if (focusing) onPinClick?.(it.pin);
+            }}
           >
             <span className="v2-pin-label-place">{it.text}</span>
             <span className="v2-pin-label-coord">{it.coord}</span>
