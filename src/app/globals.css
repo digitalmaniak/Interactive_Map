@@ -603,3 +603,4 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 .v2-edge-km { color: rgba(255, 255, 255, 0.6); }
 .v2-edge-km:empty { display: none; }
 @media (prefers-reduced-motion: reduce) { .v2-edge-tag, .v2-edge-tag.is-on { transition: none; } }
+.v2-stats-cell dd.v2-stats-sub { margin-top: 6px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(230, 237, 240, 0.6); }

@@ -21,7 +21,7 @@ export default function TravelStats({ onClose }) {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
   const s = state.data;
-  const items = s ? [["Countries", fmt(s.countries)], ["Trips", fmt(s.trips)], ["Km", fmt(s.km)], ["Flown km", fmt(s.flownKm)]] : [];
+  const items = s ? [["Countries", fmt(s.countries)], ["Trips", fmt(s.trips)], ["Km", fmt(s.km)], ["Flights", fmt(s.flights), s.flownKm ? `${fmt(s.flownKm)} km flown` : null]] : [];
   if (typeof document === "undefined") return null;
   return createPortal(
     <div className="v2-stats-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -34,8 +34,8 @@ export default function TravelStats({ onClose }) {
         {state.error && <p className="v2-stats-note">Stats are unavailable right now.</p>}
         {s && (
           <dl className="v2-stats-grid">
-            {items.map(([k, v]) => (
-              <div key={k} className="v2-stats-cell"><dt>{k}</dt><dd>{v}</dd></div>
+            {items.map(([k, v, sub]) => (
+              <div key={k} className="v2-stats-cell"><dt>{k}</dt><dd>{v}</dd>{sub && <dd className="v2-stats-sub">{sub}</dd>}</div>
             ))}
           </dl>
         )}

@@ -2,7 +2,7 @@
 // scopes it to the signed-in user; soft-deleted journeys, legs and pins are excluded there).
 import { supabase } from "../supabase/client";
 
-export const STATS_COLUMNS = "country_count, journey_count, total_km, flown_km";
+export const STATS_COLUMNS = "country_count, journey_count, total_km, flights_total, flown_km";
 
 export async function fetchProfileStats() {
   const { data, error } = await supabase.from("profile_stats_v2").select(STATS_COLUMNS).maybeSingle();
@@ -13,5 +13,5 @@ export async function fetchProfileStats() {
 /** View row to display values. Missing row (no trips yet) reads as zeros. */
 export function toStats(row) {
   const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-  return { countries: n(row?.country_count), trips: n(row?.journey_count), km: Math.round(n(row?.total_km)), flownKm: Math.round(n(row?.flown_km)) };
+  return { countries: n(row?.country_count), trips: n(row?.journey_count), km: Math.round(n(row?.total_km)), flights: n(row?.flights_total), flownKm: Math.round(n(row?.flown_km)) };
 }
