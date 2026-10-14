@@ -62,7 +62,8 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
       const active = activeLegId !== undefined ? activeLegId != null && leg.id === activeLegId : activePinId != null && leg.toPinId === activePinId;
       const fly = leg.mode === "fly";
       const path = fly ? flyArc(leg.a.v, leg.b.v, { offsetDeg: leg.offsetDeg }) : { points: surfacePath(leg.a.v, leg.b.v), alpha: null };
-      const baseA = active ? 1 : s.alpha;
+      // Guessed (draft) legs use the existing 40% style until confirmed.
+      const baseA = active ? 1 : s.alpha * (leg.status === "draft" ? 0.4 : 1);
       const colors = [];
       path.points.forEach((_, i) => colors.push(ROUTE.r, ROUTE.g, ROUTE.b, path.alpha ? (active ? Math.max(path.alpha[i], 0.4) : path.alpha[i] * baseA) : baseA));
       const line = makeLine(path.points, colors, s.px * (active ? 1.5 : 1), !!s.dash);

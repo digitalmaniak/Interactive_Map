@@ -3,7 +3,9 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { makeTapGuard } from "./tapGuard";
-import { easeInOutCubic } from "./flyover/flyoverTiming";
+import { easeInOutCubic, FLYOVER } from "./flyover/flyoverTiming";
+import { buildFlyoverPlan } from "./flyover/flyoverPlan";
+const DRAFT_FLY_MS = 3000; // draft preview flyover, about 3 s in total
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerformanceMonitor } from "@react-three/drei";
@@ -907,6 +909,8 @@ export default function GlobeScene({
   pins = [],
   activePinId = null,
   focusJourneyId = null,
+  draftLegs = null, // trip draft preview: leg rows (pin ids "draft:i") used instead of a fetch
+  draftPlayKey = null, // changes when a parsed draft should play its fast flyover
   flyTo = null,
   focusIsCollection = false,
   focusTitle = null,
@@ -966,6 +970,8 @@ export default function GlobeScene({
 
   const geo = useMemo(() => rewindGeo(geoJson), [geoJson]);
   const focusing = focusJourneyId != null && !String(focusJourneyId).startsWith("__");
+  // Trip draft preview: not a saved journey, so nothing is fetched for it.
+  const isDraft = focusing && String(focusJourneyId).startsWith("draft:");
 
   const items = useMemo(
     () =>
@@ -990,7 +996,7 @@ export default function GlobeScene({
   // with notes (journal_blocks rows on the place). Read only.
   const [labelMeta, setLabelMeta] = useState({ ends: new Set(), notes: new Set() });
   useEffect(() => {
-    if (!focusing) return undefined;
+    if (!focusing || isDraft) return undefined;
     let cancelled = false;
     const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
     const sig = (q) => (ac && typeof q.abortSignal === "function" ? q.abortSignal(ac.signal) : q);
@@ -1018,7 +1024,7 @@ export default function GlobeScene({
       }
     })();
     return () => { cancelled = true; ac?.abort(); };
-  }, [focusing, focusJourneyId]);
+  }, [focusing, focusJourneyId, isDraft]);
 
   // Cluster tap: ease the camera in over the cluster until its pins separate.
   const clusterRef = useRef(new Map());
@@ -1047,7 +1053,7 @@ export default function GlobeScene({
   const tripKeyForLegs = focusing && !focusIsCollection ? String(focusJourneyId) : null;
   const [legRows, setLegRows] = useState({ key: null, rows: [] });
   useEffect(() => {
-    if (!tripKeyForLegs) return undefined;
+    if (!tripKeyForLegs || tripKeyForLegs.startsWith("draft:")) return undefined;
     let cancelled = false;
     const req = sharedJourneyLegs(tripKeyForLegs);
     req.promise
@@ -1056,11 +1062,12 @@ export default function GlobeScene({
     return () => { cancelled = true; req.release(); };
   }, [tripKeyForLegs]);
   const legs = useMemo(() => {
-    if (!tripKeyForLegs || legRows.key !== tripKeyForLegs) return [];
+    const draftKey = tripKeyForLegs && tripKeyForLegs.startsWith("draft:");
+    if (!tripKeyForLegs || (!draftKey && legRows.key !== tripKeyForLegs)) return [];
     const byId = {};
     for (const p of pins) byId[p.id] = p;
-    return resolveLegs(legRows.rows, byId);
-  }, [tripKeyForLegs, legRows, pins]);
+    return resolveLegs(draftKey ? draftLegs || [] : legRows.rows, byId);
+  }, [tripKeyForLegs, legRows, pins, draftLegs]);
 
   // Trip engagement. `engaged` remembers what the camera framed: a trip (its journey key)
   // or a single point (a pin from the Imported bucket, or a pin with no trip). Exit is
@@ -1209,7 +1216,27 @@ export default function GlobeScene({
   // Trip flyover: stop to stop in leg order through the same CameraController.
   const flyEnabled = focusing && !focusIsCollection && legs.length > 0;
   const flyEndGoal = useCallback(() => tripFitGoal(items.filter((it) => !it.dimmed)), [tripFitGoal, items]);
-  const fly = useFlyover({ legs, enabled: flyEnabled, tripKey: tripKeyForLegs, reducedMotion, moveRef, fov: TRIP_KEY.fov, endGoal: flyEndGoal });
+  // Draft preview: the same flyover, scaled to about DRAFT_FLY_MS in total.
+  const draftTiming = useMemo(() => {
+    if (!isDraft || !legs.length) return null;
+    const base = buildFlyoverPlan(legs, { reducedMotion: false }).totalMs || 1;
+    const k = Math.min(1, DRAFT_FLY_MS / base);
+    const t = { ...FLYOVER };
+    for (const key of ["shortLegMs", "longFlightMs", "holdMs", "introMs", "outroMs"]) t[key] = Math.max(120, Math.round(FLYOVER[key] * k));
+    return t;
+  }, [isDraft, legs]);
+  const fly = useFlyover({ legs, enabled: flyEnabled, tripKey: tripKeyForLegs, reducedMotion, moveRef, fov: TRIP_KEY.fov, endGoal: flyEndGoal, timing: draftTiming });
+  // A parsed draft plays its fast flyover after the trip fit has had a moment to start.
+  const playedRef = useRef(null);
+  const flyPlayRef = useRef(null);
+  useEffect(() => { flyPlayRef.current = fly.play; });
+  useEffect(() => {
+    // Keyed by the located stop set too, so fixing a stop in the preview replays it.
+    const k = `${draftPlayKey}|${tripKeyForLegs}`;
+    if (!isDraft || !draftPlayKey || !flyEnabled || playedRef.current === k) return undefined;
+    const t = setTimeout(() => { playedRef.current = k; flyPlayRef.current?.(); }, 700);
+    return () => clearTimeout(t);
+  }, [isDraft, draftPlayKey, flyEnabled, tripKeyForLegs]);
   const flyOn = fly.state.playing || fly.state.paused;
   const shownActivePinId = flyOn ? fly.state.pinId : activePinId;
   const activeLegId = flyOn ? fly.state.legId : undefined;

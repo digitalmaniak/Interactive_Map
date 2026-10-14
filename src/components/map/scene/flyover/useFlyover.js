@@ -11,7 +11,7 @@ import { flyoverActive } from "./flyoverState";
 
 const IDLE = { playing: false, paused: false, done: false, legIndex: -1, stopIndex: -1, pinId: null, legId: null };
 
-export default function useFlyover({ legs, enabled, tripKey, reducedMotion, moveRef, fov, endGoal }) {
+export default function useFlyover({ legs, enabled, tripKey, reducedMotion, moveRef, fov, endGoal, timing }) {
   // State is tagged with the trip it belongs to; another trip (or none) always reads as
   // idle, so a flyover can never carry over into the next journal.
   const [state, setState] = useState({ ...IDLE, key: null });
@@ -78,7 +78,7 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
     if (!enabled || f.playing) return;
     const cur = state.key === tripKey ? state : IDLE;
     if (!f.plan || cur.done || !cur.paused) {
-      f.plan = buildFlyoverPlan(legs, { reducedMotion });
+      f.plan = buildFlyoverPlan(legs, { reducedMotion, ...(timing ? { timing } : {}) });
       if (!f.plan.steps.length) return;
       f.playing = true;
       publish({ playing: true, paused: false, done: false });
@@ -93,7 +93,7 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
     }
     cancelAnimationFrame(f.raf);
     f.raf = requestAnimationFrame(() => r.current.tickRef());
-  }, [enabled, legs, reducedMotion, state, tripKey, enter, publish]);
+  }, [enabled, legs, reducedMotion, state, tripKey, enter, publish, timing]);
 
   const pause = useCallback(() => {
     const f = r.current;
@@ -120,9 +120,9 @@ export default function useFlyover({ legs, enabled, tripKey, reducedMotion, move
   // point between stops. Reuses the plan, timings and the single CameraController.
   const planNow = useCallback(() => {
     const f = r.current;
-    if (!f.plan) f.plan = buildFlyoverPlan(legs, { reducedMotion });
+    if (!f.plan) f.plan = buildFlyoverPlan(legs, { reducedMotion, ...(timing ? { timing } : {}) });
     return f.plan;
-  }, [legs, reducedMotion]);
+  }, [legs, reducedMotion, timing]);
   const timeNow = useCallback(() => {
     const f = r.current;
     if (!f.plan) return 0;
