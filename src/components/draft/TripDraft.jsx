@@ -65,7 +65,7 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
             <button type="button" className="v2-link" onClick={onAddSingle}>Add a single place</button>
             {resumable
               ? <button type="button" className="v2-link" onClick={onResume}>Continue your draft</button>
-              : <button type="button" className="v2-link" onClick={onStartGuided}>Build a trip step by step</button>}
+              : <button type="button" className="v2-link" onClick={onStartGuided}>Build a trip</button>}
           </div>
         )}
       </div>

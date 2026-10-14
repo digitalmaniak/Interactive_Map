@@ -145,8 +145,8 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
         <>
           <div className="v2-quickadd-or" aria-hidden="true">or</div>
           <div className="v2-quickadd-links">
-            {onTypeTrip && <button type="button" className="v2-quickadd-link" onClick={onTypeTrip}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7V5h16v2M12 5v14M9 19h6" /></svg><span>Type a trip</span></button>}
-            {onBuildTrip && <button type="button" className="v2-quickadd-link" onClick={onBuildTrip}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="1.5" /><circle cx="5" cy="12" r="1.5" /><circle cx="5" cy="18" r="1.5" /><path d="M10 6h10M10 12h10M10 18h10" /></svg><span>Build a trip step by step</span></button>}
+            {onTypeTrip && <button type="button" className="v2-quickadd-link" onClick={onTypeTrip}>Type a trip</button>}
+            {onBuildTrip && <button type="button" className="v2-quickadd-link" onClick={onBuildTrip}>Build a trip</button>}
           </div>
         </>
       )}

@@ -147,7 +147,7 @@ export default function JourneyList({
       {onTypeTrip && (
         <div style={{ display: "flex", gap: "1rem", flexShrink: 0, marginTop: "0.35rem" }}>
           <button type="button" className="v2-link" onClick={() => onTypeTrip("start")}>Type a trip</button>
-          <button type="button" className="v2-link" onClick={() => onTypeTrip("guided")}>Build a trip step by step</button>
+          <button type="button" className="v2-link" onClick={() => onTypeTrip("guided")}>Build a trip</button>
         </div>
       )}
 
