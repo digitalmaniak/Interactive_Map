@@ -152,9 +152,9 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
           if (e.delta > DRAG_PX) return;
           // A click that also hit a pin belongs to the pin, never to add-point.
           if (e.intersections?.some((h) => h.object?.userData?.pinHit)) return;
-          onGlobeClick(e.point);
+          onGlobeClick(raySphere(e.ray) || e.point);
         }}
-        onPointerMove={(e) => onGlobeHover(e.point)}
+        onPointerMove={(e) => onGlobeHover(raySphere(e.ray) || e.point)}
         onPointerOut={() => onGlobeHover(null)}
       >
         <sphereGeometry args={[GLOBE_R, t.globeSeg[0], t.globeSeg[1]]} />
@@ -1391,6 +1391,7 @@ export default function GlobeScene({
     onHoverRegion?.(null);
   }, [onHoverRegion]);
 
+  const hoverPtRef = useRef(null);
   const handleGlobeHover = useCallback(
     (point) => {
       if (!point) {
@@ -1398,11 +1399,13 @@ export default function GlobeScene({
         return;
       }
       if (draggingRef.current) return; // no readout while dragging
+      // Country under the cursor only: the exact ray/sphere hit (not the faceted mesh
+      // hit), point-in-polygon, evaluated at the LATEST pointer position of the frame.
+      hoverPtRef.current = point.clone();
       if (hoverRafRef.current) return;
-      const p = point.clone();
       hoverRafRef.current = requestAnimationFrame(() => {
         hoverRafRef.current = null;
-        const name = countryAt(vec3ToLonLat(p))?.properties?.name || null;
+        const name = countryAt(vec3ToLonLat(hoverPtRef.current))?.properties?.name || null;
         if (name !== lastRegionRef.current) { lastRegionRef.current = name; onHoverRegion?.(name); }
       });
     },
