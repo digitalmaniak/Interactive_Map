@@ -6,6 +6,7 @@ import GlobeScene from "../map/scene";
 import MapLoader from "../map/MapLoader";
 import ModeIcon from "../shell/ModeIcon";
 import { loadSharedJourney } from "../../lib/journeys/share";
+import { homeLegIdFromRows } from "../../lib/legs/homeLeg";
 import { legDate, legLine, shareLegs, tripDates } from "../../lib/journeys/shareItinerary";
 
 const IDLE = { playing: false, paused: false, done: false, legIndex: -1, legId: null };
@@ -58,6 +59,7 @@ export default function ShareView({ token }) {
   const pins = useMemo(() => (journey?.places || []).map((p) => ({ ...p, journey_id: journey.id })), [journey]);
   const pinsById = useMemo(() => Object.fromEntries(pins.map((p) => [p.id, p])), [pins]);
   const legs = useMemo(() => (journey ? shareLegs(journey.legs, pins) : []), [journey, pins]);
+  const homeId = useMemo(() => homeLegIdFromRows(legs, pins), [legs, pins]);
   const onFlyState = useCallback((s) => setFly(s || IDLE), []);
 
   // Reduced motion: whole route and a static list, nothing highlighted.
@@ -180,7 +182,7 @@ export default function ShareView({ token }) {
                 <button
                   type="button"
                   data-leg-index={i}
-                  className={`share-leg${cur ? " is-current" : ""}${past ? " is-done" : ""}`}
+                  className={`share-leg${cur ? " is-current" : ""}${past ? " is-done" : ""}${leg.id === homeId ? " is-home" : ""}`}
                   aria-current={cur ? "step" : undefined}
                   onClick={() => jump(leg)}
                 >

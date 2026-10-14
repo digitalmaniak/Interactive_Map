@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { homeLegId } from "../../../../lib/legs/homeLeg.js";
 
 // Pure leg geometry (no React), shared by LegsLayer and scripts/check-legs.mjs.
 // DESIGN.md "Leg mode styles (v1, build spec)". Globe radius is 1 R.
@@ -70,6 +71,9 @@ export function resolveLegs(rows, pinsById) {
   for (const l of flights) {
     if (flights.some((m) => m !== l && m.a.v.angleTo(l.b.v) < PAIR_MATCH_RAD && m.b.v.angleTo(l.a.v) < PAIR_MATCH_RAD)) l.offsetDeg = pairOffsetDeg(l.a.v.angleTo(l.b.v));
   }
+  // Return-home flight (last leg, a flight, ending within 50 km of the trip start).
+  const homeId = homeLegId(out.map((l) => ({ id: l.id, mode: l.mode, sort: l.sort, departAt: l.departAt, a: { lat: l.a.lat, lon: l.a.lon }, b: { lat: l.b.lat, lon: l.b.lon } })));
+  for (const l of out) l.home = homeId != null && l.id === homeId;
   return out;
 }
 

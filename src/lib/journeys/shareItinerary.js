@@ -1,6 +1,8 @@
 // Share view helpers: plain words leg lines, counts, and a flat route projection for the
 // Open Graph card. Pure functions, safe on the edge runtime.
 
+import { homeLegIdFromRows } from "../legs/homeLeg.js";
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const num = (v) => (v == null || v === "" ? NaN : Number(v));
@@ -104,8 +106,9 @@ export function legEnds(leg, pinsById = {}) {
 export function projectRoute(legs, pins, { width, height, pad = 0.15 }) {
   const byId = {};
   for (const p of pins || []) byId[p.id] = p;
+  const homeId = homeLegIdFromRows(legs, pins);
   const raw = [];
-  for (const l of legs || []) { const e = legEnds(l, byId); if (e) raw.push({ mode: l.mode, a: e.a, b: e.b }); }
+  for (const l of legs || []) { const e = legEnds(l, byId); if (e) raw.push({ mode: l.mode, a: e.a, b: e.b, home: homeId != null && l.id === homeId }); }
   const lone = [];
   if (!raw.length) for (const p of pins || []) { const la = num(p.latitude), lo = num(p.longitude); if (Number.isFinite(la) && Number.isFinite(lo)) lone.push([lo, la]); }
   const pts = raw.length ? raw.flatMap((s) => [s.a, s.b]) : lone;
@@ -126,7 +129,7 @@ export function projectRoute(legs, pins, { width, height, pad = 0.15 }) {
   const r1 = (v) => Math.round(v * 10) / 10;
   const segs = raw.map((sg) => {
     const [x1, y1] = P(sg.a), [x2, y2] = P(sg.b);
-    const seg = { mode: sg.mode, x1: r1(x1), y1: r1(y1), x2: r1(x2), y2: r1(y2) };
+    const seg = { mode: sg.mode, home: sg.home, x1: r1(x1), y1: r1(y1), x2: r1(x2), y2: r1(y2) };
     if (sg.mode === "fly") {
       const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy) || 1;
       // Bow the arc to the left of travel by 20% of its length.

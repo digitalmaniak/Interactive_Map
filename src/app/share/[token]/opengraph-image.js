@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { fetchSharedTrip } from "../../../lib/journeys/shareServer";
+import { ARC_HOME } from "../../../lib/legs/homeLeg";
 import { countsLine, projectRoute, shareLegs, tripDates } from "../../../lib/journeys/shareItinerary";
 
 // Share card, drawn on request and never stored. Anon key plus the share token only. A
@@ -70,7 +71,7 @@ export default async function Image({ params }) {
             <path
               key={i}
               d={s.cx != null ? `M${s.x1} ${s.y1}Q${s.cx} ${s.cy} ${s.x2} ${s.y2}` : `M${s.x1} ${s.y1}L${s.x2} ${s.y2}`}
-              stroke={CYAN}
+              stroke={s.home ? ARC_HOME : CYAN}
               strokeOpacity={s.mode === "fly" ? 0.9 : 0.75}
               strokeWidth={s.mode === "walk" ? 4 : 3}
               strokeDasharray={dash(s.mode)}

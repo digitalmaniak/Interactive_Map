@@ -2,6 +2,7 @@
 /* eslint-disable react-hooks/immutability -- three.js objects are mutated imperatively inside useFrame by design */
 
 import { useEffect, useMemo, useRef } from "react";
+import { ARC_HOME, ARC_HOME_GLOW } from "../../../../lib/legs/homeLeg.js";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 // three-stdlib's Line2 (the same one drei's <Line> uses) supports RGBA vertex colours,
@@ -13,6 +14,9 @@ import { flyArc, surfacePath, surfaceLiftScale, flyScaleFor, FLY_TRIP_SCALE } fr
 // are screen px (LineMaterial). Every leg is cyan; the active leg (arriving at the
 // current stop) is 1.5x wider at full opacity. Red-orange stays reserved for the stop.
 const ROUTE = new THREE.Color("#5CC8E4");
+// Return-home flight: one warm colour, glow at 70% of an outbound arc.
+const HOME = new THREE.Color(ARC_HOME);
+const HOME_HEAD = HOME.clone().multiplyScalar(ARC_HOME_GLOW);
 const DRAW_MS = 900;
 const WAKE_PX = 40;
 const WAKE_HALF = THREE.MathUtils.degToRad(19.5);
@@ -63,9 +67,10 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
       const fly = leg.mode === "fly";
       const path = fly ? flyArc(leg.a.v, leg.b.v, { offsetDeg: leg.offsetDeg }) : { points: surfacePath(leg.a.v, leg.b.v), alpha: null };
       // Guessed (draft) legs use the existing 40% style until confirmed.
-      const baseA = active ? 1 : s.alpha * (leg.status === "draft" ? 0.4 : 1);
+      const baseA = (active ? 1 : s.alpha * (leg.status === "draft" ? 0.4 : 1)) * (leg.home ? ARC_HOME_GLOW : 1);
+      const col = leg.home ? HOME : ROUTE;
       const colors = [];
-      path.points.forEach((_, i) => colors.push(ROUTE.r, ROUTE.g, ROUTE.b, path.alpha ? (active ? Math.max(path.alpha[i], 0.4) : path.alpha[i] * baseA) : baseA));
+      path.points.forEach((_, i) => colors.push(col.r, col.g, col.b, path.alpha ? (active ? Math.max(path.alpha[i], 0.4) : path.alpha[i] * baseA) : baseA));
       const line = makeLine(path.points, colors, s.px * (active ? 1.5 : 1), !!s.dash);
       line.renderOrder = fly ? 6 : 4;
       out.push({ leg, s, fly, active, line, points: path.points, arcScale: FLY_TRIP_SCALE });
@@ -89,7 +94,7 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
   const deco = useMemo(() => ({ chevrons: makeSegs(1), ticks: makeSegs(1), wakes: makeSegs(1) }), []);
   const heads = useRef();
   const ringMesh = useRef();
-  const headMat = useMemo(() => new THREE.MeshBasicMaterial({ color: ROUTE.clone().multiplyScalar(lite ? 1 : 2), toneMapped: false, transparent: true, depthWrite: false }), [lite]);
+  const headMat = useMemo(() => new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 1, 1).multiplyScalar(lite ? 1 : 2), toneMapped: false, transparent: true, depthWrite: false }), [lite]);
   const ringMat = useMemo(() => new THREE.MeshBasicMaterial({ color: ROUTE, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }), []);
 
   useEffect(() => () => { for (const b of built) { b.line.geometry.dispose(); b.line.material.dispose(); } }, [built]);
@@ -213,6 +218,7 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
       tmp.quaternion.copy(camera.quaternion);
       tmp.scale.setScalar(1.5 * w * (b.active ? 1.3 : 1));
       tmp.updateMatrix();
+      hm.setColorAt(h, b.leg.home ? HOME_HEAD : ROUTE);
       hm.setMatrixAt(h++, tmp.matrix);
       if (b.s.wake && !lite) {
         const T = pts[i + 1].clone().sub(pts[i]).normalize();
@@ -225,7 +231,7 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
         }
       }
     }
-    if (hm) { hm.count = h; hm.instanceMatrix.needsUpdate = true; }
+    if (hm) { hm.count = h; hm.instanceMatrix.needsUpdate = true; if (hm.instanceColor) hm.instanceColor.needsUpdate = true; }
     if (typeof window !== "undefined") {
       window.__legsDebug = { reducedMotion: !!reducedMotion, lite: !!lite, legCount: built.length, progress: Number(progress.toFixed(3)), tripBlend: Number(blend.toFixed(3)), headRunning: h > 0, heads: h };
     }

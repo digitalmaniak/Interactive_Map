@@ -451,3 +451,5 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 .share-leg-date { font: 400 11px/1 var(--v2-mono); color: var(--v2-text-dim); white-space: nowrap; }
 .share-end { position: fixed; left: 0; right: 0; top: 72px; margin: 0 auto; width: max-content; display: flex; gap: 8px; z-index: 26; }
 @media (prefers-reduced-motion: reduce) { .share-itin.is-sheet, .share-leg { transition: none; } }
+/* Return-home flight: icon in the home arc colour (ARC_HOME in lib/legs/homeLeg.js). */
+.share-leg.is-home .share-leg-icon { color: #E8D5B0; }
