@@ -65,6 +65,9 @@ const TRIP_MIN_ALT = 0.00125;
 const RELIEF_FADE_ALT = 0.0078;
 const BORDER_LIFT_MAX = 0.0003;
 const TRIP_MIN_DIST = GLOBE_R + TRIP_MIN_ALT;
+// A trip with one located stop (a typed draft before the rest are found) frames a region,
+// about 500 km up, so land and borders stay on screen instead of an 8 km close up.
+const SINGLE_STOP_ALT = 0.08;
 const MAX_DIST = 6;
 const LABEL_DIST = 1.9;
 const DRAG_PX = 5;
@@ -1107,13 +1110,13 @@ export default function GlobeScene({
       const r = document.querySelector(".v2-map")?.getBoundingClientRect();
       if (r && r.width && r.height) view = { width: r.width, height: r.height };
     }
-    let n = fr.n, D = fr.fit;
+    let n = fr.n, D = stops.length < 2 ? Math.max(fr.fit, GLOBE_R + SINGLE_STOP_ALT) : fr.fit;
     if (view && view.width && view.height) {
       const sol = solveTripFit(stops.map((it) => it.pos.clone().normalize()), {
         W: view.width, H: view.height, offset: panelOffsetFor(panelOpen, view.width, panelWidth), offsetY: Math.max(0, Math.min(view.height * 0.45, sheetInsetRef.current / 2)),
         fov: TRIP_KEY.fov, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0,
         pad: tripPads(view.width, view.height), labels: stops.map((it) => estimateLabelBox(it.text, it.coord)),
-        minAlt: TRIP_MIN_ALT,
+        minAlt: stops.length < 2 ? SINGLE_STOP_ALT : TRIP_MIN_ALT,
       });
       n = sol.n; D = sol.D;
     }
