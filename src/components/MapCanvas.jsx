@@ -851,6 +851,7 @@ export default function MapCanvas() {
         sessionEmail={session?.user?.email}
         onSignOut={() => supabase.auth.signOut()}
         onAddEntry={() => setAddSearchOpen(true)}
+        addTripName={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection ? activeJourney?.title || null : null}
         onOpenJournalsTab={() => { setReviewOpen(false); setClusterPins(null); setActivePin(null); setActiveJourneyId(null); setActiveTab("Journals"); }}
       >
         {session && (

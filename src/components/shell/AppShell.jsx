@@ -1,6 +1,8 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
 import Crosshairs from "./Crosshairs";
+import { addEntryLabel } from "../../lib/shell/addLabel";
 
 /**
  * Layout chrome extracted from MapCanvas: nav tabs (Map | Journals),
@@ -19,9 +21,20 @@ export default function AppShell({
   sessionEmail,
   onSignOut,
   onAddEntry,
+  addTripName = null, // open trip's name: the button reads Add stop to [name]
   onOpenJournalsTab,
   children,
 }) {
+  // Add entry label; a short name that still overflows the button falls back to Add stop.
+  const base = addEntryLabel(addTripName);
+  const [overflowName, setOverflowName] = useState(null);
+  const addText = base.fallback && overflowName === addTripName ? base.fallback : base;
+  const addRef = useRef(null);
+  useLayoutEffect(() => {
+    const el = addRef.current?.querySelector(".v2-add-label");
+    if (el && base.fallback && el.scrollWidth > el.clientWidth + 1) setOverflowName(addTripName);
+  }, [base.fallback, addTripName]);
+
   const handle = sessionEmail?.split("@")[0] || "wanderer";
   return (
     <div className="ui-layer">
@@ -96,9 +109,9 @@ export default function AppShell({
 
       {/* Bottom right: primary action */}
       <div className="bottom-right-group">
-        <button type="button" className="v2-btn v2-btn-primary v2-add" onClick={onAddEntry}>
+        <button ref={addRef} type="button" className="v2-btn v2-btn-primary v2-add" onClick={onAddEntry} title={addText.title} aria-label={addText.title || addText.label}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-          Add entry
+          <span className="v2-add-label">{addText.label}</span>
           <kbd className="v2-add-key" aria-hidden="true">/</kbd>
         </button>
       </div>

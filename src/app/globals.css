@@ -456,3 +456,6 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 /* '/' keycap hint in the Add entry button; hidden on touch devices. */
 .v2-add-key { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; margin-left: 6px; padding: 0 4px; border: 1px solid currentColor; border-radius: 3px; font: 500 10px/1 var(--v2-mono); opacity: 0.5; }
 @media (hover: none) and (pointer: coarse) { .v2-add-key { display: none; } }
+/* Add entry label: one line; a long trip name falls back to Add stop (see addLabel.js). */
+.v2-add { max-width: 300px; }
+.v2-add-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
