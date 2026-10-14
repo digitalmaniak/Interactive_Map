@@ -1202,7 +1202,8 @@ export default function GlobeScene({
   const stripOn = !!timeline && stripBox.W >= STRIP.hideBelowPx;
   const stripLeft = Math.max(STRIP.insetPx, stripBox.chipRight ? stripBox.chipRight + STRIP.gapPx : 0);
   const stripRight = useMemo(() => {
-    const base = (panelOpen ? panelWidth : 0) + STRIP.insetPx;
+    // 24 px from the screen edge, or 16 px short of the open panel.
+    const base = panelOpen ? panelWidth + 16 : STRIP.insetPx;
     const { W, H, addLeft, addTop } = stripBox;
     // Only when the button shares the strip's band and sits left of the strip's right end.
     if (addLeft == null || addTop == null || addTop >= H - STRIP.insetPx || addTop + 1 < H - STRIP.insetPx - STRIP.heightPx - 64) return base;

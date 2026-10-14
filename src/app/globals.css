@@ -458,4 +458,17 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 @media (hover: none) and (pointer: coarse) { .v2-add-key { display: none; } }
 /* Add entry label: one line; a long trip name falls back to Add stop (see addLabel.js). */
 .v2-add { max-width: 300px; }
-.v2-add-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.v2-add-label { display: inline-block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Desktop top-left stack: wordmark, quiet profile pill (menu: Sign out), Add entry. */
+.top-left-group.is-stack { top: 24px; left: 24px; width: 200px; flex-direction: column; align-items: flex-start; min-height: 0; }
+.top-left-group.is-stack .v2-wordmark { margin-bottom: 12px; }
+.top-left-group.is-stack .v2-profile-wrap { position: relative; margin-bottom: 8px; }
+.v2-profile.is-quiet { min-height: 32px; padding: 0 0.6rem; background: transparent; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 999px; color: var(--v2-text-dim); }
+.v2-profile.is-quiet:hover { border-color: rgba(255, 255, 255, 0.3); }
+.v2-profile-chev { opacity: 0.7; }
+.v2-profile-menu { position: absolute; top: calc(100% + 6px); left: 0; width: 160px; padding: 4px; background: var(--v2-panel); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); z-index: 40; }
+.top-left-group.is-stack .v2-add { max-width: 200px; }
+.top-left-group.is-stack .v2-profile-wrap { z-index: 2; }
+.top-left-group.is-stack .v2-add { padding: 0 10px; gap: 6px; }
+.top-left-group.is-stack .v2-add-key { margin-left: 0; }

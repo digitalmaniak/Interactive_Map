@@ -154,7 +154,6 @@ export default function MapCanvas() {
   })();
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [showFlightPaths, setShowFlightPaths] = useState(false);
   const [activeTab, setActiveTab] = useState("Map");
 
   // Interactive HUD States
@@ -846,8 +845,6 @@ export default function MapCanvas() {
         hoveredCountry={hoveredCountry}
         showProfileMenu={showProfileMenu}
         setShowProfileMenu={setShowProfileMenu}
-        showFlightPaths={showFlightPaths}
-        setShowFlightPaths={setShowFlightPaths}
         sessionEmail={session?.user?.email}
         onSignOut={() => supabase.auth.signOut()}
         onAddEntry={() => setAddSearchOpen(true)}
