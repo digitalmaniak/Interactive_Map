@@ -109,6 +109,8 @@ export function dayStated(text, iso) {
 /** Live per-stop warning: a stop with no date (shown amber, never filled in for you). */
 export const NO_DATE_WARNING = "No date yet. Add it if you know it.";
 
+// Sentence starters that are not places (a capitalised first word is otherwise a stop).
+const NOT_PLACES = new Set(["i", "we", "my", "our", "went", "flew", "took", "drove", "walked", "then", "visited", "trip", "the", "spent", "stayed", "after", "from", "in", "to", "and"]);
 const AIRPORT_RE = /\b(?:from|to)\s+([A-Z]{3})\b/;
 
 export function stubParse(text) {
@@ -117,15 +119,17 @@ export function stubParse(text) {
   const warnings = ["Stub parser: places and dates are a rough guess. Check each one before saving."];
   const found = [];
   for (const [k, g] of Object.entries(GAZ)) { const i = low.search(new RegExp(`\\b${k}\\b`)); if (i >= 0) found.push({ i, g }); }
-  // Capitalised words after "to", "in", "visited" or "then" that are not known places: stops
+  // Capitalised words at the start, after a comma, or after "to", "in", "visited", "then" or "and" that are not known places: stops
   // without a location. Three letter airport codes are skipped.
-  const re = /\b(?:to|in|visited|then)\s+([A-Z][a-z\u00C0-\u017F-]+(?:\s[A-Z][a-z\u00C0-\u017F-]+)?)/g;
+  const re = /(?:^|,\s*|\b(?:to|in|visited|then|and)\s+)([A-Z][a-z\u00C0-\u017F-]+(?:\s[A-Z][a-z\u00C0-\u017F-]+)?)/g;
   let m;
   while ((m = re.exec(t))) {
     const name = m[1];
     const k = name.toLowerCase();
-    if (GAZ[k] || MONTHS.includes(k) || found.some((f) => f.name === name)) continue;
-    found.push({ i: m.index + m[0].indexOf(name), name });
+    if (GAZ[k] || MONTHS.includes(k) || NOT_PLACES.has(k.split(" ")[0]) || found.some((f) => f.name === name)) continue;
+    const at = m.index + m[0].indexOf(name);
+    if (found.some((f) => f.i === at)) continue;
+    found.push({ i: at, name });
   }
   found.sort((a, b) => a.i - b.i);
   const stops = found.map((f) => (f.g ? { name: f.g[0], lat: f.g[1], lng: f.g[2], country_code: f.g[3], date: null } : { name: f.name, lat: null, lng: null, country_code: null, date: null }));

@@ -20,4 +20,6 @@ ok(stubParse("Lisbon, Sintra, Porto 2024").stops.every((s) => s.date === null), 
 ok(stubParse("Rome on May 3, 2024 then Florence").stops.every((s) => s.date === "2024-05-03"), "explicit day is kept");
 ok(explicitDate("3rd May 2024") === "2024-05-03" && explicitDate("May 2024") === null && explicitDate("2024-05-07") === "2024-05-07", "explicitDate");
 ok(!dayStated("Paris in May 2024", "2024-05-01") && dayStated("Paris May 3 2024", "2024-05-03") && !dayStated("trip 2021", "2021-01-01"), "dayStated drops invented AI dates");
+ok(JSON.stringify(stubParse("Lisbon, Sintra, Porto 2024").stops.map((s) => s.name)) === '["Lisbon","Sintra","Porto"]', "comma list finds every stop");
+ok(JSON.stringify(stubParse("Went to Kyoto and Osaka").stops.map((s) => s.name)) === '["Kyoto","Osaka"]', "sentence starter is not a stop");
 process.exit(failed ? 1 : 0);
