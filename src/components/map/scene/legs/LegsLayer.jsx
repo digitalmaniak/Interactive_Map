@@ -6,11 +6,11 @@ import { ARC_HOME, ARC_HOME_GLOW } from "../../../../lib/legs/homeLeg.js";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
-import { isShortLeg, legKm, shortLegLabel } from "../../../../lib/legs/shortLeg.js";
+import { isShortLeg, legKm, shortLegLabel, snapShortLegs } from "../../../../lib/legs/shortLeg.js";
 // three-stdlib's Line2 (the same one drei's <Line> uses) supports RGBA vertex colours,
 // needed for the fly end fade and the wake fade.
 import { Line2, LineGeometry, LineMaterial, LineSegments2, LineSegmentsGeometry } from "three-stdlib";
-import { flyArc, surfacePath, surfaceLiftScale, flyScaleFor, FLY_TRIP_SCALE } from "./legGeometry";
+import { llToUnit, flyArc, surfacePath, surfaceLiftScale, flyScaleFor, FLY_TRIP_SCALE } from "./legGeometry";
 
 // Journey legs on the globe (DESIGN.md "Leg mode styles", v1 build spec). All widths
 // are screen px (LineMaterial). Every leg is cyan; the active leg (arriving at the
@@ -52,12 +52,26 @@ function makeSegs(px) {
   return l;
 }
 
-export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, reducedMotion, lite = false }) {
+export default function LegsLayer({ legs: rawLegs, activePinId, activeLegId, tripBlend, reducedMotion, lite = false }) {
   const { camera, size, gl } = useThree();
   const surfaceGroup = useRef();
   const flyGroup = useRef();
   const fxGroup = useRef();
   const st = useRef({ start: null, lastDeco: 0, camKey: "" });
+
+  // Short legs (< 2 km) and the legs touching them share one exact point: the dot.
+  const legs = useMemo(() => {
+    if (!rawLegs) return rawLegs;
+    const real = rawLegs.filter((l) => !l.preview);
+    const snapped = snapShortLegs(real.map((l) => ({ a: l.a, b: l.b, km: legKm(l.distanceKm, l.a, l.b) })));
+    const byLeg = new Map(real.map((l, i) => [l, snapped[i]]));
+    return rawLegs.map((l) => {
+      const s = byLeg.get(l);
+      if (!s) return l;
+      const end = (orig, p) => (p === orig ? orig : { ...orig, lat: p.lat, lon: p.lon, v: llToUnit(p.lat, p.lon) });
+      return { ...l, a: end(l.a, s.a), b: end(l.b, s.b), dotV: s.dot ? llToUnit(s.dot.lat, s.dot.lon) : null };
+    });
+  }, [rawLegs]);
 
   // Build lines once per leg set / active stop.
   const built = useMemo(() => {
@@ -90,9 +104,9 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
       if (leg.preview) continue;
       const km = legKm(leg.distanceKm, leg.a, leg.b);
       if (!isShortLeg(km)) continue;
-      const v = leg.a.v.clone().add(leg.b.v).normalize();
+      const v = leg.dotV ? leg.dotV.clone() : leg.a.v.clone().add(leg.b.v).normalize();
       if (out.some((d) => d.v.angleTo(v) < 1e-6 && d.label === shortLegLabel(leg.mode, km))) continue;
-      out.push({ id: leg.id, v, pos: v.clone().multiplyScalar(1.0008), label: shortLegLabel(leg.mode, km) });
+      out.push({ id: leg.id, v, pos: v.clone(), label: shortLegLabel(leg.mode, km) });
     }
     return out;
   }, [legs]);
@@ -283,6 +297,14 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
         {built.filter((b) => !b.fly).map((b) => <primitive key={b.line.uuid} object={b.line} />)}
         <primitive object={deco.chevrons} renderOrder={5} />
         <primitive object={deco.ticks} renderOrder={5} />
+        {/* Inside the lifted surface group: dots sit exactly on the legs' shared end. */}
+        {shortDots.map((d, i) => (
+          <Html key={d.id} position={d.pos} center zIndexRange={[5, 0]} style={{ pointerEvents: "none" }}>
+            <span ref={(el) => { shortRefs.current[i] = el; }} className="v2-short-leg" data-short-leg={d.label} tabIndex={0} aria-label={d.label}>
+              <span className="v2-short-leg-tip" role="tooltip">{d.label}</span>
+            </span>
+          </Html>
+        ))}
       </group>
       <group ref={flyGroup}>
         {built.filter((b) => b.fly).map((b) => <primitive key={b.line.uuid} object={b.line} />)}
@@ -298,13 +320,6 @@ export default function LegsLayer({ legs, activePinId, activeLegId, tripBlend, r
         </instancedMesh>
       )}
       </group>
-      {shortDots.map((d, i) => (
-        <Html key={d.id} position={d.pos} center zIndexRange={[5, 0]} style={{ pointerEvents: "none" }}>
-          <span ref={(el) => { shortRefs.current[i] = el; }} className="v2-short-leg" data-short-leg={d.label} tabIndex={0} aria-label={d.label}>
-            <span className="v2-short-leg-tip" role="tooltip">{d.label}</span>
-          </span>
-        </Html>
-      ))}
     </group>
   );
 }

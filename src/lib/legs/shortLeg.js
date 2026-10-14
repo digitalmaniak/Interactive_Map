@@ -22,3 +22,31 @@ export function shortLegLabel(mode, km) {
   const name = MODE_NAME[mode] || "Other";
   return `${name} · ${km < 10 ? km.toFixed(1) : Math.round(km)} km`;
 }
+
+const TOUCH_KM = 0.05;
+/**
+ * Make short-leg dots and the legs that touch them share one exact point.
+ * items: [{ a: {lat, lon}, b: {lat, lon}, km }]. Returns the same length:
+ * [{ a, b, short, dot }], where a short leg's dot is the endpoint its neighbours meet at
+ * (or the midpoint when neighbours touch both ends, e.g. a border crossed both ways),
+ * and every longer leg's end that touched that short leg is moved onto the dot.
+ */
+export function snapShortLegs(items) {
+  const out = items.map((it) => ({ a: it.a, b: it.b, short: isShortLeg(it.km), dot: null }));
+  const near = (p, q) => p && q && haversineKm(p.lat, p.lon, q.lat, q.lon) <= TOUCH_KM;
+  const long = out.filter((o) => !o.short);
+  for (const s of out) {
+    if (!s.short) continue;
+    const tA = long.some((l) => near(l.a, s.a) || near(l.b, s.a));
+    const tB = long.some((l) => near(l.a, s.b) || near(l.b, s.b));
+    s.dot = tA && !tB ? { lat: s.a.lat, lon: s.a.lon } : tB && !tA ? { lat: s.b.lat, lon: s.b.lon } : { lat: (s.a.lat + s.b.lat) / 2, lon: (s.a.lon + s.b.lon) / 2 };
+  }
+  for (const s of out) {
+    if (!s.short) continue;
+    for (const l of long) {
+      if (near(l.a, s.a) || near(l.a, s.b)) l.a = { ...l.a, ...s.dot, snapped: true };
+      if (near(l.b, s.a) || near(l.b, s.b)) l.b = { ...l.b, ...s.dot, snapped: true };
+    }
+  }
+  return out;
+}

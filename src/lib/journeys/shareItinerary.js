@@ -2,7 +2,7 @@
 // Open Graph card. Pure functions, safe on the edge runtime.
 
 import { homeLegIdFromRows } from "../legs/homeLeg.js";
-import { isShortLeg, legKm } from "../legs/shortLeg.js";
+import { isShortLeg, legKm, snapShortLegs } from "../legs/shortLeg.js";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -115,6 +115,9 @@ export function projectRoute(legs, pins, { width, height, pad = 0.15 }) {
     const km = legKm(l.distance_km, { lat: e.a[1], lon: e.a[0] }, { lat: e.b[1], lon: e.b[0] });
     raw.push({ mode: l.mode, a: e.a, b: e.b, home: homeId != null && l.id === homeId, short: isShortLeg(km) });
   }
+  // Short-leg dots and the legs touching them share one exact point.
+  const snapped = snapShortLegs(raw.map((r) => ({ a: { lat: r.a[1], lon: r.a[0] }, b: { lat: r.b[1], lon: r.b[0] }, km: r.short ? 0 : Infinity })));
+  raw.forEach((r, i) => { const s = snapped[i]; r.a = [s.a.lon, s.a.lat]; r.b = [s.b.lon, s.b.lat]; if (s.dot) r.dot = [s.dot.lon, s.dot.lat]; });
   const lone = [];
   if (!raw.length) for (const p of pins || []) { const la = num(p.latitude), lo = num(p.longitude); if (Number.isFinite(la) && Number.isFinite(lo)) lone.push([lo, la]); }
   const pts = raw.length ? raw.flatMap((s) => [s.a, s.b]) : lone;
@@ -135,8 +138,8 @@ export function projectRoute(legs, pins, { width, height, pad = 0.15 }) {
   const r1 = (v) => Math.round(v * 10) / 10;
   const shortDots = [];
   for (const sg of raw.filter((x) => x.short)) {
-    const [x1, y1] = P(sg.a), [x2, y2] = P(sg.b);
-    const x = r1((x1 + x2) / 2), y = r1((y1 + y2) / 2);
+    const [dx, dy] = P(sg.dot);
+    const x = r1(dx), y = r1(dy);
     if (!shortDots.some((d) => Math.abs(d.x - x) < 1 && Math.abs(d.y - y) < 1)) shortDots.push({ x, y, mode: sg.mode });
   }
   const segs = raw.filter((x) => !x.short).map((sg) => {
