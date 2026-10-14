@@ -83,6 +83,15 @@ const easeMove = bezier([0.65, 0, 0.35, 1]);
 const TRIP_KEY = CAM.keyframes[CAM.keyframes.length - 1];
 // Trip view pull back limit, measured from the surface target: about a whole hemisphere.
 const TRIP_MAX_D = 2.2;
+// Prism pan/orbit values.
+const AUTO_ROTATE_MIN_ALT = 1.5 * 1; // height above the surface, in R
+const AUTO_ROTATE_RESUME_MS = 4000;
+const ORBIT_DAMP = 0.12;
+const DAMP_TAU = -1 / (60 * Math.log(1 - ORBIT_DAMP)); // 0.12 per frame at 60 fps
+const TRIP_POLAR_MIN = THREE.MathUtils.degToRad(20);
+const TRIP_POLAR_MAX = THREE.MathUtils.degToRad(70);
+const TRIP_AZ_RANGE = THREE.MathUtils.degToRad(60);
+const TRIP_FLY_MS = 2400;
 
 const easeGrow = bezier([0.16, 1, 0.3, 1]);
 
@@ -495,6 +504,23 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
     else camera.lookAt(look);
   };
 
+  // Trip view orbit: heading (azimuth) within +-60 deg of the fly-in heading, tilt (polar
+  // angle from the local vertical) within 20..70 deg. Distance and target stay put.
+  const orbitBy = (dHeading, dTilt, controls) => {
+    const s = st.current;
+    if (!controls || controls.target.lengthSq() < 0.25) return;
+    const live = readLive(camera, controls, s.heading);
+    const base = s.flyHeading ?? live.heading;
+    const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+    const rel = THREE.MathUtils.clamp(wrap(live.heading + dHeading - base), -TRIP_AZ_RANGE, TRIP_AZ_RANGE);
+    // Zoomed out, trip tilt eases toward top-down; never snap it back up to 20 deg.
+    const tilt = THREE.MathUtils.clamp(live.tilt + dTilt, Math.min(TRIP_POLAR_MIN, live.tilt), TRIP_POLAR_MAX);
+    applyState({ ...live, heading: base + rel, tilt, offset: s.offset }, controls);
+  };
+
+  const orbitRef = useRef(orbitBy);
+  useEffect(() => { orbitRef.current = orbitBy; });
+
   useFrame((_, delta) => {
     const s = st.current;
     const controls = controlsRef.current;
@@ -504,7 +530,16 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       // Grab-to-follow: OrbitControls turns 2*PI*rotateSpeed per screen height; the ground
       // under the cursor moves about alt * fov per screen height, so scale by height above
       // the surface (not centre distance). Close up this stops pans overshooting.
-      controls.rotateSpeed = THREE.MathUtils.clamp((alt * THREE.MathUtils.degToRad(camera.fov)) / (2 * Math.PI), 0.002, 0.5);
+      // Grab-to-follow, scaled by height above the surface: OrbitControls turns 2*PI*speed per
+      // canvas height, and the ground under the view centre moves H / (2 * h * tan(fov / 2)) px
+      // per radian, so speed = h * tan(fov / 2) / PI keeps the grabbed point under the cursor.
+      // (Prism's h / R measured 2.8x to 10x too fast.) Clamped before applying: never <= 0.
+      const fovHalf = THREE.MathUtils.degToRad(camera.fov) / 2;
+      controls.rotateSpeed = THREE.MathUtils.clamp((Math.max(0, alt) * Math.tan(fovHalf)) / Math.PI, 0.001, 1.0);
+      // Damping per second, not per frame: 0.12 at 60 fps (tau about 0.13 s), so inertia
+      // settles in about 1 s at any frame rate.
+      controls.dampingFactor = 1 - Math.exp(-Math.min(delta, 0.1) / DAMP_TAU);
+      controls.enableRotate = !tripView.current;
       // OrbitControls clamps the camera to target distance. In trip view the target sits on
       // the surface, so the limit is the minimum altitude, not the centre distance.
       const surfaceTarget = controls.target.lengthSq() > 0.25;
@@ -531,7 +566,7 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       applyOffset(s.offset);
     }
     viewRef.current = { width: size.width, height: size.height, offset: panelTarget, offsetY: s.voff, offsetYTarget: s.vTo };
-    if (typeof window !== "undefined") { window.__globeCamD = camera.position.length(); window.__globeCam = camera; } // smoke tests read these
+    if (typeof window !== "undefined") { window.__globeCamD = camera.position.length(); window.__globeCam = camera; window.__globeTrip = tripView.current; window.__globeTarget = controls ? controls.target.toArray() : null; } // smoke tests read these
 
     // New goal, or a panel change while idle or mid-move: one tween from the live state.
     const req = moveRef.current;
@@ -623,7 +658,16 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
           if (Math.hypot(sx - px, sy - py) <= PIN_HOVER_PX) { underCursor = true; break; }
         }
       }
-      if (controls && !tripView.current && !reducedMotion && now > idleUntil.current && !pinHoverRef.current && !underCursor) {
+      // Trip view drag orbit inertia (same 0.12 per frame decay as the globe damping).
+      const ov = s.orbitVel;
+      if (ov && tripView.current && !s.orbitDrag) {
+        orbitBy(ov.h * delta * 1000, ov.t * delta * 1000, controls);
+        const k = Math.exp(-Math.min(delta, 0.1) / DAMP_TAU); ov.h *= k; ov.t *= k;
+        if (Math.abs(ov.h) + Math.abs(ov.t) < 1e-6) s.orbitVel = null;
+      }
+      // Auto-rotate: only at globe zoom (height over 1.5 R), 4 s after the last drag ended,
+      // never while dragging or zoomed in.
+      if (controls && !tripView.current && !reducedMotion && !draggingRef.current && alt > AUTO_ROTATE_MIN_ALT && now > idleUntil.current && !pinHoverRef.current && !underCursor) {
         const yaw = THREE.MathUtils.degToRad(CAM.idleYawDegPerSec) * delta;
         camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
         controls.update();
@@ -652,6 +696,7 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
 
   // Globe view (tilt 0) orbits the globe centre again once the move lands.
   function finish(s, controls) {
+    if (tripView.current) { s.flyHeading = s.heading; s.orbitVel = null; }
     if (controls && camera.position.clone().normalize().angleTo(controls.target.clone().normalize()) < 1e-3 && !tripView.current) {
       controls.target.set(0, 0, 0);
       controls.update();
@@ -693,14 +738,42 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       const speed = controlsRef.current ? controlsRef.current.zoomSpeed : 1;
       if (zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * 0.0012 * speed))) {
         e.preventDefault();
-        idleUntil.current = performance.now() + CAM.idleResumeMs;
+        idleUntil.current = performance.now() + AUTO_ROTATE_RESUME_MS;
       }
     };
     const touches = new Map();
     let pinch = null;
-    const onDown = (e) => { if (e.pointerType === "touch") touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); };
-    const onUp = (e) => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; };
+    // Trip view drag: left/right orbits (heading), up/down tilts. Speeds: half a turn per
+    // canvas width, a quarter turn per canvas height. Release keeps the velocity (inertia).
+    const s = st.current;
+    const onDown = (e) => {
+      if (e.pointerType === "touch") touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!tripView.current || (e.pointerType === "touch" && touches.size > 1) || e.button > 0) { s.orbitDrag = null; return; }
+      moveRef.current = null; // a drag cancels any tween
+      s.orbitVel = null;
+      s.orbitDrag = { x: e.clientX, y: e.clientY, t: performance.now(), vh: 0, vt: 0 };
+      idleUntil.current = Infinity;
+    };
+    const onUp = (e) => {
+      touches.delete(e.pointerId); if (touches.size < 2) pinch = null;
+      const d = s.orbitDrag;
+      if (d) {
+        s.orbitDrag = null;
+        s.orbitVel = performance.now() - d.t < 80 ? { h: d.vh, t: d.vt } : null;
+        idleUntil.current = performance.now() + AUTO_ROTATE_RESUME_MS;
+      }
+    };
+    const onOrbitMove = (e) => {
+      const d = s.orbitDrag;
+      if (!d || !tripView.current || touches.size > 1) return;
+      const rect = el.getBoundingClientRect(), now = performance.now();
+      const dh = -((e.clientX - d.x) / rect.width) * Math.PI, dt = -((e.clientY - d.y) / rect.height) * (Math.PI / 2);
+      const ms = Math.max(1, now - d.t);
+      d.vh = dh / ms; d.vt = dt / ms; d.x = e.clientX; d.y = e.clientY; d.t = now;
+      orbitRef.current(dh, dt, controlsRef.current);
+    };
     const onMove = (e) => {
+      onOrbitMove(e);
       if (!touches.has(e.pointerId)) return;
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size !== 2 || !tripView.current) return;
@@ -729,7 +802,7 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
     // Drag start clears the region readout and suppresses it until the drag ends.
     const pause = () => { idleUntil.current = Infinity; draggingRef.current = true; onDragStart?.(); };
     const resume = () => {
-      idleUntil.current = performance.now() + CAM.idleResumeMs;
+      idleUntil.current = performance.now() + AUTO_ROTATE_RESUME_MS;
       draggingRef.current = false;
       // Refill the region readout once at the last cursor position, no mouse move needed.
       const ptr = pointerRef.current;
@@ -1206,7 +1279,7 @@ export default function GlobeScene({
       });
       n = sol.n; D = sol.D;
     }
-    return { n, D, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true };
+    return { n, D, tilt: THREE.MathUtils.degToRad(TRIP_KEY.tiltDeg), heading: 0, fov: TRIP_KEY.fov, trip: true, ms: TRIP_FLY_MS, ease: easeInOutCubic };
   }, [panelOpen, panelWidth]);
 
   // Opening a trip: frame its pins (skipped for the Imported collection, which opens as
@@ -1595,7 +1668,7 @@ export default function GlobeScene({
           makeDefault
           enablePan={false}
           enableDamping={!reducedMotion}
-          dampingFactor={0.2}
+          dampingFactor={0.12}
           rotateSpeed={0.5}
           zoomSpeed={0.7}
           minDistance={MIN_DIST}
