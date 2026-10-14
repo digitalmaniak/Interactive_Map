@@ -13,6 +13,7 @@ import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { geoArea, geoContains } from "d3-geo";
 import { countryNames, shortLegRegion } from "../../../lib/legs/shortLegRegion";
 import { countryName } from "../../../lib/geo/countryName";
+import { dragThrough, wasDragged } from "./dragThrough";
 import { GLOBE_R, rewindGeo, lonLatToVec3, vec3ToLonLat, buildLandTexture, buildCoastGeometry } from "./geometry";
 import { createGlobeMaterial, createAtmosphereMaterial, createBeamMaterial, LAND_RELIEF } from "./GlobeMaterial";
 import { tokens, tiers, bezier } from "./tokens";
@@ -92,6 +93,7 @@ const TRIP_POLAR_MIN = THREE.MathUtils.degToRad(20);
 const TRIP_POLAR_MAX = THREE.MathUtils.degToRad(70);
 const TRIP_AZ_RANGE = THREE.MathUtils.degToRad(60);
 const TRIP_FLY_MS = 2400;
+const AUTO_ROTATE_EASE_S = 1.5;
 
 const easeGrow = bezier([0.16, 1, 0.3, 1]);
 
@@ -665,10 +667,30 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
         const k = Math.exp(-Math.min(delta, 0.1) / DAMP_TAU); ov.h *= k; ov.t *= k;
         if (Math.abs(ov.h) + Math.abs(ov.t) < 1e-6) s.orbitVel = null;
       }
+      // Zoom to cursor (globe view): keep the ground point grabbed at the wheel step under
+      // the cursor by turning the camera about the globe centre; the target stays at the centre.
+      const za = s.zoomAnchor;
+      if (za && controls && !tripView.current && controls.target.lengthSq() < 1e-6) {
+        if (now - za.t > 450 || draggingRef.current) s.zoomAnchor = null;
+        else {
+          const rect = gl.domElement.getBoundingClientRect();
+          const rc = new THREE.Raycaster();
+          rc.setFromCamera(new THREE.Vector2(((za.x - rect.left) / rect.width) * 2 - 1, -((za.y - rect.top) / rect.height) * 2 + 1), camera);
+          const q = raySphere(rc.ray);
+          if (q && q.angleTo(za.p) > 1e-7) {
+            camera.position.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(q.normalize(), za.p));
+            controls.update();
+          }
+        }
+      }
       // Auto-rotate: only at globe zoom (height over 1.5 R), 4 s after the last drag ended,
       // never while dragging or zoomed in.
-      if (controls && !tripView.current && !reducedMotion && !draggingRef.current && alt > AUTO_ROTATE_MIN_ALT && now > idleUntil.current && !pinHoverRef.current && !underCursor) {
-        const yaw = THREE.MathUtils.degToRad(CAM.idleYawDegPerSec) * delta;
+      const autoOn = controls && !tripView.current && !reducedMotion && !draggingRef.current && alt > AUTO_ROTATE_MIN_ALT && now > idleUntil.current && !pinHoverRef.current && !underCursor;
+      if (!autoOn) s.autoK = 0;
+      if (autoOn) {
+        // Gentle restart: speed eases in from 0 over 1.5 s (smoothstep).
+        s.autoK = Math.min(1, (s.autoK || 0) + delta / AUTO_ROTATE_EASE_S);
+        const yaw = THREE.MathUtils.degToRad(CAM.idleYawDegPerSec) * delta * THREE.MathUtils.smoothstep(s.autoK, 0, 1);
         camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
         controls.update();
       }
@@ -734,7 +756,20 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       return true;
     };
     const onWheel = (e) => {
-      if (!tripView.current) return;
+      if (!tripView.current) {
+        const controls = controlsRef.current;
+        if (!controls || controls.target.lengthSq() > 1e-6) return;
+        const rect = el.getBoundingClientRect();
+        const rc = new THREE.Raycaster();
+        rc.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
+        const p = raySphere(rc.ray);
+        const s = st.current, now = performance.now();
+        // Keep the first step's point while the wheel keeps going at the same spot.
+        if (p && !(s.zoomAnchor && now - s.zoomAnchor.t < 450 && Math.hypot(s.zoomAnchor.x - e.clientX, s.zoomAnchor.y - e.clientY) < 3)) s.zoomAnchor = { p: p.normalize(), x: e.clientX, y: e.clientY, t: now };
+        else if (p && s.zoomAnchor) s.zoomAnchor.t = now;
+        else if (!p) s.zoomAnchor = null;
+        return;
+      }
       const speed = controlsRef.current ? controlsRef.current.zoomSpeed : 1;
       if (zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * 0.0012 * speed))) {
         e.preventDefault();
@@ -1748,7 +1783,8 @@ export default function GlobeScene({
             ref={(el) => { labelEls.current[i] = el; }}
             className={`v2-pin-label${it.pin.id === shownActivePinId ? " is-active" : ""}${flyOn && it.pin.id === shownActivePinId ? " is-flyover" : ""}${reducedMotion ? " no-motion" : ""}`}
             style={{ opacity: 0, visibility: "hidden" }}
-            onClick={() => onClusterTap(i)}
+            onPointerDown={dragThrough}
+            onClick={(e) => { if (!wasDragged(e)) onClusterTap(i); }}
           >
             <span className="v2-pin-label-place">{it.text}</span>
             <span className="v2-pin-label-coord">{it.coord}</span>

@@ -5,6 +5,7 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
+import { dragThrough, wasDragged } from "./dragThrough";
 import { EDGE, avoidBox, edgePoint, estWidth, kmText, fitTags, mergeTags, roundedKm, shortName } from "./edgeTagsMath";
 
 export function useEdgeTagsStore() {
@@ -115,7 +116,8 @@ export function EdgeTagsLayer({ store, onFly }) {
     <div className="v2-edge-tags">
       {Array.from({ length: EDGE.max }, (_, i) => (
         <button key={i} type="button" className="v2-edge-tag" ref={(el) => { store.els[i] = el; }}
-          onClick={() => { const t = store.targets[i]; if (t) onFly(t.n.clone()); }}>
+          onPointerDown={dragThrough}
+          onClick={(e) => { if (wasDragged(e)) return; const t = store.targets[i]; if (t) onFly(t.n.clone()); }}>
           <svg className="v2-edge-arrow" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h7M6.5 3l3 3-3 3" fill="none" stroke="#00E5FF" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
           <span className="v2-edge-name" />
           <span className="v2-edge-km" />
