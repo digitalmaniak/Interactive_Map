@@ -17,6 +17,8 @@ import { tokens, tiers, bezier } from "./tokens";
 import { detectRenderTier } from "./renderTier";
 import { supabase } from "../../../lib/supabase/client";
 import FpsGuard from "./FpsGuard";
+import { Line2, LineGeometry, LineMaterial } from "three-stdlib";
+import { PULSE, ringPhase, ringOpacity, easeOut } from "../../../lib/rings/homePulse";
 import LegsLayer from "./legs/LegsLayer";
 import { resolveLegs } from "./legs/legGeometry";
 import { sharedJourneyLegs } from "../../../lib/journeys/legs";
@@ -169,38 +171,63 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
   );
 }
 
-// Home range rings: thin concentric rings on the surface around the dated home base.
-// Pulse gently; static on reduced motion and in force3d lite mode.
+// Home range rings around the dated home base. Screen-space 1px lines (Line2, worldUnits
+// false) so they stay 1px at every zoom. Animated: three rings grow outward from home,
+// 1.2s apart (homePulse.js). Reduced motion / force3d lite: today's three static rings.
 function HomeRings({ home, still }) {
-  const group = useRef();
-  const rings = useMemo(() => {
-    if (!home) return [];
+  const { size } = useThree();
+  const frame = useMemo(() => {
+    if (!home) return null;
     const n = lonLatToVec3(home.lng, home.lat, 1).normalize();
     const { north, east } = localFrame(n);
-    return HOME_RINGS.radiiR.map((rad) => {
-      const pts = [];
-      for (let k = 0; k < HOME_RINGS.segments; k++) {
-        const a = (k / HOME_RINGS.segments) * Math.PI * 2;
-        const p = n.clone().addScaledVector(north, Math.cos(a) * rad).addScaledVector(east, Math.sin(a) * rad).normalize().multiplyScalar(GLOBE_R * HOME_RINGS.lift);
-        pts.push(p);
-      }
-      const g = new THREE.BufferGeometry().setFromPoints(pts);
-      const m = new THREE.LineBasicMaterial({ color: HOME_RINGS.color, transparent: true, opacity: HOME_RINGS.opacity, depthWrite: false });
-      return new THREE.LineLoop(g, m);
-    });
+    const q = new THREE.Quaternion().setFromRotationMatrix((() => { const m = new THREE.Matrix4().makeBasis(north, east, n); return m.determinant() < 0 ? m.makeBasis(east, north, n) : m; })());
+    return { n, q };
   }, [home]);
+  const rings = useMemo(() => {
+    if (!frame) return [];
+    // Unit circle in the local tangent plane; each ring's group sets its sphere radius.
+    const pos = [];
+    for (let k = 0; k <= HOME_RINGS.segments; k++) {
+      const a = (k / HOME_RINGS.segments) * Math.PI * 2;
+      pos.push(Math.cos(a), Math.sin(a), 0);
+    }
+    const count = still ? HOME_RINGS.radiiR.length : PULSE.count;
+    return Array.from({ length: count }, () => {
+      const g = new LineGeometry(); g.setPositions(pos);
+      const m = new LineMaterial({ color: HOME_RINGS.color, linewidth: 1, worldUnits: false, transparent: true, opacity: HOME_RINGS.opacity, depthWrite: false });
+      const l = new Line2(g, m); l.computeLineDistances(); l.frustumCulled = false;
+      return l;
+    });
+  }, [frame, still]);
   useEffect(() => () => rings.forEach((r) => { r.geometry.dispose(); r.material.dispose(); }), [rings]);
+  // Place a ring of angular radius rad (in globe radii) exactly on the sphere surface.
+  const place = useCallback((r, rad) => {
+    const R = GLOBE_R * HOME_RINGS.lift;
+    const th = Math.max(rad, 1e-4);
+    r.position.copy(frame.n).multiplyScalar(R * Math.cos(th));
+    r.quaternion.copy(frame.q);
+    r.scale.setScalar(R * Math.sin(th));
+  }, [frame]);
+  useEffect(() => {
+    if (!frame) return;
+    rings.forEach((r, i) => {
+      r.material.resolution.set(size.width, size.height);
+      if (still) { place(r, HOME_RINGS.radiiR[i]); r.material.opacity = HOME_RINGS.opacity; }
+    });
+  }, [rings, size, still, frame, place]);
   useFrame(() => {
     if (still || !rings.length) return;
-    const t = (performance.now() % HOME_RINGS.pulseMs) / HOME_RINGS.pulseMs;
+    const now = performance.now();
+    const maxR = HOME_RINGS.radiiR[HOME_RINGS.radiiR.length - 1];
     rings.forEach((r, i) => {
-      // A soft brightness wave travels outward through the rings.
-      const ph = (t - i / rings.length + 1) % 1;
-      r.material.opacity = HOME_RINGS.opacity * (1 - HOME_RINGS.pulseAmp + HOME_RINGS.pulseAmp * 2 * Math.max(0, Math.sin(Math.PI * ph)));
+      const ph = ringPhase(now, i);
+      place(r, maxR * easeOut(ph));
+      r.material.opacity = ringOpacity(ph);
+      r.visible = r.material.opacity > 0.001;
     });
   });
   if (!rings.length) return null;
-  return <group ref={group}>{rings.map((r, i) => <primitive key={i} object={r} raycast={() => null} />)}</group>;
+  return <group>{rings.map((r, i) => <primitive key={i} object={r} raycast={() => null} />)}</group>;
 }
 
 // Stop dots (one InstancedMesh) and stop beams (one InstancedMesh).
@@ -953,6 +980,8 @@ export default function GlobeScene({
   const reducedMotion = usePrefersReducedMotion();
   // Hidden ?force3d=1 flag: always run the live scene (skips the software WebGL and
   // low fps fallbacks). Read on the client only, same as the render tier probe.
+  // QA only: ?force3d=1&pulse=1 keeps the home ring pulse animating in lite mode.
+  const [pulseQA] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pulse") === "1");
   const [force3d] = useState(() => {
     if (typeof window === "undefined") return false;
     const on = new URLSearchParams(window.location.search).get("force3d") === "1";
@@ -1463,7 +1492,7 @@ export default function GlobeScene({
         <FpsGuard minFps={20} onLow={onLowFps} />
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} cheap={force3d} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
-        <HomeRings home={home} still={reducedMotion || force3d} />
+        <HomeRings home={home} still={reducedMotion || (force3d && !pulseQA)} />
         <LegsLayer legs={legs} activePinId={shownActivePinId} activeLegId={activeLegId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
         <Stops
           beamHeightRef={beamHeightRef}

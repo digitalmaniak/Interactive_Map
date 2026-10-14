@@ -33,8 +33,6 @@ export const HOME_RINGS = {
   radiiR: [0.035, 0.07, 0.105], // about 220, 450, 670 km
   segments: 128,
   lift: 1.0006,
-  pulseMs: 3200, // one outward pulse per ring cycle
-  pulseAmp: 0.25, // opacity swing, fraction of base
 };
 
 // Dated home bases: the base whose range contains the date; no date means the current base.
