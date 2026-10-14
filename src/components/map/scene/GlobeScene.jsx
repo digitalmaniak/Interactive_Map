@@ -17,6 +17,7 @@ import { tokens, tiers, bezier } from "./tokens";
 import { detectRenderTier } from "./renderTier";
 import { supabase } from "../../../lib/supabase/client";
 import FpsGuard from "./FpsGuard";
+import { EdgeTagsDriver, EdgeTagsLayer, useEdgeTagsStore } from "./EdgeTags";
 import { fmtMonthYear } from "../../../lib/dates/calendar";
 import { Line2, LineGeometry, LineMaterial } from "three-stdlib";
 import { PULSE, ringPhase, ringOpacity, easeOut } from "../../../lib/rings/homePulse";
@@ -1241,6 +1242,16 @@ export default function GlobeScene({
     return () => { window.removeEventListener("resize", measure); ro?.disconnect(); clearTimeout(t); };
   }, []);
   const stripOn = !!timeline && stripBox.W >= STRIP.hideBelowPx;
+  // Edge tags (main globe only): kept clear of the panel, timeline, top-left stack and nav.
+  const edgeStore = useEdgeTagsStore();
+  const edgeOn = !autoPlayKey && !isDraft && !legsOverride;
+  const edgeSafe = useMemo(() => ({
+    top: 56, left: 0,
+    right: panelOpen ? panelWidth + 16 : 0,
+    bottom: sheetInset ? sheetInset : stripOn ? STRIP.insetPx + STRIP.heightPx : 0,
+    block: { x0: 0, y0: 0, x1: 244, y1: 176 },
+  }), [panelOpen, panelWidth, sheetInset, stripOn]);
+  const edgeFly = useCallback((n) => { moveRef.current = { n, ms: reducedMotion ? 1 : undefined }; }, [reducedMotion]);
   const stripLeft = Math.max(STRIP.insetPx, stripBox.chipRight ? stripBox.chipRight + STRIP.gapPx : 0);
   const stripRight = useMemo(() => {
     // 24 px from the screen edge, or 16 px short of the open panel.
@@ -1532,6 +1543,7 @@ export default function GlobeScene({
           onStart={() => { moveRef.current = null; }}
         />
         {onFirstFrame && <FirstFrame onFirstFrame={onFirstFrame} />}
+        <EdgeTagsDriver store={edgeStore} itemsRef={itemsRef} safe={edgeSafe} reducedMotion={reducedMotion} enabled={edgeOn} />
         <CameraController sheetInset={sheetInset} pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={shownActivePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (
@@ -1547,6 +1559,7 @@ export default function GlobeScene({
         )}
       </Canvas>
 
+      {edgeOn && <EdgeTagsLayer store={edgeStore} onFly={edgeFly} />}
       <div className="v2-frame" style={{ right: panelOpen ? panelWidth : 0 }} aria-hidden={!(tripStops.length && focusTitle)}>
         {/* Corner crosshairs come from the shell (Crosshairs, 10px in); no inner set here. */}
         {tripStops.length > 0 && focusTitle && (

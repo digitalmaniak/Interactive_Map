@@ -593,3 +593,13 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 .share-stop-dates.v2-date-est { color: rgba(230, 237, 240, 0.6); }
 @media (prefers-reduced-motion: reduce) { .share-cine-black, .share-stop-card { animation: none; } }
 
+/* Edge tags: off-screen places pinned to the nearest screen edge (main globe). */
+.v2-edge-tags { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+.v2-edge-tag { position: absolute; left: 0; top: 0; height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px 0 10px; border-radius: 8px; background: rgba(14, 17, 20, 0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.4); font: 400 11px/1 var(--v2-mono); letter-spacing: 0.08em; white-space: nowrap; cursor: pointer; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 200ms linear, visibility 0s linear 200ms; will-change: transform; }
+.v2-edge-tag.is-on { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 200ms linear, visibility 0s; }
+.v2-edge-tag:hover, .v2-edge-tag:focus-visible { border-color: #00E5FF; }
+.v2-edge-arrow { flex-shrink: 0; transform-origin: 50% 50%; }
+.v2-edge-name { font-weight: 700; color: #FFFFFF; }
+.v2-edge-km { color: rgba(255, 255, 255, 0.6); }
+.v2-edge-km:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .v2-edge-tag, .v2-edge-tag.is-on { transition: none; } }
