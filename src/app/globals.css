@@ -499,8 +499,8 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 
 
 /* Date pairs shrink to fit their panel. */
-/* Two equal columns, 12px gap; one column when the container is under 360px (174 + 12 + 174). */
-.v2-date-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(174px, calc((100% - 12px) / 2)), 1fr)); gap: 12px; }
+/* Two equal columns, 12px gap; one column when the container is under 280px (134 + 12 + 134); the desktop panel is 291px inside. */
+.v2-date-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(134px, calc((100% - 12px) / 2)), 1fr)); gap: 12px; }
 .v2-date-pair > * { min-width: 0; }
 .v2-date-pair input, .v2-draft-dates input { width: 100%; min-width: 0; box-sizing: border-box; }
 .v2-draft-dates > input { flex: 1 1 0; }
