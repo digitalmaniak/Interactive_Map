@@ -5,7 +5,7 @@ import { supabase } from "../supabase/client";
 export const LEG_MODES = ["fly", "drive", "train", "boat", "cruise", "walk", "other"];
 
 const LEG_COLUMNS =
-  "id, journey_id, from_pin_id, from_label, from_lat, from_lng, to_pin_id, to_label, to_lat, to_lng, mode, depart_at, arrive_at, sort_order, status, distance_km";
+  "id, journey_id, from_pin_id, from_label, from_lat, from_lng, to_pin_id, to_label, to_lat, to_lng, mode, depart_at, arrive_at, sort_order, status, distance_km, from_country, to_country";
 
 /** { [journey_id]: draftCount } for the signed in user. */
 export async function fetchDraftLegCounts() {

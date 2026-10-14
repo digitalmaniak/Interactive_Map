@@ -12,6 +12,7 @@ import { OrbitControls, PerformanceMonitor } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { geoArea, geoContains } from "d3-geo";
 import { countryNames, shortLegRegion } from "../../../lib/legs/shortLegRegion";
+import { countryName } from "../../../lib/geo/countryName";
 import { GLOBE_R, rewindGeo, lonLatToVec3, vec3ToLonLat, buildLandTexture, buildCoastGeometry } from "./geometry";
 import { createGlobeMaterial, createAtmosphereMaterial, createBeamMaterial, LAND_RELIEF } from "./GlobeMaterial";
 import { tokens, tiers, bezier } from "./tokens";
@@ -122,6 +123,41 @@ function tripFraming(points) {
   return { n: c, fit };
 }
 
+// Exact ray/sphere hit in world space, then into the globe's own (local) frame, so lat/lng
+// stay right if the globe group is ever rotated or tilted.
+function localHit(e) {
+  const obj = e.eventObject || e.object;
+  if (obj) obj.updateWorldMatrix(true, false);
+  const inv = obj ? obj.matrixWorld.clone().invert() : null;
+  const ray = inv ? e.ray.clone().applyMatrix4(inv) : e.ray;
+  const p = raySphere(ray);
+  if (p) return p;
+  return obj ? obj.worldToLocal(e.point.clone()) : e.point;
+}
+
+// Region readout probe: every frame the cursor or the camera moved (drag inertia, flies,
+// zoom), re-cast the live cursor through the live camera and look up the country there.
+// Mesh pointer events only fire when the mouse moves, so a still cursor over a moving globe
+// used to keep a stale country. Pins and short-leg dots report their own country.
+function RegionProbe({ pointerRef, draggingRef, pinHoverRef, dotHoverRef, onPoint }) {
+  const { camera, gl } = useThree();
+  const st = useMemo(() => ({ rc: new THREE.Raycaster(), v: new THREE.Vector2(), key: "", t: 0 }), []);
+  useFrame(() => {
+    const ptr = pointerRef.current;
+    if (!ptr || draggingRef.current || pinHoverRef.current || dotHoverRef.current) { st.key = ""; return; }
+    const e = camera.matrixWorld.elements;
+    const key = `${ptr.x},${ptr.y},${e[12].toFixed(5)},${e[13].toFixed(5)},${e[14].toFixed(5)},${e[0].toFixed(4)},${e[5].toFixed(4)}`;
+    const now = performance.now();
+    if (key === st.key || now - st.t < 40) return;
+    st.key = key; st.t = now;
+    const rect = gl.domElement.getBoundingClientRect();
+    st.v.set(((ptr.x - rect.left) / rect.width) * 2 - 1, -((ptr.y - rect.top) / rect.height) * 2 + 1);
+    st.rc.setFromCamera(st.v, camera);
+    onPoint(raySphere(st.rc.ray));
+  });
+  return null;
+}
+
 function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false }) {
   const { gl, size, camera } = useThree();
   const coastRef = useRef();
@@ -155,10 +191,9 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
           if (e.delta > DRAG_PX) return;
           // A click that also hit a pin belongs to the pin, never to add-point.
           if (e.intersections?.some((h) => h.object?.userData?.pinHit)) return;
-          onGlobeClick(raySphere(e.ray) || e.point);
+          onGlobeClick(localHit(e));
         }}
-        onPointerMove={(e) => onGlobeHover(raySphere(e.ray) || e.point)}
-        onPointerOut={() => onGlobeHover(null)}
+        onPointerOut={() => onGlobeHover?.(null)}
       >
         <sphereGeometry args={[GLOBE_R, t.globeSeg[0], t.globeSeg[1]]} />
       </mesh>
@@ -493,7 +528,7 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       applyOffset(s.offset);
     }
     viewRef.current = { width: size.width, height: size.height, offset: panelTarget, offsetY: s.voff, offsetYTarget: s.vTo };
-    if (typeof window !== "undefined") window.__globeCamD = camera.position.length(); // smoke tests read this
+    if (typeof window !== "undefined") { window.__globeCamD = camera.position.length(); window.__globeCam = camera; } // smoke tests read these
 
     // New goal, or a panel change while idle or mid-move: one tween from the live state.
     const req = moveRef.current;
@@ -1420,11 +1455,17 @@ export default function GlobeScene({
   }, [onHoverRegion]);
 
   const hoverPtRef = useRef(null);
+  const dotHoverRef = useRef(false);
+  const handleRegionPoint = useCallback((point) => {
+    const name = point ? countryAt(vec3ToLonLat(point))?.properties?.name || null : null;
+    if (name !== lastRegionRef.current) { lastRegionRef.current = name; onHoverRegion?.(name); }
+  }, [countryAt, onHoverRegion]);
   // Short-leg dot hover: the countries at the leg's own from and to points ("Costa Rica ·
   // Panama"); point-in-polygon at the dot is only the fallback.
   const names = useMemo(() => countryNames(hitFeatures), [hitFeatures]);
   const handleDotHover = useCallback((point, leg) => {
-    if (draggingRef.current) return;
+    dotHoverRef.current = !!leg;
+    if (!leg || draggingRef.current) return;
     if (hoverRafRef.current) { cancelAnimationFrame(hoverRafRef.current); hoverRafRef.current = null; }
     const nameAt = (ll) => countryAt(ll)?.properties?.name || null;
     const name = shortLegRegion(leg, names, nameAt, point ? vec3ToLonLat(point) : null);
@@ -1544,7 +1585,7 @@ export default function GlobeScene({
           hoveredPinId={hoveredPinId}
           reducedMotion={reducedMotion}
           onSelect={(pin) => onPinClick?.(pin)}
-          onHover={(pin) => { pinHoverRef.current = !!pin; setHoveredPinId(pin?.id || null); onHoverRegion?.(pin?.location_name || null); }}
+          onHover={(pin) => { pinHoverRef.current = !!pin; setHoveredPinId(pin?.id || null); onHoverRegion?.(pin ? countryName(pin.country_code) || pin.location_name || null : null); lastRegionRef.current = null; }}
         />
         <OrbitControls
           ref={controlsRef}
@@ -1560,6 +1601,7 @@ export default function GlobeScene({
         />
         {onFirstFrame && <FirstFrame onFirstFrame={onFirstFrame} />}
         <EdgeTagsDriver store={edgeStore} itemsRef={itemsRef} safe={edgeSafe} reducedMotion={reducedMotion} enabled={edgeOn} />
+        <RegionProbe pointerRef={pointerRef} draggingRef={draggingRef} pinHoverRef={pinHoverRef} dotHoverRef={dotHoverRef} onPoint={handleRegionPoint} />
         <CameraController sheetInset={sheetInset} pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} tripMaxD={cinematic ? MAX_DIST : TRIP_MAX_D} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={shownActivePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (

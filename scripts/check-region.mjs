@@ -37,4 +37,11 @@ ok(r3 === "Panama", `Guabito alone reads ${r3}`);
 const r4 = shortLegRegion({ a: { lat: 9.93, lon: -84.09 }, b: { lat: 9.935, lon: -84.085 } }, names, nameAt);
 ok(r4 === "Costa Rica", `unlabelled ends fall back to point-in-polygon (${r4})`);
 ok(shortLegRegion({}, names, nameAt, { lat: 9.52, lon: -82.62 }) === "Panama", "no ends: dot point-in-polygon is the last fallback");
+// Harbor's ISO codes win over names and polygons; direction order is kept.
+const inWalk = shortLegRegion({ a: { ...sixaola, country: "CR" }, b: { ...guabito, country: "PA" } }, names, nameAt);
+const backWalk = shortLegRegion({ a: { ...guabito, country: "PA" }, b: { ...sixaola, country: "CR" } }, names, nameAt);
+ok(inWalk === "Costa Rica · Panama", `walk in (CR to PA) reads "${inWalk}"`);
+ok(backWalk === "Panama · Costa Rica", `walk back (PA to CR) reads "${backWalk}"`);
+const isoOnly = shortLegRegion({ a: { lat: 0, lon: -150, country: "CR" }, b: { lat: 0, lon: -150, country: "CR" } }, names, nameAt);
+ok(isoOnly === "Costa Rica", `ISO code beats an ocean point (${isoOnly})`);
 console.log(failed ? `${failed} failed` : "all passed"); process.exit(failed ? 1 : 0);

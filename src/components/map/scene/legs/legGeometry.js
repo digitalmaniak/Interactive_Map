@@ -52,15 +52,15 @@ function slerpUnit(a, b, ang, t, out) {
 export function resolveLegs(rows, pinsById) {
   const out = [];
   for (const r of rows || []) {
-    const end = (pinId, lat, lng, label) => {
+    const end = (pinId, lat, lng, label, cc) => {
       const pin = pinId ? pinsById?.[pinId] : null;
       const la = Number(pin ? pin.latitude : lat), lo = Number(pin ? pin.longitude : lng);
       if (pin == null && (lat == null || lng == null)) return null;
       if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
-      return { lat: la, lon: lo, pinned: !!pin, label: label || null, place: label || pin?.location_name || pin?.title || null, raw: { lat: la, lon: lo }, v: llToUnit(la, lo) };
+      return { lat: la, lon: lo, pinned: !!pin, label: label || null, place: label || pin?.location_name || pin?.title || null, raw: { lat: la, lon: lo }, country: cc || pin?.country_code || null, v: llToUnit(la, lo) };
     };
-    const a = end(r.from_pin_id, r.from_lat, r.from_lng, r.from_label);
-    const b = end(r.to_pin_id, r.to_lat, r.to_lng, r.to_label);
+    const a = end(r.from_pin_id, r.from_lat, r.from_lng, r.from_label, r.from_country);
+    const b = end(r.to_pin_id, r.to_lat, r.to_lng, r.to_label, r.to_country);
     if (!a || !b || a.v.angleTo(b.v) < 1e-7) continue;
     out.push({ id: r.id, mode: normLegMode(r.mode), a, b, toPinId: r.to_pin_id || null, fromPinId: r.from_pin_id || null, distanceKm: r.distance_km == null ? null : Number(r.distance_km), sort: r.sort_order ?? out.length, offsetDeg: 0, departAt: r.depart_at || null, arriveAt: r.arrive_at || null, status: r.status || null });
   }

@@ -312,7 +312,8 @@ export default function LegsLayer({ onHoverPoint, cinematic = false, legs: rawLe
         {shortDots.map((d, i) => (
           <Html key={d.id} position={d.pos} center zIndexRange={[5, 0]} style={{ pointerEvents: "none" }}>
             <span ref={(el) => { shortRefs.current[i] = el; }} className="v2-short-leg" data-short-leg={d.label} tabIndex={0} aria-label={d.label}
-              onPointerEnter={() => onHoverPoint?.(d.v.clone(), d.leg)} onFocus={() => onHoverPoint?.(d.v.clone(), d.leg)}>
+              onPointerEnter={() => onHoverPoint?.(d.v.clone(), d.leg)} onFocus={() => onHoverPoint?.(d.v.clone(), d.leg)}
+              onPointerLeave={() => onHoverPoint?.(null, null)} onBlur={() => onHoverPoint?.(null, null)}>
               <span className="v2-short-leg-tip" role="tooltip">{d.label}</span>
             </span>
           </Html>
