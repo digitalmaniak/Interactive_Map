@@ -57,7 +57,7 @@ export function resolveLegs(rows, pinsById) {
       const la = Number(pin ? pin.latitude : lat), lo = Number(pin ? pin.longitude : lng);
       if (pin == null && (lat == null || lng == null)) return null;
       if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
-      return { lat: la, lon: lo, pinned: !!pin, label: label || null, v: llToUnit(la, lo) };
+      return { lat: la, lon: lo, pinned: !!pin, label: label || null, place: label || pin?.location_name || pin?.title || null, raw: { lat: la, lon: lo }, v: llToUnit(la, lo) };
     };
     const a = end(r.from_pin_id, r.from_lat, r.from_lng, r.from_label);
     const b = end(r.to_pin_id, r.to_lat, r.to_lng, r.to_label);

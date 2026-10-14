@@ -110,7 +110,7 @@ export default function LegsLayer({ onHoverPoint, cinematic = false, legs: rawLe
       if (!isShortLeg(km)) continue;
       const v = leg.dotV ? leg.dotV.clone() : leg.a.v.clone().add(leg.b.v).normalize();
       if (out.some((d) => d.v.angleTo(v) < 1e-6 && d.label === shortLegLabel(leg.mode, km))) continue;
-      out.push({ id: leg.id, v, pos: v.clone(), label: shortLegLabel(leg.mode, km) });
+      out.push({ id: leg.id, v, pos: v.clone(), label: shortLegLabel(leg.mode, km), leg });
     }
     return out;
   }, [legs]);
@@ -312,7 +312,7 @@ export default function LegsLayer({ onHoverPoint, cinematic = false, legs: rawLe
         {shortDots.map((d, i) => (
           <Html key={d.id} position={d.pos} center zIndexRange={[5, 0]} style={{ pointerEvents: "none" }}>
             <span ref={(el) => { shortRefs.current[i] = el; }} className="v2-short-leg" data-short-leg={d.label} tabIndex={0} aria-label={d.label}
-              onPointerEnter={() => onHoverPoint?.(d.v.clone())} onFocus={() => onHoverPoint?.(d.v.clone())}>
+              onPointerEnter={() => onHoverPoint?.(d.v.clone(), d.leg)} onFocus={() => onHoverPoint?.(d.v.clone(), d.leg)}>
               <span className="v2-short-leg-tip" role="tooltip">{d.label}</span>
             </span>
           </Html>

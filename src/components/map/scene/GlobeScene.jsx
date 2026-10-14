@@ -11,6 +11,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerformanceMonitor } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { geoArea, geoContains } from "d3-geo";
+import { countryNames, shortLegRegion } from "../../../lib/legs/shortLegRegion";
 import { GLOBE_R, rewindGeo, lonLatToVec3, vec3ToLonLat, buildLandTexture, buildCoastGeometry } from "./geometry";
 import { createGlobeMaterial, createAtmosphereMaterial, createBeamMaterial, LAND_RELIEF } from "./GlobeMaterial";
 import { tokens, tiers, bezier } from "./tokens";
@@ -1419,6 +1420,16 @@ export default function GlobeScene({
   }, [onHoverRegion]);
 
   const hoverPtRef = useRef(null);
+  // Short-leg dot hover: the countries at the leg's own from and to points ("Costa Rica ·
+  // Panama"); point-in-polygon at the dot is only the fallback.
+  const names = useMemo(() => countryNames(hitFeatures), [hitFeatures]);
+  const handleDotHover = useCallback((point, leg) => {
+    if (draggingRef.current) return;
+    if (hoverRafRef.current) { cancelAnimationFrame(hoverRafRef.current); hoverRafRef.current = null; }
+    const nameAt = (ll) => countryAt(ll)?.properties?.name || null;
+    const name = shortLegRegion(leg, names, nameAt, point ? vec3ToLonLat(point) : null);
+    if (name !== lastRegionRef.current) { lastRegionRef.current = name; onHoverRegion?.(name); }
+  }, [countryAt, names, onHoverRegion]);
   const handleGlobeHover = useCallback(
     (point) => {
       if (!point) {
@@ -1523,7 +1534,7 @@ export default function GlobeScene({
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} cheap={force3d} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
         <HomeRings home={home} still={reducedMotion || (force3d && !pulseQA)} />
-        <LegsLayer onHoverPoint={handleGlobeHover} cinematic={cinematic} legs={legs} activePinId={shownActivePinId} activeLegId={activeLegId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
+        <LegsLayer onHoverPoint={handleDotHover} cinematic={cinematic} legs={legs} activePinId={shownActivePinId} activeLegId={activeLegId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
         <Stops
           beamHeightRef={beamHeightRef}
           hideBeams={force3d}
