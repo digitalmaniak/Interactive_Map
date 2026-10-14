@@ -113,7 +113,18 @@ export default function MapCanvas() {
     setTripDraft((cur) => ({ ...cur, face, draft: face === "edit" && !cur.draft?.stops?.length ? syncLegs(emptyDraft()) : cur.draft }));
   };
   const closeDraft = () => setTripDraft((cur) => ({ ...cur, face: null }));
-  const discardDraft = () => setTripDraft({ face: null, draft: emptyDraft(), text: "", playKey: null, stub: false });
+  // Discard at once, keep the draft for 5 s so Undo can restore it and reopen the panel.
+  const [discarded, setDiscarded] = useState(null);
+  const discardDraft = () => {
+    setDiscarded({ prev: { ...tripDraft, face: tripDraft.face || "edit" }, at: Date.now() });
+    setTripDraft({ face: null, draft: emptyDraft(), text: "", playKey: null, stub: false });
+  };
+  const undoDiscard = () => { if (discarded) setTripDraft(discarded.prev); setDiscarded(null); };
+  useEffect(() => {
+    if (!discarded) return undefined;
+    const t = setTimeout(() => setDiscarded(null), 5000);
+    return () => clearTimeout(t);
+  }, [discarded]);
   const submitDraftText = async () => {
     const text = tripDraft.text.trim();
     if (!text || draftBusy.parsing) return;
@@ -828,6 +839,14 @@ export default function MapCanvas() {
           resumable={!tripDraft.face && tripDraft.draft.stops.length > 0}
           onResume={() => openDraft("edit")}
         />
+      )}
+
+      {discarded && (
+        <div className="v2-toast" role="status">
+          <span>Draft discarded</span>
+          <span aria-hidden="true">·</span>
+          <button type="button" className="v2-toast-undo" onClick={undoDiscard}>Undo</button>
+        </div>
       )}
 
       {session && addSearchOpen && (

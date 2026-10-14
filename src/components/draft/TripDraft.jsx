@@ -137,8 +137,8 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
 
       {saveError && <p className="v2-draft-error" role="alert">{saveError}</p>}
       <div className="v2-draft-foot">
-        <button type="button" className="v2-btn v2-btn-primary" disabled={!ready || saving} aria-disabled={!ready || saving} aria-describedby={hint ? "v2-draft-save-hint" : undefined} onClick={onSave}>{saving ? "Saving" : "Save trip"}</button>
-        {onDiscard && <button type="button" className="v2-link" onClick={onDiscard}>Discard</button>}
+        <button type="button" className="v2-btn v2-btn-primary v2-draft-save" disabled={!ready || saving} aria-disabled={!ready || saving} aria-describedby={hint ? "v2-draft-save-hint" : undefined} onClick={onSave}>{saving ? "Saving" : "Save trip"}</button>
+        {onDiscard && <button type="button" className="v2-btn v2-draft-discard" onClick={onDiscard}>Discard</button>}
         {hint && <span className="v2-draft-hint" id="v2-draft-save-hint">{hint}</span>}
       </div>
     </div>
