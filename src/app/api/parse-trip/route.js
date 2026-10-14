@@ -9,7 +9,8 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { LEG_MODES, dayStated } from "../../../lib/draft/draft";
+import { LEG_MODES, dayStated, monthOnlyJourneyDates } from "../../../lib/draft/draft";
+import { monthBounds } from "../../../lib/dates/calendar";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -17,7 +18,7 @@ export const maxDuration = 30;
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
 
 const DraftSchema = z.object({
-  journey: z.object({ title: z.string().min(1), date_start: isoDate, date_end: isoDate }),
+  journey: z.object({ title: z.string().min(1), date_start: isoDate, date_end: isoDate, month_only: z.string().regex(/^\d{4}-\d{2}$/).nullable() }),
   stops: z.array(z.object({
     name: z.string().min(1),
     lat: z.number().min(-90).max(90),
@@ -84,7 +85,8 @@ export async function POST(req) {
         `indexes into stops. Leg mode must be one of: ${LEG_MODES.join(", ")} (use "fly" for flights). ` +
         "For flights put the airport in from_label/to_label, like \"New York (JFK)\", else null. " +
         "Dates are YYYY-MM-DD or null. Never invent a date: give a date only when the text states the exact day, " +
-        "otherwise null (a month or a year alone is null). Put any ambiguity in warnings.",
+        "otherwise null (a month or a year alone is null). When the text names only a month for the trip, like \"June 2025\", " +
+        "set journey.month_only to \"YYYY-MM\" (else null) and leave every date null. Put any ambiguity in warnings.",
       prompt: text,
     });
 
@@ -98,7 +100,14 @@ export async function POST(req) {
     // Never invent dates: drop any date whose day the text does not state.
     const keep = (d) => (d && dayStated(text, d) ? d : null);
     const stops = object.stops.map((s) => ({ ...s, date: keep(s.date), matched_pin_id: null }));
-    const journey = { ...object.journey, date_start: keep(object.journey.date_start), date_end: keep(object.journey.date_end) };
+    const { month_only: mo, ...jr } = object.journey;
+    let journey = { ...jr, date_start: keep(jr.date_start), date_end: keep(jr.date_end), date_precision: "day" };
+    // Month only: the trip spans the month (estimated). Stops stay undated and fall back to it.
+    if (!journey.date_start && !journey.date_end) {
+      const fromModel = mo && /^\d{4}-(0[1-9]|1[0-2])$/.test(mo) ? (() => { const b = monthBounds(Number(mo.slice(0, 4)), Number(mo.slice(5))); return { date_start: b.start, date_end: b.end, date_precision: "month" }; })() : null;
+      const month = monthOnlyJourneyDates(text) || fromModel;
+      if (month) journey = { ...journey, ...month };
+    }
     return NextResponse.json({ draft: { journey, stops, legs: legs.map((l) => ({ ...l, date: keep(l.date) })), warnings }, source: picked.source });
   } catch (e) {
     console.error("parse-trip failed", picked.source, e?.name || "error", e?.statusCode || "");

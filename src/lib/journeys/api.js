@@ -6,16 +6,28 @@
 import { supabase } from "../supabase/client";
 import { updatePin } from "../pins/api";
 
-const JOURNEY_SELECT =
+const JOURNEY_BASE =
   "id, user_id, title, summary, date_start, date_end, visibility, share_token, tags, created_at, updated_at";
+// journeys.date_precision ('day' | 'month') is Harbor's column. Tolerate it missing:
+// after one undefined-column error, stop asking for or writing it.
+let hasPrecision = true;
+const JOURNEY_SELECT_FULL = `${JOURNEY_BASE}, date_precision`;
+const sel = () => (hasPrecision ? JOURNEY_SELECT_FULL : JOURNEY_BASE);
+export const isMissingColumn = (error) =>
+  !!error && (error.code === "42703" || error.code === "PGRST204" || /date_precision/.test(String(error.message || "")));
+async function withPrecision(run) {
+  const r = await run(sel(), hasPrecision);
+  if (hasPrecision && isMissingColumn(r.error)) { hasPrecision = false; return run(sel(), false); }
+  return r;
+}
 
 /** Select non-deleted journeys for the signed-in user (RLS). */
 export async function loadJourneys() {
-  const { data, error } = await supabase
+  const { data, error } = await withPrecision((cols) => supabase
     .from("journeys")
-    .select(JOURNEY_SELECT)
+    .select(cols)
     .is("deleted_at", null)
-    .order("date_start", { ascending: false });
+    .order("date_start", { ascending: false }));
   if (error) return { data: null, error };
   return { data: data || [], error: null };
 }
@@ -44,7 +56,7 @@ export async function createJourney({ userId, title, summary, date_start, date_e
   const { data, error } = await supabase
     .from("journeys")
     .insert(row)
-    .select(JOURNEY_SELECT)
+    .select(sel())
     .single();
   return { data, error };
 }
@@ -61,6 +73,9 @@ export async function updateJourney(id, fields) {
   if (fields.summary !== undefined) patch.summary = fields.summary?.trim() || null;
   if (fields.date_start !== undefined) patch.date_start = fields.date_start || null;
   if (fields.date_end !== undefined) patch.date_end = fields.date_end || null;
+  // Real days entered: the month estimate clears. Callers may set "month" explicitly.
+  if (fields.date_precision === "month" || fields.date_precision === "day") patch.date_precision = fields.date_precision;
+  else if (fields.date_start !== undefined || fields.date_end !== undefined) patch.date_precision = "day";
   if (fields.tags !== undefined) patch.tags = normalizeTags(fields.tags);
   if (fields.visibility !== undefined) {
     if (fields.visibility !== "private" && fields.visibility !== "unlisted") {
@@ -74,13 +89,12 @@ export async function updateJourney(id, fields) {
     return { data: null, error: { message: "No fields to update." } };
   }
 
-  const { data, error } = await supabase
-    .from("journeys")
-    .update(patch)
-    .eq("id", id)
-    .is("deleted_at", null)
-    .select(JOURNEY_SELECT)
-    .single();
+  const { data, error } = await withPrecision((cols, withP) => {
+    const p = { ...patch };
+    if (!withP) delete p.date_precision;
+    if (!Object.keys(p).length) return { data: null, error: null };
+    return supabase.from("journeys").update(p).eq("id", id).is("deleted_at", null).select(cols).single();
+  });
   return { data, error };
 }
 
@@ -133,7 +147,7 @@ export async function ensureImportedJourney(userId) {
 
   const { data: existing, error: findError } = await supabase
     .from("journeys")
-    .select(JOURNEY_SELECT)
+    .select(sel())
     .eq("user_id", userId)
     .eq("title", "Imported")
     .is("deleted_at", null)
@@ -152,7 +166,7 @@ export async function ensureImportedJourney(userId) {
       visibility: "private",
       summary: "Soft-migrate catch-all for pins without a journey.",
     })
-    .select(JOURNEY_SELECT)
+    .select(sel())
     .single();
   return { data: created, error: createError };
 }

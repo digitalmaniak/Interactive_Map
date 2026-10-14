@@ -1,3 +1,4 @@
+import { updateJourney } from "../journeys/api";
 // Client calls for the trip draft flow. Parse never writes. Save is one atomic RPC.
 import { supabase } from "../supabase/client";
 import { hasLocation, normalizeDraft, stubParse, toRpcDraft } from "./draft";
@@ -53,5 +54,9 @@ export async function locateStubStops(draft, { signal, geocodeImpl = geocode } =
 export async function saveDraft(draft) {
   const { data, error } = await supabase.rpc("create_journey_from_draft", { draft: toRpcDraft(draft) });
   if (error) return { error: error.message || "save_failed" };
+  // Month-only parse: persist the estimate (tolerates the column missing; never blocks save).
+  if (draft?.journey?.date_precision === "month" && data) {
+    await updateJourney(data, { date_precision: "month" }).catch(() => {});
+  }
   return { id: data };
 }

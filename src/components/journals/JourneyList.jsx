@@ -276,7 +276,7 @@ export default function JourneyList({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: "0.75rem", color: "var(--v2-text-dim)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "var(--v2-mono)" }}>
-                    {dates || "Undated"}
+                    {dates ? (journey.date_precision === "month" ? <span className="v2-date-est">{dates}</span> : dates) : "Undated"}
                   </div>
                   <div style={{ fontSize: "1.1rem", color: "var(--v2-text)", fontWeight: 600, margin: "0.25rem 0" }}>
                     {journey.title}

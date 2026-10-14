@@ -65,7 +65,7 @@ export default function JourneyPlacesList({
         {journey?.title || "Journey"}
       </h2>
       <p style={{ fontSize: "0.85rem", color: "var(--v2-text-dim)", margin: "0.25rem 0 0", flexShrink: 0 }}>
-        {dates ? `${dates} · ` : ""}
+        {dates ? (journey?.date_precision === "month" ? <><span className="v2-date-est">{dates}</span>{" · "}</> : `${dates} · `) : ""}
         {places.length} {places.length === 1 ? "place" : "places"}
         {shared ? " · Shared" : ""}
       </p>

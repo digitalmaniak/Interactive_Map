@@ -6,6 +6,7 @@
 //   "How did you get to the next one?" row with mode icons. Fly asks for two airports.
 // Nothing is saved until Save. Save stays disabled until every stop has a location.
 import { useState } from "react";
+import { fmtMonthYear, fmtMonthRange } from "../../lib/dates/calendar";
 import QuickAdd from "../quickadd/QuickAdd";
 import { LEG_MODES, MODE_LABEL, NO_DATE_WARNING, canSave, hasLocation, saveHint, warningsFor } from "../../lib/draft/draft";
 import ModeIcon from "../shell/ModeIcon";
@@ -47,6 +48,9 @@ export function previewLabel(stub, reason) {
 
 export default function TripDraft({ face, text, setText, onSubmitText, parsing, error, stub, onStartGuided, onAddSingle, draft, setDraft, onSave, saving, saveError, onClose, onDiscard, stubReason = null, source = null, resumable = false, onResume, showLinks = true }) {
   const [openWarn, setOpenWarn] = useState(null);
+  const [editDates, setEditDates] = useState(false);
+  const monthEst = draft?.journey?.date_precision === "month" && !!draft?.journey?.date_start;
+  const tripFallback = fmtMonthRange(draft?.journey?.date_start, draft?.journey?.date_end);
   const [changing, setChanging] = useState(null); // stop index whose place is being changed
 
   if (face === "start") {
@@ -92,11 +96,17 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
       {source && <p className="v2-draft-note">{previewLabel(source === "offline", stubReason)}</p>}
       <input className="v2-draft-name panel-input" placeholder="Trip name" aria-label="Trip name" value={d.journey.title}
         onChange={(e) => setDraft((cur) => ({ ...cur, journey: { ...cur.journey, title: e.target.value } }))} />
-      <div className="v2-draft-dates">
-        <input type="date" className="panel-input" aria-label="Start date" value={d.journey.date_start || ""} onChange={(e) => setDraft((cur) => ({ ...cur, journey: { ...cur.journey, date_start: e.target.value || null } }))} />
-        <span aria-hidden="true">to</span>
-        <input type="date" className="panel-input" aria-label="End date" value={d.journey.date_end || ""} onChange={(e) => setDraft((cur) => ({ ...cur, journey: { ...cur.journey, date_end: e.target.value || null } }))} />
-      </div>
+      {monthEst && !editDates ? (
+        <button type="button" className="v2-draft-month v2-date-est" onClick={() => setEditDates(true)} title="Estimated from the month. Click to enter exact days.">
+          {fmtMonthYear(d.journey.date_start)} (trip dates)
+        </button>
+      ) : (
+        <div className="v2-draft-dates">
+          <input type="date" className="panel-input" aria-label="Start date" value={d.journey.date_start || ""} onChange={(e) => setDraft((cur) => ({ ...cur, journey: { ...cur.journey, date_start: e.target.value || null, date_precision: "day" } }))} />
+          <span aria-hidden="true">to</span>
+          <input type="date" className="panel-input" aria-label="End date" value={d.journey.date_end || ""} onChange={(e) => setDraft((cur) => ({ ...cur, journey: { ...cur.journey, date_end: e.target.value || null, date_precision: "day" } }))} />
+        </div>
+      )}
 
       <ol className="v2-draft-list">
         {d.stops.map((s, i) => {
@@ -114,8 +124,9 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
                       ariaLabel={`Find a place for stop ${i + 1}`} onPick={(r) => { setStop(i, placeFromPick(r)); setChanging(null); }} />
                   )}
                   <input type="date" className="panel-input v2-draft-stop-date" aria-label={`Date for stop ${i + 1}`} value={s.date || ""} onChange={(e) => setStop(i, { date: e.target.value || null })} />
+                  {!s.date && tripFallback && <span className="v2-draft-stop-fallback v2-date-est">{tripFallback} (trip dates)</span>}
                 </div>
-                <Warn list={[...(s.guessed || !located ? warningsFor(d, "stop", i) : []), ...(s.date ? [] : [NO_DATE_WARNING])]} id={`s${i}`} openId={openWarn} setOpenId={setOpenWarn} />
+                <Warn list={[...(s.guessed || !located ? warningsFor(d, "stop", i) : []), ...(s.date || tripFallback ? [] : [NO_DATE_WARNING])]} id={`s${i}`} openId={openWarn} setOpenId={setOpenWarn} />
                 <button type="button" className="v2-draft-rm" aria-label={`Remove stop ${i + 1}`} onClick={() => removeStop(i)}>×</button>
               </div>
               {leg && (

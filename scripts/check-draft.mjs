@@ -4,7 +4,7 @@ let failed = 0; const ok = (c, m) => { console.log(`${c ? "PASS" : "FAIL"} ${m}`
 ok(LEG_MODES.join() === "fly,drive,train,boat,cruise,walk,other", "modes match journey_legs_mode_check");
 const d = stubParse("Paris in May 2024, flew from JFK, took the train to Lyon");
 ok(d.stops.map((s) => s.name).join() === "Paris,Lyon", `stub finds Paris then Lyon (${d.stops.map((s) => s.name)})`);
-ok(d.stops.every(hasLocation) && d.stops.every((s) => s.date === null) && d.journey.date_start === null, "stub stops have coordinates and no invented dates (month only)");
+ok(d.stops.every(hasLocation) && d.stops.every((s) => s.date === null) && d.journey.date_start === "2024-05-01" && d.journey.date_end === "2024-05-31" && d.journey.date_precision === "month", "stub stops have coordinates and no invented dates; month only spans the month");
 ok(d.legs.length === 1 && d.legs[0].mode === "train" && d.legs[0].from_stop === 0 && d.legs[0].to_stop === 1, `leg Paris to Lyon by train (${JSON.stringify(d.legs[0])})`);
 ok(canSave(d), "draft with all locations can save");
 const u = stubParse("Went to Lisbon then Sintra in 2023");
@@ -23,4 +23,16 @@ ok(!dayStated("Paris in May 2024", "2024-05-01") && dayStated("Paris May 3 2024"
 ok(JSON.stringify(stubParse("Lisbon, Sintra, Porto 2024").stops.map((s) => s.name)) === '["Lisbon","Sintra","Porto"]', "comma list finds every stop");
 ok(JSON.stringify(stubParse("Went to Kyoto and Osaka").stops.map((s) => s.name)) === '["Kyoto","Osaka"]', "sentence starter is not a stop");
 ok(saveHint({ journey: { title: "" }, stops: [{ name: "a" }, { name: "b" }] }) === "Add a location for 2 stops and a trip name." && saveHint({ journey: { title: "T" }, stops: [{ name: "a", lat: 1, lng: 1 }] }) === null && saveHint({ journey: { title: "T" }, stops: [] }) === "Add a stop to save.", "save hint counts missing locations and the name");
+// Month-only dates (offline reader only, no AI): the trip spans the month, estimated.
+{
+  const { stubParse: sp, monthOnly: mo } = await import("../src/lib/draft/draft.js");
+  const r = sp("Odyssey Smoke: Lisbon in June 2025, flew from JFK, took the train to Porto");
+  if (r.journey.date_start !== "2025-06-01" || r.journey.date_end !== "2025-06-30" || r.journey.date_precision !== "month") { console.error("FAIL month-only", r.journey); process.exit(1); }
+  if (r.stops.some((s) => s.date)) { console.error("FAIL month-only invented stop dates"); process.exit(1); }
+  const day = sp("Lisbon on June 3 2025, then Porto");
+  if (day.journey.date_precision !== "day" || day.journey.date_start !== "2025-06-03") { console.error("FAIL explicit day", day.journey); process.exit(1); }
+  if (mo("Feb 2024") ?.m !== 2 || mo("no dates here")) { console.error("FAIL monthOnly"); process.exit(1); }
+  console.log("PASS month-only June 2025 -> 2025-06-01..2025-06-30 (estimated), stops undated");
+}
+
 process.exit(failed ? 1 : 0);

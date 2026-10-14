@@ -546,3 +546,7 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 
 /* Fallback / estimated dates: 60% grey, never uppercase-shouted beyond the parent. */
 .v2-date-est { color: rgba(230, 237, 240, 0.6); }
+.v2-draft-month { display: block; width: 100%; text-align: left; background: none; border: 1px dashed rgba(230, 237, 240, 0.2); border-radius: 3px; padding: 8px 10px; font: 400 13px/1.3 var(--v2-mono); cursor: pointer; margin-bottom: 12px; }
+.v2-draft-month:hover, .v2-draft-month:focus-visible { border-color: rgba(230, 237, 240, 0.45); }
+.v2-draft-stop-fallback { display: block; font: 400 11px/1.3 var(--v2-mono); margin-top: 4px; }
+.v2-draft .v2-date-est, .v2-draft button.v2-date-est { color: rgba(230, 237, 240, 0.6); }

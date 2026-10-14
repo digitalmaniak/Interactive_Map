@@ -1,3 +1,4 @@
+import { monthBounds } from "../dates/calendar.js";
 // Trip draft: the shape /api/parse-trip returns and create_journey_from_draft saves.
 // { journey: { title, date_start, date_end },
 //   stops: [{ name, lat, lng, country_code, date | null, matched_pin_id? }],
@@ -13,7 +14,7 @@ const isoOrNull = (d) => (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)
 const numOrNull = (x) => (x === null || x === undefined || x === "" || !Number.isFinite(Number(x)) ? null : Number(x));
 
 export function emptyDraft() {
-  return { journey: { title: "", date_start: null, date_end: null }, stops: [], legs: [], warnings: [] };
+  return { journey: { title: "", date_start: null, date_end: null, date_precision: "day" }, stops: [], legs: [], warnings: [] };
 }
 
 export const hasLocation = (s) => !!s && numOrNull(s.lat) != null && numOrNull(s.lng) != null && Math.abs(s.lat) <= 90 && Math.abs(s.lng) <= 180;
@@ -24,6 +25,8 @@ export function normalizeDraft(d) {
   out.journey.title = String(d?.journey?.title || "").slice(0, 200);
   out.journey.date_start = isoOrNull(d?.journey?.date_start);
   out.journey.date_end = isoOrNull(d?.journey?.date_end);
+  // "month": the text named only a month; dates are that month's first and last day (estimated).
+  out.journey.date_precision = d?.journey?.date_precision === "month" && out.journey.date_start ? "month" : "day";
   out.stops = (Array.isArray(d?.stops) ? d.stops : []).map((s) => {
     const r = { name: String(s?.name || "").trim(), lat: numOrNull(s?.lat), lng: numOrNull(s?.lng), country_code: /^[A-Za-z]{2}$/.test(s?.country_code || "") ? s.country_code.toUpperCase() : null, date: isoOrNull(s?.date) };
     if (s?.matched_pin_id) r.matched_pin_id = String(s.matched_pin_id);
@@ -109,6 +112,22 @@ export function explicitDate(text) {
   return null;
 }
 
+/** A month named without a day ("June 2025", "in Jun 2025"): { y, m }, else null. */
+export function monthOnly(text) {
+  const t = String(text || "");
+  if (explicitDate(t)) return null;
+  const m = t.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+((?:19|20)\d{2})\b/i);
+  return m ? { y: Number(m[2]), m: MON3.indexOf(m[1].toLowerCase()) + 1 } : null;
+}
+
+/** Journey dates for a month-only text: first and last day, precision "month". Else null. */
+export function monthOnlyJourneyDates(text) {
+  const mo = monthOnly(text);
+  if (!mo) return null;
+  const b = monthBounds(mo.y, mo.m);
+  return { date_start: b.start, date_end: b.end, date_precision: "month" };
+}
+
 /** True when the text states the day of this ISO date (the date itself, or its day number). */
 export function dayStated(text, iso) {
   const m = String(iso || "").match(/^\d{4}-\d{2}-(\d{2})$/);
@@ -162,5 +181,7 @@ export function stubParse(text) {
   if (!stops.length) warnings.push("No places found. Add stops below.");
   const yr = low.match(/\b(?:19|20)\d{2}\b/)?.[0];
   const title = stops.length ? `${stops.map((s) => s.name).slice(0, 3).join(", ")}${yr ? ` ${yr}` : ""}` : "New trip";
-  return normalizeDraft({ journey: { title, date_start: date, date_end: date }, stops, legs, warnings });
+  // Month only ("June 2025"): the trip spans that month (estimated); stops stay undated.
+  const month = date ? null : monthOnlyJourneyDates(t);
+  return normalizeDraft({ journey: { title, date_start: date, date_end: date, ...(month || {}) }, stops, legs, warnings });
 }
