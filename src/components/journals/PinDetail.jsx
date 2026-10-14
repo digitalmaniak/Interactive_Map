@@ -68,12 +68,12 @@ export default function PinDetail({
           <input type="text" className="panel-input" value={editPin.title} onChange={(e) => setEditPin({ ...editPin, title: e.target.value })} />
           <label className="panel-label">Location</label>
           <input type="text" className="panel-input" value={editPin.location_name} onChange={(e) => setEditPin({ ...editPin, location_name: e.target.value })} />
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <div style={{ flex: 1 }}>
+          <div className="v2-date-pair">
+            <div>
               <label className="panel-label">Start Date</label>
               <input type="date" className="panel-input" value={editPin.start_date || ""} onChange={(e) => setEditPin({ ...editPin, start_date: e.target.value })} />
             </div>
-            <div style={{ flex: 1 }}>
+            <div>
               <label className="panel-label">End Date</label>
               <input type="date" className="panel-input" value={editPin.end_date || ""} onChange={(e) => setEditPin({ ...editPin, end_date: e.target.value })} />
             </div>

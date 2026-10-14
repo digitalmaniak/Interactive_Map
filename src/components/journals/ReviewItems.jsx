@@ -67,9 +67,9 @@ export default function ReviewItems({ journeys, onBack, onConfirmed }) {
                 <div key={`s-${it.item_id}`} style={card} data-kind="undated_stop">
                   <div style={small}>Undated stop</div>
                   <div style={{ color: "var(--v2-text)", fontWeight: 600 }}>{it.label}</div>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <label style={{ flex: 1, minWidth: 0 }}><span className="panel-label">Start</span><input type="date" className="panel-input" style={{ width: "100%", boxSizing: "border-box" }} value={d.start || ""} onChange={(e) => set("start", e.target.value)} aria-label={`Start date for ${it.label}`} /></label>
-                    <label style={{ flex: 1, minWidth: 0 }}><span className="panel-label">End</span><input type="date" className="panel-input" style={{ width: "100%", boxSizing: "border-box" }} value={d.end || ""} onChange={(e) => set("end", e.target.value)} aria-label={`End date for ${it.label}, optional`} /></label>
+                  <div className="v2-date-pair">
+                    <label><span className="panel-label">Start</span><input type="date" className="panel-input" style={{ width: "100%", boxSizing: "border-box" }} value={d.start || ""} onChange={(e) => set("start", e.target.value)} aria-label={`Start date for ${it.label}`} /></label>
+                    <label><span className="panel-label">End</span><input type="date" className="panel-input" style={{ width: "100%", boxSizing: "border-box" }} value={d.end || ""} onChange={(e) => set("end", e.target.value)} aria-label={`End date for ${it.label}, optional`} /></label>
                   </div>
                   <button type="button" className="glass-pill btn-green" disabled={!!busy[it.item_id]} onClick={() => confirm(it)} style={{ alignSelf: "flex-end" }}>{busy[it.item_id] ? "CONFIRMING..." : "CONFIRM DATES"}</button>
                   {errors[it.item_id] && <p role="alert" style={{ color: "#FF6B57", fontSize: "0.8rem", margin: 0 }}>{errors[it.item_id]}</p>}

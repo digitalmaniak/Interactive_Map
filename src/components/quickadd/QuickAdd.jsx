@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { QUICK_ADD, debounce, geocode, makeRateGate, nextIndex, shouldSearch } from "../../lib/geocode/quickAdd";
 
-export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCancel, inline = false, placeholder, ariaLabel, clearOnPick = false, autoFocus = false, initialQuery = "" }) {
+export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCancel, inline = false, placeholder, ariaLabel, clearOnPick = false, autoFocus = false, initialQuery = "", onTypeTrip, onBuildTrip }) {
   const [q, setQ] = useState(initialQuery);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -140,6 +140,15 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
             </li>
           ))}
         </ul>
+      )}
+      {dialog && (onTypeTrip || onBuildTrip) && (
+        <>
+          <div className="v2-quickadd-or" aria-hidden="true">or</div>
+          <div className="v2-quickadd-links">
+            {onTypeTrip && <button type="button" className="v2-quickadd-link" onClick={onTypeTrip}>Type a trip</button>}
+            {onBuildTrip && <button type="button" className="v2-quickadd-link" onClick={onBuildTrip}>Build a trip step by step</button>}
+          </div>
+        </>
       )}
       {dialog && (
         <button type="button" className="v2-btn v2-quickadd-cancel" onClick={() => onCancel?.()}>Cancel</button>

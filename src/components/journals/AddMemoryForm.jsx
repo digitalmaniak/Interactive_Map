@@ -32,12 +32,12 @@ export default function AddMemoryForm({
         <input type="text" placeholder="Title (e.g. Skiing)" className="panel-input" value={newPinName} onChange={(e) => setNewPinName(e.target.value)} />
         <label className="panel-label">Location</label>
         <input type="text" placeholder="Location (e.g. Alps)" className="panel-input" value={newPinCity} onChange={(e) => setNewPinCity(e.target.value)} />
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <div style={{ flex: 1 }}>
+        <div className="v2-date-pair">
+          <div>
             <label className="panel-label">Start Date</label>
             <input type="date" className="panel-input" value={newPinStartDate} onChange={(e) => setNewPinStartDate(e.target.value)} />
           </div>
-          <div style={{ flex: 1 }}>
+          <div>
             <label className="panel-label">End Date</label>
             <input type="date" className="panel-input" value={newPinEndDate} onChange={(e) => setNewPinEndDate(e.target.value)} />
           </div>

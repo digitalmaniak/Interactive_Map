@@ -170,12 +170,12 @@ export default function JourneyList({
             value={createForm.summary}
             onChange={(e) => setCreateForm({ ...createForm, summary: e.target.value })}
           />
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <div style={{ flex: 1 }}>
+          <div className="v2-date-pair">
+            <div>
               <label className="panel-label">Start</label>
               <input type="date" className="panel-input" value={createForm.date_start} onChange={(e) => setCreateForm({ ...createForm, date_start: e.target.value })} />
             </div>
-            <div style={{ flex: 1 }}>
+            <div>
               <label className="panel-label">End</label>
               <input type="date" className="panel-input" value={createForm.date_end} onChange={(e) => setCreateForm({ ...createForm, date_end: e.target.value })} />
             </div>
@@ -224,12 +224,12 @@ export default function JourneyList({
                 <input type="text" className="panel-input" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} required />
                 <label className="panel-label">Summary</label>
                 <input type="text" className="panel-input" value={editForm.summary} onChange={(e) => setEditForm({ ...editForm, summary: e.target.value })} />
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <div style={{ flex: 1 }}>
+                <div className="v2-date-pair">
+                  <div>
                     <label className="panel-label">Start</label>
                     <input type="date" className="panel-input" value={editForm.date_start} onChange={(e) => setEditForm({ ...editForm, date_start: e.target.value })} />
                   </div>
-                  <div style={{ flex: 1 }}>
+                  <div>
                     <label className="panel-label">End</label>
                     <input type="date" className="panel-input" value={editForm.date_end} onChange={(e) => setEditForm({ ...editForm, date_end: e.target.value })} />
                   </div>

@@ -856,6 +856,8 @@ export default function MapCanvas() {
           inTrip={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection}
           onPick={(r) => { setAddSearchOpen(false); handleQuickAddPick(r); }}
           onCancel={() => setAddSearchOpen(false)}
+          onTypeTrip={() => { setAddSearchOpen(false); openDraft("start"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}
+          onBuildTrip={() => { setAddSearchOpen(false); openDraft("edit"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}
         />
       )}
 
