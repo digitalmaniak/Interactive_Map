@@ -3,6 +3,7 @@
  * No dedicated Harbor RPC — uses existing unlisted SELECT policies.
  */
 import { createShareClient } from "../supabase/shareClient";
+import { isMissingRpc, labelSnapped } from "./sharedLegsRpc";
 
 const SHARED_JOURNEY_SELECT =
   "id, title, summary, date_start, date_end, visibility, tags, share_token, created_at, updated_at";
@@ -93,7 +94,15 @@ export async function loadSharedJourney(shareToken) {
   // Legs need a journey_legs unlisted SELECT policy. Without one this returns no rows (or
   // an error), and the view falls back to stop to stop in pin order.
   let legs = [];
+  let viaRpc = false;
   try {
+    const { data: rpcRows, error: rpcError, status } = await client.rpc("get_shared_legs", { p_token: token });
+    if (!rpcError) { legs = (rpcRows || []).map(labelSnapped); viaRpc = true; }
+    else if (!isMissingRpc(rpcError, status)) { console.warn("[share] get_shared_legs failed", rpcError.message); viaRpc = true; }
+  } catch (err) {
+    console.warn("[share] get_shared_legs failed", err?.message || err);
+  }
+  if (!viaRpc) try {
     const { data: legRows, error: legsError } = await client
       .from("journey_legs")
       .select(SHARED_LEG_SELECT)
