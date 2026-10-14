@@ -501,7 +501,10 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
     const now = performance.now();
     const alt = camera.position.length() - GLOBE_R;
     if (controls) {
-      controls.rotateSpeed = THREE.MathUtils.clamp(alt * 0.35, 0.03, 0.5);
+      // Grab-to-follow: OrbitControls turns 2*PI*rotateSpeed per screen height; the ground
+      // under the cursor moves about alt * fov per screen height, so scale by height above
+      // the surface (not centre distance). Close up this stops pans overshooting.
+      controls.rotateSpeed = THREE.MathUtils.clamp((alt * THREE.MathUtils.degToRad(camera.fov)) / (2 * Math.PI), 0.002, 0.5);
       // OrbitControls clamps the camera to target distance. In trip view the target sits on
       // the surface, so the limit is the minimum altitude, not the centre distance.
       const surfaceTarget = controls.target.lengthSq() > 0.25;
@@ -1592,7 +1595,7 @@ export default function GlobeScene({
           makeDefault
           enablePan={false}
           enableDamping={!reducedMotion}
-          dampingFactor={0.08}
+          dampingFactor={0.2}
           rotateSpeed={0.5}
           zoomSpeed={0.7}
           minDistance={MIN_DIST}
