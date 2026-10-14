@@ -226,6 +226,8 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 /* v2 globe scene */
 .v2-map { position: absolute; inset: 0; overflow: hidden; background: var(--v2-bg); touch-action: none; }
 .v2-map-overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+/* Drags that start on a label or tag never select page text. */
+.v2-map, .v2-map canvas, .v2-map-overlay, .v2-pin-label, .v2-edge-tags, .v2-edge-tag, .v2-short-leg { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .v2-pin-label {
   position: absolute; left: 0; top: 0; will-change: transform, opacity;
   display: flex; flex-direction: column; align-items: center; gap: 2px;

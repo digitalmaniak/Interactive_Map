@@ -874,6 +874,8 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
 // cluster label. Placement recomputes only while the camera moves, at most every 100 ms.
 const CLUSTER_PX = 28;
 const LABEL_PAD = 6;
+const TRIP_LABEL_PAD = 4; // Prism: 4 px pad around each trip stop label
+const TRIP_LABEL_RETURN_PX = 8; // a hidden trip label returns only once clear by 8 px
 const LABEL_RECOMPUTE_MS = 100;
 // A trip enter or exit crossfade never outlives this, even if the camera move that drives it
 // was replaced or never ran (labels from the old trip were left on the globe).
@@ -956,6 +958,12 @@ function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, met
         if (!grid.has(k)) grid.set(k, []);
         grid.get(k).push(h);
       }
+      // Trip view (Prism): the selected stop wins, then the label nearer the camera.
+      if (focusing) {
+        const act = (c) => c.members.some((m) => items[m]?.pin.id === activePinId);
+        const dist = (c) => camera.position.distanceToSquared(items[c.i].pos);
+        clusters.sort((a, b) => (act(b) - act(a)) || dist(a) - dist(b));
+      }
       // Place by priority, skipping overlaps, capped per device.
       const boxes = [];
       const placed = new Set();
@@ -964,8 +972,11 @@ function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, met
         if (placed.size >= maxLabels) break;
         const el = labelEls.current[c.i];
         if (!el) continue;
-        const w = (el.offsetWidth || 80) + LABEL_PAD * 2, h = (el.offsetHeight || 28) + LABEL_PAD * 2;
-        let box = { l: c.x - w / 2, r: c.x + w / 2, t: c.y - 10 - h + LABEL_PAD, b: c.y - 10 + LABEL_PAD };
+        // Trip view pads 4 px; a hidden label must be clear by 8 px to return (no flicker).
+        const prevS = s.state[c.i];
+        const pad = focusing ? TRIP_LABEL_PAD + (prevS && !prevS.shown ? TRIP_LABEL_RETURN_PX : 0) : LABEL_PAD;
+        const w = (el.offsetWidth || 80) + pad * 2, h = (el.offsetHeight || 28) + pad * 2;
+        let box = { l: c.x - w / 2, r: c.x + w / 2, t: c.y - 10 - h + pad, b: c.y - 10 + pad };
         // Flip below the pin when the beam's projected top leans across the label (before
         // the collision test, so placement uses the flipped box).
         const top = items[c.i].pos.clone().multiplyScalar(1 + (beamHeightRef?.current || 0)).project(camera);
@@ -973,9 +984,9 @@ function LabelProjector({ items, labelEls, focusing, maxLabels, activePinId, met
         let crosses = false;
         for (let k = 1; k <= 8 && !crosses; k++) {
           const px = c.x + (tx - c.x) * (k / 8), py = c.y + (ty - c.y) * (k / 8);
-          crosses = px > box.l + LABEL_PAD && px < box.r - LABEL_PAD && py > box.t + LABEL_PAD && py < box.b - LABEL_PAD;
+          crosses = px > box.l + pad && px < box.r - pad && py > box.t + pad && py < box.b - pad;
         }
-        if (crosses) box = { l: box.l, r: box.r, t: c.y + 10 - LABEL_PAD, b: c.y + 10 + h - LABEL_PAD };
+        if (crosses) box = { l: box.l, r: box.r, t: c.y + 10 - pad, b: c.y + 10 + h - pad };
         s.flip.set(c.i, crosses);
         if (boxes.some((o) => box.l < o.r && box.r > o.l && box.t < o.b && box.b > o.t)) continue;
         // Hysteresis: a hidden label must stay hidden 200 ms before returning.
