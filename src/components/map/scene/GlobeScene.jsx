@@ -10,7 +10,7 @@ import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerformanceMonitor } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
-import { geoContains } from "d3-geo";
+import { geoArea, geoContains } from "d3-geo";
 import { GLOBE_R, rewindGeo, lonLatToVec3, vec3ToLonLat, buildLandTexture, buildCoastGeometry } from "./geometry";
 import { createGlobeMaterial, createAtmosphereMaterial, createBeamMaterial, LAND_RELIEF } from "./GlobeMaterial";
 import { tokens, tiers, bezier } from "./tokens";
@@ -1391,9 +1391,12 @@ export default function GlobeScene({
     onMapClick?.({ offGlobe: true });
   }, [onMapClick, flyPause, tapGuard]);
 
+  // Point-in-polygon lookup. Skip wrongly wound features (area over a hemisphere, e.g.
+  // Bermuda in countries.json) that would otherwise "contain" most of the planet.
+  const hitFeatures = useMemo(() => (geo ? geo.features.filter((f) => geoArea(f) < 2 * Math.PI) : []), [geo]);
   const countryAt = useCallback(
-    (ll) => (ll && geo ? geo.features.find((f) => geoContains(f, [ll.lon, ll.lat])) || null : null),
-    [geo]
+    (ll) => (ll ? hitFeatures.find((f) => geoContains(f, [ll.lon, ll.lat])) || null : null),
+    [hitFeatures]
   );
 
   const handleGlobeClick = useCallback(
@@ -1520,7 +1523,7 @@ export default function GlobeScene({
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} cheap={force3d} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
         <HomeRings home={home} still={reducedMotion || (force3d && !pulseQA)} />
-        <LegsLayer cinematic={cinematic} legs={legs} activePinId={shownActivePinId} activeLegId={activeLegId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
+        <LegsLayer onHoverPoint={handleGlobeHover} cinematic={cinematic} legs={legs} activePinId={shownActivePinId} activeLegId={activeLegId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
         <Stops
           beamHeightRef={beamHeightRef}
           hideBeams={force3d}

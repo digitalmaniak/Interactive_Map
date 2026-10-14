@@ -54,7 +54,7 @@ function makeSegs(px) {
   return l;
 }
 
-export default function LegsLayer({ cinematic = false, legs: rawLegs, activePinId, activeLegId, tripBlend, reducedMotion, lite = false }) {
+export default function LegsLayer({ onHoverPoint, cinematic = false, legs: rawLegs, activePinId, activeLegId, tripBlend, reducedMotion, lite = false }) {
   const { camera, size, gl } = useThree();
   const surfaceGroup = useRef();
   const flyGroup = useRef();
@@ -311,7 +311,8 @@ export default function LegsLayer({ cinematic = false, legs: rawLegs, activePinI
         {/* Inside the lifted surface group: dots sit exactly on the legs' shared end. */}
         {shortDots.map((d, i) => (
           <Html key={d.id} position={d.pos} center zIndexRange={[5, 0]} style={{ pointerEvents: "none" }}>
-            <span ref={(el) => { shortRefs.current[i] = el; }} className="v2-short-leg" data-short-leg={d.label} tabIndex={0} aria-label={d.label}>
+            <span ref={(el) => { shortRefs.current[i] = el; }} className="v2-short-leg" data-short-leg={d.label} tabIndex={0} aria-label={d.label}
+              onPointerEnter={() => onHoverPoint?.(d.v.clone())} onFocus={() => onHoverPoint?.(d.v.clone())}>
               <span className="v2-short-leg-tip" role="tooltip">{d.label}</span>
             </span>
           </Html>
