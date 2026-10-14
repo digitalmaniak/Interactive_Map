@@ -5,8 +5,8 @@ import { geocode, makeRateGate } from "../geocode/quickAdd";
 
 export const stubParseOn = () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("stubparse") === "1";
 
-// Returns { draft, stub } or { error, message }. Falls back to the stub parser when
-// ?stubparse=1 is set or the route says the AI gateway is not configured.
+// Returns { draft, stub, reason } or { error, message }. Falls back to the offline reader
+// when ?stubparse=1 is set, no model is configured, or the daily AI limit is reached.
 export async function parseTrip(text, { signal } = {}) {
   if (stubParseOn()) return { draft: await locateStubStops(stubParse(text), { signal }), stub: true };
   let res, body;
@@ -19,9 +19,10 @@ export async function parseTrip(text, { signal } = {}) {
     if (e?.name === "AbortError") throw e;
     return { error: "network", message: "Could not reach the trip reader. Check your connection and try again." };
   }
-  if (res.ok && body?.draft) return { draft: normalizeDraft(body.draft), stub: false };
-  if (body?.error === "not_configured") return { draft: await locateStubStops(stubParse(text), { signal }), stub: true };
-  if (res.status === 429) return { error: "daily_limit", message: "You have read a lot of trips today. Try again tomorrow, or build this one step by step." };
+  if (res.ok && body?.draft) return { draft: normalizeDraft(body.draft), stub: false, reason: null };
+  if (body?.error === "not_configured") return { draft: await locateStubStops(stubParse(text), { signal }), stub: true, reason: "not_configured" };
+  // Daily AI cap reached: fall back to the offline reader and say why.
+  if (res.status === 429 || body?.error === "daily_limit") return { draft: await locateStubStops(stubParse(text), { signal }), stub: true, reason: "daily_limit" };
   return { error: body?.error || "parse_failed", message: body?.message || "Could not read that trip. Try rephrasing, or build it step by step." };
 }
 

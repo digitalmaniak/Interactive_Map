@@ -36,7 +36,16 @@ function Warn({ list, id, openId, setOpenId }) {
   );
 }
 
-export default function TripDraft({ face, text, setText, onSubmitText, parsing, error, stub, onStartGuided, onAddSingle, draft, setDraft, onSave, saving, saveError, onClose, onDiscard, resumable = false, onResume, showLinks = true }) {
+// Preview source line above the draft.
+// Stops fade in along the route as the globe draws it (LegsLayer DRAW_MS).
+const DRAW_SYNC_MS = 900;
+
+export function previewLabel(stub, reason) {
+  const base = stub ? "Preview from the offline reader. Check each item." : "Preview from AI. Check each item.";
+  return reason === "daily_limit" ? `${base} · Daily AI limit reached` : base;
+}
+
+export default function TripDraft({ face, text, setText, onSubmitText, parsing, error, stub, onStartGuided, onAddSingle, draft, setDraft, onSave, saving, saveError, onClose, onDiscard, stubReason = null, resumable = false, onResume, showLinks = true }) {
   const [openWarn, setOpenWarn] = useState(null);
   const [changing, setChanging] = useState(null); // stop index whose place is being changed
 
@@ -48,6 +57,7 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
         <textarea id="v2-draft-text" className="v2-draft-textarea" rows={4} placeholder={PLACEHOLDER} value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSubmitText(); } }} />
+        {parsing && <div className="v2-draft-bar" role="progressbar" aria-label="Reading your trip"><span /></div>}
         {error && <p className="v2-draft-error" role="alert">{error}</p>}
         <button type="button" className="v2-btn v2-btn-primary v2-draft-go" disabled={!text.trim() || parsing} onClick={onSubmitText}>{parsing ? "Reading your trip" : "Show my trip"}</button>
         {showLinks && (
@@ -79,7 +89,7 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
   return (
     <div className="v2-draft v2-draft-edit" role="dialog" aria-label="Trip draft" onPointerDown={(e) => e.stopPropagation()}>
       <button type="button" className="v2-draft-x" aria-label="Close and keep the draft" onClick={onClose}>×</button>
-      {stub && <p className="v2-draft-note">Preview from the offline reader. Check each item.</p>}
+      <p className="v2-draft-note">{previewLabel(stub, stubReason)}</p>
       <input className="v2-draft-name panel-input" placeholder="Trip name" aria-label="Trip name" value={d.journey.title}
         onChange={(e) => setDraft((cur) => ({ ...cur, journey: { ...cur.journey, title: e.target.value } }))} />
       <div className="v2-draft-dates">
@@ -94,7 +104,7 @@ export default function TripDraft({ face, text, setText, onSubmitText, parsing, 
           const located = hasLocation(s);
           return (
             <li key={`s${i}`} className="v2-draft-item">
-              <div className={`v2-draft-stop${s.guessed ? " is-guessed" : ""}${located ? "" : " is-missing"}`} data-stop={i}>
+              <div className={`v2-draft-stop${s.guessed ? " is-guessed" : ""}${located ? "" : " is-missing"}`} data-stop={i} style={{ animationDelay: `${Math.round((i * DRAW_SYNC_MS) / Math.max(1, d.stops.length - 1))}ms` }}>
                 <span className="v2-draft-num">{i + 1}</span>
                 <div className="v2-draft-stop-main">
                   {located && changing !== i ? (

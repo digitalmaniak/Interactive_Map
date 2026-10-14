@@ -5,6 +5,7 @@
 // token as "Authorization: Bearer <token>" and this route makes a per-request client with it
 // (RLS and auth.uid() apply as that user).
 import { generateObject } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -35,9 +36,14 @@ const DraftSchema = z.object({
   warnings: z.array(z.string()),
 });
 
-// The AI Gateway needs a key (or a Vercel OIDC token on a deployment with the gateway on).
-function gatewayConfigured() {
-  return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
+// Model source. First choice: Anthropic directly when ANTHROPIC_API_KEY is set.
+// Second: the AI Gateway (a key, or a Vercel OIDC token on a deployment with it on).
+// The key is only handed to the provider; it is never logged or returned.
+function pickModel() {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (key) return { source: "anthropic", model: createAnthropic({ apiKey: key })("claude-haiku-4-5") };
+  if (process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN) return { source: "gateway", model: "anthropic/claude-haiku-4.5" };
+  return null;
 }
 
 const fail = (error, status, message) => NextResponse.json({ error, message }, { status });
@@ -58,8 +64,9 @@ export async function POST(req) {
   const text = typeof body?.text === "string" ? body.text.trim() : "";
   if (!text || text.length > 4000) return fail("bad_request", 400, "Type your trip in up to 4000 characters.");
 
-  // Checked before the usage bump so an unconfigured gateway never spends the daily cap.
-  if (!gatewayConfigured()) return fail("not_configured", 503, "Trip parsing is not set up yet.");
+  // Checked before the usage bump so an unconfigured model never spends the daily cap.
+  const picked = pickModel();
+  if (!picked) return fail("not_configured", 503, "Trip parsing is not set up yet.");
 
   const { error: bumpError } = await supabase.rpc("ai_usage_bump", { p_limit: 20 });
   if (bumpError) {
@@ -69,7 +76,7 @@ export async function POST(req) {
 
   try {
     const { object } = await generateObject({
-      model: "anthropic/claude-haiku-4.5", // AI Gateway plain model string
+      model: picked.model,
       schema: DraftSchema,
       system:
         "Extract a travel itinerary from the user text. Return place names as stops in travel order, " +
@@ -92,9 +99,9 @@ export async function POST(req) {
     const keep = (d) => (d && dayStated(text, d) ? d : null);
     const stops = object.stops.map((s) => ({ ...s, date: keep(s.date), matched_pin_id: null }));
     const journey = { ...object.journey, date_start: keep(object.journey.date_start), date_end: keep(object.journey.date_end) };
-    return NextResponse.json({ draft: { journey, stops, legs: legs.map((l) => ({ ...l, date: keep(l.date) })), warnings } });
+    return NextResponse.json({ draft: { journey, stops, legs: legs.map((l) => ({ ...l, date: keep(l.date) })), warnings }, source: picked.source });
   } catch (e) {
-    console.error("parse-trip failed", e?.message || e);
+    console.error("parse-trip failed", picked.source, e?.name || "error", e?.statusCode || "");
     const msg = String(e?.message || "");
     if (/api key|unauthori[sz]ed|authentication|credit card|gateway/i.test(msg) && /key|auth|token|card/i.test(msg)) {
       return fail("not_configured", 503, "Trip parsing is not set up yet.");

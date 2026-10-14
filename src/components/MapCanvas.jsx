@@ -134,7 +134,7 @@ export default function MapCanvas() {
     setDraftBusy((b) => ({ ...b, parsing: false, error: "" }));
     // Parsed items start as guesses (40% style) until the user touches them.
     const d = syncLegs({ ...r.draft, stops: r.draft.stops.map((st) => ({ ...st, guessed: true })), legs: r.draft.legs.map((l) => ({ ...l, guessed: true })) });
-    setTripDraft((cur) => ({ ...cur, face: "edit", draft: d, stub: !!r.stub, playKey: Date.now() }));
+    setTripDraft((cur) => ({ ...cur, face: "edit", draft: d, stub: !!r.stub, stubReason: r.reason || null, playKey: Date.now() }));
     setActiveTab("Map");
   };
   const saveTripDraft = async () => {
@@ -827,6 +827,7 @@ export default function MapCanvas() {
           parsing={draftBusy.parsing}
           error={draftBusy.error}
           stub={tripDraft.stub}
+          stubReason={tripDraft.stubReason || null}
           onStartGuided={() => { openDraft("edit"); setActiveTab("Map"); }}
           onAddSingle={() => { if (tripDraft.face) closeDraft(); setAddSearchOpen(true); }}
           draft={tripDraft.draft}
