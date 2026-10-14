@@ -3,7 +3,7 @@
  * No dedicated Harbor RPC — uses existing unlisted SELECT policies.
  */
 import { createShareClient } from "../supabase/shareClient";
-import { isMissingRpc, labelSnapped } from "./sharedLegsRpc";
+import { labelSnapped } from "./sharedLegsRpc";
 
 const SHARED_JOURNEY_SELECT =
   "id, title, summary, date_start, date_end, visibility, tags, share_token, created_at, updated_at";
@@ -11,8 +11,6 @@ const SHARED_JOURNEY_SELECT =
 const SHARED_PLACE_SELECT =
   "id, title, location_name, latitude, longitude, start_date, end_date, journey_id, sort_order, trip_type";
 
-const SHARED_LEG_SELECT =
-  "id, journey_id, from_pin_id, from_label, from_lat, from_lng, to_pin_id, to_label, to_lat, to_lng, mode, depart_at, arrive_at, sort_order";
 
 /** App Router path for an unlisted journey share link. */
 export function journeySharePath(token) {
@@ -91,28 +89,15 @@ export async function loadSharedJourney(shareToken) {
 
   if (placesError) return { data: null, error: placesError };
 
-  // Legs need a journey_legs unlisted SELECT policy. Without one this returns no rows (or
-  // an error), and the view falls back to stop to stop in pin order.
+  // Legs only through Harbor's get_shared_legs RPC (direct journey_legs reads are closed).
+  // On error the view falls back to stop to stop in pin order.
   let legs = [];
-  let viaRpc = false;
   try {
-    const { data: rpcRows, error: rpcError, status } = await client.rpc("get_shared_legs", { p_token: token });
-    if (!rpcError) { legs = (rpcRows || []).map(labelSnapped); viaRpc = true; }
-    else if (!isMissingRpc(rpcError, status)) { console.warn("[share] get_shared_legs failed", rpcError.message); viaRpc = true; }
+    const { data: rpcRows, error: rpcError } = await client.rpc("get_shared_legs", { p_token: token });
+    if (rpcError) console.warn("[share] get_shared_legs failed", rpcError.message);
+    else legs = (rpcRows || []).map(labelSnapped);
   } catch (err) {
     console.warn("[share] get_shared_legs failed", err?.message || err);
-  }
-  if (!viaRpc) try {
-    const { data: legRows, error: legsError } = await client
-      .from("journey_legs")
-      .select(SHARED_LEG_SELECT)
-      .eq("journey_id", journey.id)
-      .is("deleted_at", null)
-      .order("sort_order", { ascending: true });
-    if (legsError) console.warn("[share] legs not readable", legsError.message);
-    else legs = legRows || [];
-  } catch (err) {
-    console.warn("[share] legs not readable", err?.message || err);
   }
 
   return {
