@@ -1,3 +1,4 @@
+import { fmtMonthYear } from "../dates/calendar.js";
 // Pure helpers (also used by scripts/check-review.mjs).
 export function groupReviewItems(items, journeys = []) {
   // Same named trips stay distinguishable: "Snowboarding · Feb 2019" from the earliest
@@ -6,7 +7,7 @@ export function groupReviewItems(items, journeys = []) {
     const stopDs = (j.places || []).map((p) => p.start_date).filter(Boolean);
     const ds = (stopDs.length ? stopDs : [j.date_start, j.start_date]).filter(Boolean).map((d) => String(d).slice(0, 10)).sort();
     if (!ds.length) return { text: j.title, sort: `${j.title}|` };
-    const m = new Date(`${ds[0]}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+    const m = fmtMonthYear(ds[0]);
     return { text: `${j.title} \u00b7 ${m}`, sort: `${j.title}|${ds[0]}` };
   };
   const title = new Map(journeys.map((j) => [j.id, label(j)]));

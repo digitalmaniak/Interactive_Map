@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { formatPinDate, sortPinsByStartDate } from "../../lib/pins/format";
+import { sortPinsByStartDate } from "../../lib/pins/format";
+import StopDate from "./StopDate";
 import { formatJourneyDates } from "../../lib/journeys/format";
 import { isJourneyShared } from "../../lib/journeys/share";
 import JourneyShareActions from "./JourneyShareActions";
@@ -91,7 +92,7 @@ export default function JourneyPlacesList({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "0.75rem", color: "var(--v2-text-dim)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "var(--v2-mono)" }}>
-                  {formatPinDate(pin.start_date) || "Undated"}
+                  <StopDate pin={pin} journey={journey} />
                 </div>
                 <div style={{ fontSize: "1.1rem", color: "var(--v2-text)", fontWeight: 600, margin: "0.25rem 0" }}>
                   {pin.title || pin.location_name}

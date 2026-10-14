@@ -17,6 +17,7 @@ import { tokens, tiers, bezier } from "./tokens";
 import { detectRenderTier } from "./renderTier";
 import { supabase } from "../../../lib/supabase/client";
 import FpsGuard from "./FpsGuard";
+import { fmtMonthYear } from "../../../lib/dates/calendar";
 import { Line2, LineGeometry, LineMaterial } from "three-stdlib";
 import { PULSE, ringPhase, ringOpacity, easeOut } from "../../../lib/rings/homePulse";
 import LegsLayer from "./legs/LegsLayer";
@@ -1206,7 +1207,7 @@ export default function GlobeScene({
   const home = useMemo(() => pickHomeBase(homeBases, tripStops.length ? tripDates?.from : null), [homeBases, tripStops, tripDates]);
   const tripSub = useMemo(() => {
     if (!tripStops.length) return "";
-    const fmt = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }).toUpperCase();
+    const fmt = (d) => (fmtMonthYear(d) || "").toUpperCase();
     const parts = [];
     if (tripDates) parts.push(tripDates.from.slice(0, 7) === tripDates.to.slice(0, 7) ? fmt(tripDates.from) : `${fmt(tripDates.from)} TO ${fmt(tripDates.to)}`);
     const c = tripCounts(tripStops.length, tripLegs);

@@ -1,16 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { fmtDay } from "../../lib/dates/calendar";
 import { LEG_MODES, fetchJourneyLegs, sharedJourneyLegs, updateLegMode, confirmJourneyLegs } from "../../lib/journeys/legs";
 
 const MODE_LABEL = { fly: "Fly", drive: "Drive", train: "Train", boat: "Boat", cruise: "Cruise", walk: "Walk", other: "Other" };
 
-const fmtDate = (v) => {
-  if (!v) return null;
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-};
+const fmtDate = (v) => fmtDay(v);
 
 // Coordinates may arrive as numeric strings or be null (a leg ending at a labeled
 // place with no pin, such as "Newark (EWR)"). Never throws.

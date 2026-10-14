@@ -1,6 +1,7 @@
 "use client";
 
 import { formatPinDate } from "../../lib/pins/format";
+import StopDate from "./StopDate";
 import LogEditor from "./LogEditor";
 
 /**
@@ -8,6 +9,7 @@ import LogEditor from "./LogEditor";
  * Presentational — state/handlers from MapCanvas via JournalsPanel.
  */
 export default function PinDetail({
+  journey = null,
   activePin,
   isConfirmingDelete,
   setIsConfirmingDelete,
@@ -98,7 +100,7 @@ export default function PinDetail({
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: "0.8rem", color: "var(--v2-text-dim)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "var(--v2-mono)", marginBottom: "0.25rem" }}>
-                {formatPinDate(activePin.start_date) || "Undated"}{activePin.end_date && activePin.end_date !== activePin.start_date ? ` – ${formatPinDate(activePin.end_date)}` : ""}
+                <StopDate pin={activePin} journey={journey} />{activePin.start_date && activePin.end_date && activePin.end_date !== activePin.start_date ? ` – ${formatPinDate(activePin.end_date)}` : ""}
               </div>
               <h2 style={{ fontSize: "1.5rem", margin: "0 0 0.5rem 0", fontWeight: 700, color: "var(--v2-text)", lineHeight: 1.2 }}>{activePin.title || activePin.location_name}</h2>
               <p style={{ fontSize: "0.95rem", color: "var(--v2-text-dim)", margin: "0 0 1rem 0", lineHeight: 1.4 }}>{activePin.title ? activePin.location_name : null}</p>

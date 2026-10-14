@@ -543,3 +543,6 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 .v2-short-leg-tip { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); padding: 4px 8px; white-space: nowrap; font: 400 11px/1.3 var(--v2-mono); color: var(--v2-text); background: rgba(7, 9, 11, 0.92); border: 1px solid var(--v2-hairline-strong); border-radius: 3px; opacity: 0; pointer-events: none; transition: opacity 120ms; }
 .v2-short-leg:hover .v2-short-leg-tip, .v2-short-leg:focus-visible .v2-short-leg-tip { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .v2-short-leg-tip { transition: none; } }
+
+/* Fallback / estimated dates: 60% grey, never uppercase-shouted beyond the parent. */
+.v2-date-est { color: rgba(230, 237, 240, 0.6); }

@@ -207,6 +207,7 @@ export default function JournalsPanel({
       ) : activePin ? (
         <PinDetail
           activePin={activePin}
+          journey={activePin ? (journeys || []).find((j) => j.id === activePin.journey_id) || null : null}
           isConfirmingDelete={isConfirmingDelete}
           setIsConfirmingDelete={setIsConfirmingDelete}
           isEditingPin={isEditingPin}

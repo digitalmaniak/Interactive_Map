@@ -2,6 +2,7 @@
 // Open Graph card. Pure functions, safe on the edge runtime.
 
 import { homeLegIdFromRows } from "../legs/homeLeg.js";
+import { fmtDay } from "../dates/calendar.js";
 import { isShortLeg, legKm, snapShortLegs } from "../legs/shortLeg.js";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -38,10 +39,7 @@ export function legLine(leg, pinsById = {}) {
 
 /** "May 3, 2024" from an ISO date or timestamp; null when missing. */
 export function shortDate(v) {
-  if (!v) return null;
-  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return null;
-  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
+  return fmtDay(v);
 }
 
 /** Leg date: its own departure, else the start date of its first stop. */
