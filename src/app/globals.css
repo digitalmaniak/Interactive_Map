@@ -626,5 +626,5 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 @media (max-width: 599px) { .v2-globe-title { bottom: 24px; } }
 /* Quick add confirm step: picked place plus Save (Enter also saves) */
 .v2-quickadd-confirm { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--v2-hairline, rgba(255,255,255,0.1)); border-radius: 4px; }
-.v2-quickadd-confirm-place { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.v2-quickadd-save { flex: none; }
+.v2-quickadd-confirm-place { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+.v2-quickadd-save { flex: none; width: auto; }
