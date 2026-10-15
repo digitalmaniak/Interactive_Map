@@ -277,6 +277,40 @@ function HomeRings({ home, still }) {
   return <group>{rings.map((r, i) => <primitive key={i} object={r} raycast={() => null} />)}</group>;
 }
 
+// Pending quick-add stop (Prism): browser-only ghost, a white 1px ring at 50% opacity,
+// no fill, no label, 1.5x the pin size in screen scale. Never saved; gone on cancel.
+function GhostPin({ ghost }) {
+  const { size, camera } = useThree();
+  const ring = useMemo(() => {
+    const pos = [];
+    for (let k = 0; k <= 64; k++) { const a = (k / 64) * Math.PI * 2; pos.push(Math.cos(a), Math.sin(a), 0); }
+    const g = new LineGeometry(); g.setPositions(pos);
+    const m = new LineMaterial({ color: "#FFFFFF", linewidth: 1, worldUnits: false, transparent: true, opacity: 0.5, depthWrite: false });
+    const l = new Line2(g, m); l.computeLineDistances(); l.frustumCulled = false;
+    return l;
+  }, []);
+  useEffect(() => () => { ring.geometry.dispose(); ring.material.dispose(); }, [ring]);
+  useEffect(() => { ring.material.resolution.set(size.width, size.height); }, [ring, size]);
+  useEffect(() => { if (typeof window !== "undefined") window.__globeGhost = ghost ? ring : null; }, [ghost, ring]); // smoke tests read these
+  const frame = useMemo(() => {
+    if (!ghost) return null;
+    const n = lonLatToVec3(ghost.lng, ghost.lat, 1).normalize();
+    const { north, east } = localFrame(n);
+    const m = new THREE.Matrix4().makeBasis(north, east, n);
+    if (m.determinant() < 0) m.makeBasis(east, north, n);
+    return { n, q: new THREE.Quaternion().setFromRotationMatrix(m) };
+  }, [ghost]);
+  useFrame(() => {
+    if (!frame) return;
+    ring.position.copy(frame.n).multiplyScalar(GLOBE_R * HOME_RINGS.lift);
+    ring.quaternion.copy(frame.q);
+    const pin = THREE.MathUtils.clamp(camera.position.distanceTo(ring.position) * PIN_PX_K, 0.000006, 0.02);
+    ring.scale.setScalar(pin * 1.5);
+  });
+  if (!frame) return null;
+  return <primitive object={ring} raycast={() => null} />;
+}
+
 // Stop dots (one InstancedMesh) and stop beams (one InstancedMesh).
 // Route colours are pushed above 1 (emissive 1.6, accent 2.0) so only they cross the bloom threshold.
 function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMotion, beamHeightRef, hideBeams = false, tripBlend }) {
@@ -1136,6 +1170,8 @@ export default function GlobeScene({
   onFirstFrame,
   onFallback,
   timeline = null,
+  ghost = null,
+  resetKey = 0,
   sheetInset = 0,
 }) {
   // Mobile bottom sheet height in px (0 on desktop or when closed): the camera centres
@@ -1581,11 +1617,22 @@ export default function GlobeScene({
 
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
+  useEffect(() => { if (typeof window !== "undefined") { window.__globeItems = items; window.__globeHoverPin = hoveredPinId; } }, [items, hoveredPinId]); // smoke tests read these
   const clearRegionReadout = useCallback(() => {
     if (hoverRafRef.current) { cancelAnimationFrame(hoverRafRef.current); hoverRafRef.current = null; }
     if (lastRegionRef.current) { lastRegionRef.current = null; }
     onHoverRegion?.(null);
   }, [onHoverRegion]);
+  // Empty-globe reset from the parent (resetKey bumps): drop pin hover (bright pin, dimmed
+  // others), the region tag and the stale cursor, so nothing stays half focused.
+  useEffect(() => {
+    if (!resetKey) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot reset requested by the parent
+    setHoveredPinId(null);
+    pinHoverRef.current = false;
+    pointerRef.current = null;
+    clearRegionReadout();
+  }, [resetKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hoverPtRef = useRef(null);
   // Set when a label takes a press; cleared after the pointerup's click has run.
@@ -1716,6 +1763,7 @@ export default function GlobeScene({
         <color attach="background" args={[C.bg]} />
         {geo && <Globe geo={geo} tier={tier} cheap={force3d} tripBlend={tripBlend} onGlobeClick={handleGlobeClick} onGlobeHover={handleGlobeHover} />}
         <HomeRings home={home} still={reducedMotion || (force3d && !pulseQA)} />
+        <GhostPin ghost={ghost} />
         <LegsLayer onHoverPoint={handleDotHover} cinematic={cinematic} legs={legs} activePinId={shownActivePinId} activeLegId={activeLegId} tripBlend={tripBlend} reducedMotion={reducedMotion} lite={force3d} />
         <Stops
           beamHeightRef={beamHeightRef}

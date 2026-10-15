@@ -244,12 +244,13 @@ export default function MapCanvas() {
   const viewport = useMobileViewport();
   // Profile stats (profile_stats_v2), read once per sign-in and after trip data reloads.
   const [profileStats, setProfileStats] = useState(null);
+  const statsUserId = session?.user?.id || null;
   useEffect(() => {
-    if (!session) return undefined;
+    if (!statsUserId) return undefined;
     let live = true;
     fetchProfileStats().then((r) => { if (live && r.data) setProfileStats(r.data); });
     return () => { live = false; };
-  }, [session, journeys]);
+  }, [statsUserId, journeys]);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
   const [sheetHeaderPx, setSheetHeaderPx] = useState(SHEET_HEADER_PX); // measured by the panel
   const panelIsOpen = Boolean(session) && activeTab === "Journals";
@@ -329,11 +330,19 @@ export default function MapCanvas() {
 
   // Clicking the map closes the panel when open; clicking land (when closed)
   // starts a new memory at that spot; clicking open ocean does nothing.
+  // Empty-globe reset: close the panel and selection, and clear globe hover, region tag
+  // and dimming. Used by the empty globe click and by every quick add dismissal.
+  const [globeResetKey, setGlobeResetKey] = useState(0);
+  const resetToEmptyGlobe = () => {
+    closeJournalPanel();
+    setHoveredCountry(null);
+    setGlobeResetKey((k) => k + 1);
+  };
   const handleMapClick = ({ lat, lon, isLand, offGlobe }) => {
     if (tripDraft.face === "edit") return; // the draft card owns the globe while open
     // Empty globe, ocean or space while a trip is open (or the panel is open) exits to the map.
     if (activeTab === "Journals" || activeJourneyId != null || activePin) {
-      closeJournalPanel();
+      resetToEmptyGlobe();
       return;
     }
     if (offGlobe) return;
@@ -395,6 +404,23 @@ export default function MapCanvas() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  // Quick add confirm step: a picked place becomes a browser-only ghost pin; nothing is
+  // written until Save. A place with no country code is refused here, before the ghost.
+  const [pendingStop, setPendingStop] = useState(null);
+  const handleQuickPick = (r) => {
+    const { error } = quickPinFields(r, { userId: session?.user?.id || "pending", journeyId: "pending" });
+    if (error) return error;
+    setPendingStop(r);
+    setFlyTo((f) => ({ lat: Number(r.lat), lon: Number(r.lng), at: (f?.at || 0) + 1 }));
+    return null; // the dialog stays open with Save
+  };
+  // Every dismissal (Cancel, Esc, backdrop) drops the ghost and runs the empty-globe reset.
+  const cancelQuickAdd = () => {
+    setPendingStop(null);
+    setAddSearchOpen(false);
+    resetToEmptyGlobe();
+  };
+
   // One-step quick add: the picked place is saved as a stop straight away (no form), in
   // the open trip, else the owner's Imported trip, sent explicitly. Returns an error string
   // to keep the search open (no country code, no trip), or null once saved.
@@ -411,7 +437,7 @@ export default function MapCanvas() {
     const addedPin = { ...insertedPin, logs: insertedLog ? [insertedLog] : [] };
     setPins((prev) => [...prev, addedPin]);
     setActivePin(addedPin);
-    setFlyTo({ lat: fields.latitude, lon: fields.longitude, at: Date.now() });
+    setFlyTo((f) => ({ lat: fields.latitude, lon: fields.longitude, at: (f?.at || 0) + 1 }));
     setLegsReloadKey((k) => k + 1);
     return null;
   };
@@ -884,6 +910,8 @@ export default function MapCanvas() {
             panelWidth={viewport.mobile ? 0 : draftGlobe ? 452 : 350}
             sheetInset={draftGlobe && viewport.mobile ? Math.round(viewport.h * 0.5) : sheetInset}
             timeline={session ? timelineProps : null}
+            ghost={addSearchOpen && pendingStop ? { lat: Number(pendingStop.lat), lng: Number(pendingStop.lng) } : null}
+            resetKey={globeResetKey}
           />
         )}
       </div>
@@ -935,8 +963,10 @@ export default function MapCanvas() {
         <QuickAdd
           dialog
           inTrip={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection}
-          onPick={async (r) => { const err = await handleQuickDrop(r); if (!err) setAddSearchOpen(false); return err; }}
-          onCancel={() => setAddSearchOpen(false)}
+          pending={pendingStop}
+          onPick={(r) => handleQuickPick(r)}
+          onSave={async () => { const err = await handleQuickDrop(pendingStop); if (!err) { setPendingStop(null); setAddSearchOpen(false); } return err; }}
+          onCancel={cancelQuickAdd}
           onTypeTrip={() => { setAddSearchOpen(false); openDraft("start"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}
           onBuildTrip={() => { setAddSearchOpen(false); openDraft("edit"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}
         />

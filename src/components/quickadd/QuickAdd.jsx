@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { QUICK_ADD, debounce, geocode, makeRateGate, nextIndex, shouldSearch } from "../../lib/geocode/quickAdd";
 
-export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCancel, inline = false, placeholder, ariaLabel, clearOnPick = false, autoFocus = false, initialQuery = "", onTypeTrip, onBuildTrip }) {
+export default function QuickAdd({ pending = null, onSave, onPick, inTrip = false, dialog = false, onCancel, inline = false, placeholder, ariaLabel, clearOnPick = false, autoFocus = false, initialQuery = "", onTypeTrip, onBuildTrip }) {
   const [q, setQ] = useState(initialQuery);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -79,9 +79,20 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
     if (!r) return;
     const err = await onPick?.(r);
     if (typeof err === "string" && err) { setError(err); setOpen(true); return; }
-    setOpen(false); setQ(clearOnPick ? "" : r.name); setResults([]); setSel(-1);
-    input.current?.blur();
-  }, [onPick, clearOnPick]);
+    setOpen(false); setQ(clearOnPick ? "" : r.name); setResults([]); setSel(-1); setError("");
+    if (dialog) input.current?.focus(); // Enter now saves the picked place
+    else input.current?.blur();
+  }, [onPick, clearOnPick, dialog]);
+
+  // Confirm step: the picked place waits as a browser-only ghost until Save (or Enter).
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    if (!pending || saving) return;
+    setSaving(true);
+    const err = await onSave?.();
+    setSaving(false);
+    if (typeof err === "string" && err) { setError(err); setOpen(true); }
+  };
 
   const onKeyDown = (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -90,6 +101,7 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
       setSel((i) => nextIndex(e.key, i, results.length));
     } else if (e.key === "Enter") {
       if (open && sel >= 0) { e.preventDefault(); pick(results[sel]); }
+      else if (pending && onSave) { e.preventDefault(); save(); }
     } else if (e.key === "Escape") {
       if (open) { e.preventDefault(); e.stopPropagation(); setOpen(false); }
       else if (dialog) { e.preventDefault(); e.stopPropagation(); onCancel?.(); }
@@ -143,7 +155,13 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
           ))}
         </ul>
       )}
-      {dialog && (onTypeTrip || onBuildTrip) && (
+      {pending && (
+        <div className="v2-quickadd-confirm">
+          <span className="v2-quickadd-confirm-place"><span className="v2-quickadd-name">{pending.name}</span><span className="v2-quickadd-meta">{[pending.region, pending.country].filter(Boolean).join(" · ")}</span></span>
+          <button type="button" className="v2-btn v2-btn-primary v2-quickadd-save" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save stop"}</button>
+        </div>
+      )}
+      {dialog && !pending && (onTypeTrip || onBuildTrip) && (
         <>
           <div className="v2-quickadd-or" aria-hidden="true">or</div>
           <div className="v2-quickadd-links">
@@ -158,7 +176,7 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
     </div>
   );
   if (!dialog) return box;
-  // Add entry: the same search in a modal. Nothing is created until a place is picked.
+  // Add entry: the same search in a modal. Nothing is saved until Save (or Enter) on a picked place.
   return (
     <div className="v2-quickadd-backdrop" role="dialog" aria-modal="true" aria-label="Pick a place for the new entry" onPointerDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onCancel?.(); }}>
       <p className="v2-quickadd-title">Where was this?</p>
