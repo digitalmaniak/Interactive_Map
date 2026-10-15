@@ -28,10 +28,12 @@ export const titleReservePx = (H, chipPx = 0) => titleBottomPx(chipPx) + titleBl
 export const CROSSHAIR = { armPx: 16, strokePx: 1, inset: 20, opacity: 0.8, color: "#FFFFFF" };
 
 export const HOME_RINGS = {
-  color: "#E6EDF0", // DESIGN.md ring token
-  opacity: 0.35,
-  radiiR: [0.035, 0.07, 0.105], // about 220, 450, 670 km
-  segments: 128,
+  color: "#5CC8E4", // --v2-route, the app's cyan token
+  scale: [1, 1.8, 2.6], // ring radius in pin sizes (pin scale, not km)
+  opacity: [0.6, 0.35, 0.15], // inner to outer
+  pulseGrow: 0.12, // pulse peak: rings 12% larger
+  pulseBright: 0.6, // and 60% brighter
+  segments: 96,
   lift: 1.0006,
 };
 

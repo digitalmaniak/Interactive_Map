@@ -23,7 +23,8 @@ import FpsGuard from "./FpsGuard";
 import { EdgeTagsDriver, EdgeTagsLayer, useEdgeTagsStore } from "./EdgeTags";
 import { fmtMonthYear } from "../../../lib/dates/calendar";
 import { Line2, LineGeometry, LineMaterial } from "three-stdlib";
-import { PULSE, ringPhase, ringOpacity, easeOut } from "../../../lib/rings/homePulse";
+import { homeRingPulse } from "../../../lib/rings/homePulse";
+const PIN_PX_K = 0.0055; // stop disc world size per unit camera distance (about 6 px)
 import LegsLayer from "./legs/LegsLayer";
 import { resolveLegs } from "./legs/legGeometry";
 import { sharedJourneyLegs } from "../../../lib/journeys/legs";
@@ -223,11 +224,11 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
   );
 }
 
-// Home range rings around the dated home base. Screen-space 1px lines (Line2, worldUnits
-// false) so they stay 1px at every zoom. Animated: three rings grow outward from home,
-// 1.2s apart (homePulse.js). Reduced motion / force3d lite: today's three static rings.
+// Home rings (Prism): three 1px cyan rings around the dated home base at 1x, 1.8x and 2.6x
+// the pin size, in pin scale (screen space, not km), opacity 0.6 / 0.35 / 0.15 outward.
+// One slow pulse every 3 s (rings swell and brighten, then settle); static under reduced motion.
 function HomeRings({ home, still }) {
-  const { size } = useThree();
+  const { size, camera } = useThree();
   const frame = useMemo(() => {
     if (!home) return null;
     const n = lonLatToVec3(home.lng, home.lat, 1).normalize();
@@ -237,45 +238,34 @@ function HomeRings({ home, still }) {
   }, [home]);
   const rings = useMemo(() => {
     if (!frame) return [];
-    // Unit circle in the local tangent plane; each ring's group sets its sphere radius.
     const pos = [];
     for (let k = 0; k <= HOME_RINGS.segments; k++) {
       const a = (k / HOME_RINGS.segments) * Math.PI * 2;
       pos.push(Math.cos(a), Math.sin(a), 0);
     }
-    const count = still ? HOME_RINGS.radiiR.length : PULSE.count;
-    return Array.from({ length: count }, () => {
+    return HOME_RINGS.scale.map((_, i) => {
       const g = new LineGeometry(); g.setPositions(pos);
-      const m = new LineMaterial({ color: HOME_RINGS.color, linewidth: 1, worldUnits: false, transparent: true, opacity: HOME_RINGS.opacity, depthWrite: false });
+      const m = new LineMaterial({ color: HOME_RINGS.color, linewidth: 1, worldUnits: false, transparent: true, opacity: HOME_RINGS.opacity[i], depthWrite: false });
       const l = new Line2(g, m); l.computeLineDistances(); l.frustumCulled = false;
       return l;
     });
-  }, [frame, still]);
-  useEffect(() => () => rings.forEach((r) => { r.geometry.dispose(); r.material.dispose(); }), [rings]);
-  // Place a ring of angular radius rad (in globe radii) exactly on the sphere surface.
-  const place = useCallback((r, rad) => {
-    const R = GLOBE_R * HOME_RINGS.lift;
-    const th = Math.max(rad, 1e-4);
-    r.position.copy(frame.n).multiplyScalar(R * Math.cos(th));
-    r.quaternion.copy(frame.q);
-    r.scale.setScalar(R * Math.sin(th));
   }, [frame]);
-  useEffect(() => {
-    if (!frame) return;
-    rings.forEach((r, i) => {
-      r.material.resolution.set(size.width, size.height);
-      if (still) { place(r, HOME_RINGS.radiiR[i]); r.material.opacity = HOME_RINGS.opacity; }
-    });
-  }, [rings, size, still, frame, place]);
+  useEffect(() => () => rings.forEach((r) => { r.geometry.dispose(); r.material.dispose(); }), [rings]);
+  useEffect(() => { rings.forEach((r) => r.material.resolution.set(size.width, size.height)); }, [rings, size]);
+  useEffect(() => { if (typeof window !== "undefined") window.__homeRings = rings; }, [rings]); // smoke tests read these
+  const tmp = useMemo(() => new THREE.Vector3(), []);
   useFrame(() => {
-    if (still || !rings.length) return;
-    const now = performance.now();
-    const maxR = HOME_RINGS.radiiR[HOME_RINGS.radiiR.length - 1];
+    if (!frame || !rings.length) return;
+    // Pin size in world units at the home point: the stop disc formula (about 6 px).
+    const base = frame.n.clone().multiplyScalar(GLOBE_R * HOME_RINGS.lift);
+    const dist = tmp.copy(camera.position).distanceTo(base);
+    const pin = THREE.MathUtils.clamp(dist * PIN_PX_K, 0.000006, 0.02);
+    const w = still ? 0 : homeRingPulse(performance.now());
     rings.forEach((r, i) => {
-      const ph = ringPhase(now, i);
-      place(r, maxR * easeOut(ph));
-      r.material.opacity = ringOpacity(ph);
-      r.visible = r.material.opacity > 0.001;
+      r.position.copy(base);
+      r.quaternion.copy(frame.q);
+      r.scale.setScalar(pin * HOME_RINGS.scale[i] * (1 + HOME_RINGS.pulseGrow * w));
+      r.material.opacity = Math.min(1, HOME_RINGS.opacity[i] * (1 + HOME_RINGS.pulseBright * w));
     });
   });
   if (!rings.length) return null;
@@ -308,7 +298,7 @@ function Stops({ items, activePinId, hoveredPinId, onSelect, onHover, reducedMot
     const d = dots.current, b = beams.current, hm = hits.current;
     if (!d || !b) return;
     const dist = camera.position.length() - GLOBE_R;
-    const px = THREE.MathUtils.clamp(dist * 0.0055, 0.000006, 0.02); // ~6 px disc
+    const px = THREE.MathUtils.clamp(dist * PIN_PX_K, 0.000006, 0.02); // ~6 px disc
     if (growStart.current == null) growStart.current = performance.now();
     const g = reducedMotion ? 1 : easeGrow(Math.min(1, (performance.now() - growStart.current) / tokens.beam.growMs));
     const tripish = THREE.MathUtils.clamp((2.4 - camera.position.length()) / 1.2, 0, 1);
