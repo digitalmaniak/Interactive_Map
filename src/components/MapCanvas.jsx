@@ -20,6 +20,7 @@ import {
 } from "../lib/journeys/api";
 import QuickAdd from "./quickadd/QuickAdd";
 import GlobeStats from "./stats/GlobeStats";
+import GlobeTitle from "./stats/GlobeTitle";
 import { quickPinFields } from "../lib/geocode/quickDrop";
 import { fetchProfileStats } from "../lib/stats/profileStats";
 import { dateOrNull, defaultChoice, joinLegRow, lastStop, localDate, nextPinSort, previewLegRow, tripOptions } from "../lib/addentry/partOfTrip";
@@ -887,6 +888,12 @@ export default function MapCanvas() {
         )}
       </div>
 
+      {session && !draftGlobe && activeJourneyId == null && (
+        <GlobeTitle
+          name={(() => { const m = session.user?.user_metadata || {}; const h = m.full_name || m.name || String(session.user?.email || "").split("@")[0]; return h ? h.charAt(0).toUpperCase() + h.slice(1) : ""; })()}
+          stats={profileStats}
+        />
+      )}
       {session && profileStats && !draftGlobe && activeJourneyId == null && !viewport.mobile && (
         <GlobeStats stats={profileStats} journeys={journeys} right={activeTab === "Journals" ? 350 + 24 : 48} />
       )}

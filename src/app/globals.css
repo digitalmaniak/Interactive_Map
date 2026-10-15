@@ -618,3 +618,10 @@ html:has(.share-globe-page), body:has(.share-globe-page) { height: 100%; overflo
 .v2-globe-stats-years .n { order: 1; color: var(--v2-text); }
 .v2-globe-stats-years .y { order: 3; }
 @media (max-width: 640px) { .v2-globe-stats { display: none; } }
+/* Globe view title (Prism): 24px inset, name 44px bold, one 13px counts line */
+/* 24px above the timeline (bottom 24 + 64 tall); 24px from the bottom where the timeline is hidden */
+.v2-globe-title { position: absolute; left: 24px; bottom: 112px; z-index: 3; pointer-events: none; -webkit-user-select: none; user-select: none; max-width: calc(100vw - 48px); }
+.v2-globe-title h1 { margin: 0; font-family: var(--v2-sans, inherit); font-size: 44px; font-weight: 700; line-height: 1.05; letter-spacing: -0.5px; color: rgba(255, 255, 255, 0.92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-globe-title p { margin: 6px 0 0; font-family: var(--v2-sans, inherit); font-size: 13px; font-weight: 400; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.6); }
+@media (max-width: 639px) { .v2-globe-title h1 { font-size: 28px; } }
+@media (max-width: 599px) { .v2-globe-title { bottom: 24px; } }
