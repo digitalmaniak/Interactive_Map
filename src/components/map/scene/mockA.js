@@ -31,8 +31,6 @@ export const HOME_RINGS = {
   color: "#5CC8E4", // --v2-route, the app's cyan token
   scale: [1, 1.8, 2.6], // ring radius in pin sizes (pin scale, not km)
   opacity: [0.6, 0.35, 0.15], // inner to outer
-  pulseGrow: 0.12, // pulse peak: rings 12% larger
-  pulseBright: 0.6, // and 60% brighter
   segments: 96,
   lift: 1.0006,
 };

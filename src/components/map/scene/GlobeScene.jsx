@@ -23,7 +23,7 @@ import FpsGuard from "./FpsGuard";
 import { EdgeTagsDriver, EdgeTagsLayer, useEdgeTagsStore } from "./EdgeTags";
 import { fmtMonthYear } from "../../../lib/dates/calendar";
 import { Line2, LineGeometry, LineMaterial } from "three-stdlib";
-import { homeRingPulse } from "../../../lib/rings/homePulse";
+import { PULSE, ringPhase, ringOpacity, easeOut } from "../../../lib/rings/homePulse";
 const PIN_PX_K = 0.0055; // stop disc world size per unit camera distance (about 6 px)
 import LegsLayer from "./legs/LegsLayer";
 import { resolveLegs } from "./legs/legGeometry";
@@ -226,7 +226,9 @@ function Globe({ geo, tier, onGlobeClick, onGlobeHover, tripBlend, cheap = false
 
 // Home rings (Prism): three 1px cyan rings around the dated home base at 1x, 1.8x and 2.6x
 // the pin size, in pin scale (screen space, not km), opacity 0.6 / 0.35 / 0.15 outward.
-// One slow pulse every 3 s (rings swell and brighten, then settle); static under reduced motion.
+// Pulse (the original, homePulse.js): each ring grows from home out to the 2.6x size over
+// 3.6 s, eased out, starting 1.2 s apart, rising to 0.6 then fading to 0. Reduced motion:
+// the three rings sit still at 1x / 1.8x / 2.6x with 0.6 / 0.35 / 0.15.
 function HomeRings({ home, still }) {
   const { size, camera } = useThree();
   const frame = useMemo(() => {
@@ -243,7 +245,7 @@ function HomeRings({ home, still }) {
       const a = (k / HOME_RINGS.segments) * Math.PI * 2;
       pos.push(Math.cos(a), Math.sin(a), 0);
     }
-    return HOME_RINGS.scale.map((_, i) => {
+    return Array.from({ length: PULSE.count }, (_, i) => {
       const g = new LineGeometry(); g.setPositions(pos);
       const m = new LineMaterial({ color: HOME_RINGS.color, linewidth: 1, worldUnits: false, transparent: true, opacity: HOME_RINGS.opacity[i], depthWrite: false });
       const l = new Line2(g, m); l.computeLineDistances(); l.frustumCulled = false;
@@ -260,12 +262,15 @@ function HomeRings({ home, still }) {
     const base = frame.n.clone().multiplyScalar(GLOBE_R * HOME_RINGS.lift);
     const dist = tmp.copy(camera.position).distanceTo(base);
     const pin = THREE.MathUtils.clamp(dist * PIN_PX_K, 0.000006, 0.02);
-    const w = still ? 0 : homeRingPulse(performance.now());
+    const now = performance.now(), maxS = HOME_RINGS.scale[HOME_RINGS.scale.length - 1];
     rings.forEach((r, i) => {
       r.position.copy(base);
       r.quaternion.copy(frame.q);
-      r.scale.setScalar(pin * HOME_RINGS.scale[i] * (1 + HOME_RINGS.pulseGrow * w));
-      r.material.opacity = Math.min(1, HOME_RINGS.opacity[i] * (1 + HOME_RINGS.pulseBright * w));
+      if (still) { r.scale.setScalar(pin * HOME_RINGS.scale[i]); r.material.opacity = HOME_RINGS.opacity[i]; r.visible = true; return; }
+      const ph = ringPhase(now, i);
+      r.scale.setScalar(Math.max(1e-6, pin * maxS * easeOut(ph)));
+      r.material.opacity = ringOpacity(ph);
+      r.visible = r.material.opacity > 0.001;
     });
   });
   if (!rings.length) return null;
