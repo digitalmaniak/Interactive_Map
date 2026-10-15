@@ -690,9 +690,14 @@ function CameraController({ homeResumeRef, pinHoverRef, pointerRef, itemsRef, dr
       // Quick add dismiss: hold auto-rotate until the ease out home lands, then ramp it in.
       // homeHold counts down a few idle frames (the move may start next frame) and restarts
       // while the move is running, so rotation waits for the landing.
-      if (homeResumeRef?.current) { homeResumeRef.current = 0; idleUntil.current = 0; s.homeHold = 3; }
+      // After landing, only a real drag or zoom stops it: the hover pause is ignored, because
+      // the trip exit centres the trip's pins right under a cursor resting where Cancel was.
+      // Every drag and zoom sets idleUntil away from 0, which ends that free run.
+      if (homeResumeRef?.current) { homeResumeRef.current = 0; idleUntil.current = 0; s.homeHold = 3; s.homeFree = true; }
       if (s.homeHold) s.homeHold = s.tw || s.fade ? 3 : s.homeHold - 1;
-      const autoOn = controls && !tripView.current && !reducedMotion && !draggingRef.current && alt > AUTO_ROTATE_MIN_ALT && now > idleUntil.current && !pinHoverRef.current && !underCursor && !s.homeHold;
+      if (s.homeFree && (idleUntil.current !== 0 || draggingRef.current)) s.homeFree = false;
+      const hoverPause = (pinHoverRef.current || underCursor) && !s.homeFree;
+      const autoOn = controls && !tripView.current && !reducedMotion && !draggingRef.current && alt > AUTO_ROTATE_MIN_ALT && now > idleUntil.current && !hoverPause && !s.homeHold;
       if (!autoOn) s.autoK = 0;
       if (autoOn) {
         // Gentle restart: speed eases in from 0 over 1.5 s (smoothstep).
