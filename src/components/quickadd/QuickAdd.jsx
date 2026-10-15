@@ -74,11 +74,13 @@ export default function QuickAdd({ onPick, inTrip = false, dialog = false, onCan
   }, [handleText]);
   const onChange = (e) => setQ(e.target.value);
 
-  const pick = useCallback((r) => {
+  // onPick may return an error string (e.g. no country code): stay open and show it.
+  const pick = useCallback(async (r) => {
     if (!r) return;
+    const err = await onPick?.(r);
+    if (typeof err === "string" && err) { setError(err); setOpen(true); return; }
     setOpen(false); setQ(clearOnPick ? "" : r.name); setResults([]); setSel(-1);
     input.current?.blur();
-    onPick?.(r);
   }, [onPick, clearOnPick]);
 
   const onKeyDown = (e) => {

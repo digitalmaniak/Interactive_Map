@@ -20,6 +20,7 @@ import {
 } from "../lib/journeys/api";
 import QuickAdd from "./quickadd/QuickAdd";
 import GlobeStats from "./stats/GlobeStats";
+import { quickPinFields } from "../lib/geocode/quickDrop";
 import { fetchProfileStats } from "../lib/stats/profileStats";
 import { dateOrNull, defaultChoice, joinLegRow, lastStop, localDate, nextPinSort, previewLegRow, tripOptions } from "../lib/addentry/partOfTrip";
 import { fetchJourneyLegs, insertJourneyLeg } from "../lib/journeys/legs";
@@ -393,24 +394,25 @@ export default function MapCanvas() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  // Quick add pick: fly to the place and open the existing add form prefilled. The open
-  // trip (if any) stays selected, so the form's confirm attaches the pin to it.
-  const handleQuickAddPick = (r) => {
-    const lat = parseFloat(Number(r.lat).toFixed(4));
-    const lon = parseFloat(Number(r.lng).toFixed(4));
-    setClickedCoords({ lat, lon });
-    setNewPinName(r.name);
-    setNewPinCity(placeLine(r) || r.name);
-    setNewPinCountryCode(String(r.countryCode || "").toUpperCase());
-    setActivePin(null);
-    setIsAddingLog(false);
-    setActiveTab("Journals");
-    setTripChoice(defaultChoice(openTripId));
-    setNewTripName("");
-    setJoinTripId(openTripId || "");
-    setJoinMode(null);
-    setIsAddingEntry(true);
-    setFlyTo({ lat, lon, at: Date.now() });
+  // One-step quick add: the picked place is saved as a stop straight away (no form), in
+  // the open trip, else the owner's Imported trip, sent explicitly. Returns an error string
+  // to keep the search open (no country code, no trip), or null once saved.
+  const handleQuickDrop = async (r) => {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData?.user?.id;
+    const journeyId = openTripId || journeys.find((j) => j.title === "Imported")?.id || null;
+    const { fields, error } = quickPinFields(r, { userId, journeyId, placeLine });
+    if (error) return error;
+    fields.sort_order = nextPinSort(pins, journeyId);
+    const { data: insertedPin, error: pinError } = await insertPin(fields);
+    if (pinError || !insertedPin) { console.error(pinError); return "Couldn't save that stop. Try again."; }
+    const { data: insertedLog } = await insertPinLog({ pin_id: insertedPin.id, log_date: null, title: "Initial Entry", content: "", category: "Experience", media_urls: [], created_at: new Date().toISOString() });
+    const addedPin = { ...insertedPin, logs: insertedLog ? [insertedLog] : [] };
+    setPins((prev) => [...prev, addedPin]);
+    setActivePin(addedPin);
+    setFlyTo({ lat: fields.latitude, lon: fields.longitude, at: Date.now() });
+    setLegsReloadKey((k) => k + 1);
+    return null;
   };
 
   const handleHoverRegion = (name) => {
@@ -926,7 +928,7 @@ export default function MapCanvas() {
         <QuickAdd
           dialog
           inTrip={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection}
-          onPick={(r) => { setAddSearchOpen(false); handleQuickAddPick(r); }}
+          onPick={async (r) => { const err = await handleQuickDrop(r); if (!err) setAddSearchOpen(false); return err; }}
           onCancel={() => setAddSearchOpen(false)}
           onTypeTrip={() => { setAddSearchOpen(false); openDraft("start"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}
           onBuildTrip={() => { setAddSearchOpen(false); openDraft("edit"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}

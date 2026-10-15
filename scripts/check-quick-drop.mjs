@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import { quickPinFields, NO_COUNTRY_MSG } from "../src/lib/geocode/quickDrop.js";
+const r = { name: "Puerto Viejo", countryCode: "cr", lat: 9.65612, lng: -82.75391 };
+const ok = quickPinFields(r, { userId: "u1", journeyId: "j1", placeLine: () => "Puerto Viejo, Limón, Costa Rica" });
+assert.equal(ok.fields.user_id, "u1"); assert.equal(ok.fields.journey_id, "j1"); assert.equal(ok.fields.country_code, "CR");
+assert.equal(ok.fields.latitude, 9.6561); assert.equal(ok.fields.location_name, "Puerto Viejo, Limón, Costa Rica");
+assert.equal(quickPinFields({ ...r, countryCode: "" }, { userId: "u1", journeyId: "j1" }).error, NO_COUNTRY_MSG);
+assert.equal(quickPinFields({ ...r, countryCode: undefined }, { userId: "u1", journeyId: "j1" }).error, NO_COUNTRY_MSG);
+assert.ok(quickPinFields(r, { userId: "u1", journeyId: null }).error);
+console.log("check-quick-drop: ok");
