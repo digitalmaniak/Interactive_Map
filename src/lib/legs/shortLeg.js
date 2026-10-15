@@ -1,5 +1,6 @@
 // Legs under 2 km (a border crossed on foot, a short transfer) draw as one small dot at
-// the midpoint, with no arc or line. Hover shows "Walk · 0.8 km".
+// the midpoint, with no arc or line. Hover shows "Walk · 0.5 mi".
+import { miText } from "../units/distance.js";
 export const SHORT_LEG_KM = 2;
 const MODE_NAME = { fly: "Fly", drive: "Drive", train: "Train", boat: "Boat", cruise: "Cruise", walk: "Walk", other: "Other" };
 
@@ -20,7 +21,7 @@ export const isShortLeg = (km) => km != null && km < SHORT_LEG_KM;
 
 export function shortLegLabel(mode, km) {
   const name = MODE_NAME[mode] || "Other";
-  return `${name} · ${km < 10 ? km.toFixed(1) : Math.round(km)} km`;
+  return `${name} · ${miText(km)}`;
 }
 
 const TOUCH_KM = 0.05;

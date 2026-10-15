@@ -1,6 +1,7 @@
 "use client";
 // Public share view (Prism item 5). View only: the globe opens on the trip, the flyover
 // plays once, and the leg list follows it. Reads with the anon key plus x-share-token.
+import { miText } from "../../lib/units/distance";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GlobeScene from "../map/scene";
 import MapLoader from "../map/MapLoader";
@@ -75,7 +76,7 @@ export default function ShareView({ token }) {
     }, 0);
     // Counted from the legs loaded on this page (home legs already left out), not trip totals.
     const n = pins.length, fl = legs.filter((l) => l.mode === "fly").length;
-    return [fmtMonthYear(journey.date_start), `${n} ${n === 1 ? "STOP" : "STOPS"}`, fl ? `${fl} ${fl === 1 ? "FLIGHT" : "FLIGHTS"}` : "", km > 0 ? `${Math.round(km).toLocaleString("en-US")} KM` : ""].filter(Boolean).join(" · ").toUpperCase();
+    return [fmtMonthYear(journey.date_start), `${n} ${n === 1 ? "STOP" : "STOPS"}`, fl ? `${fl} ${fl === 1 ? "FLIGHT" : "FLIGHTS"}` : "", km > 0 ? miText(km, { upper: true }) : ""].filter(Boolean).join(" · ").toUpperCase();
   }, [journey, legs, pins, pinsById]);
   // Stop card: shown on each hold, out 0.3 s before the next move.
   const [outStep, setOutStep] = useState(-1);

@@ -1,5 +1,6 @@
 "use client";
 
+import { miText } from "../../lib/units/distance";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fmtDay } from "../../lib/dates/calendar";
 import { LEG_MODES, fetchJourneyLegs, sharedJourneyLegs, updateLegMode, confirmJourneyLegs } from "../../lib/journeys/legs";
@@ -18,7 +19,7 @@ const fmtCoord = (lat, lng) => {
 
 const fmtKm = (km) => {
   if (!Number.isFinite(km)) return null;
-  return km >= 100 ? `${Math.round(km).toLocaleString()} km` : `${km.toFixed(1)} km`;
+  return miText(km);
 };
 
 /**
@@ -124,7 +125,7 @@ export default function JourneyLegsReview({ journey, pinsById, onBack, onConfirm
       {legs && legs.length > 0 && (
         <div className="legs-summary">
           <span>{legs.length} {legs.length === 1 ? "leg" : "legs"}</span>
-          <span>{fmtKm(totalKm) || "0 km"}</span>
+          <span>{fmtKm(totalKm) || "0 mi"}</span>
           <span className={draftCount ? "legs-draft" : "legs-done"}>{draftCount ? `${draftCount} draft` : "All confirmed"}</span>
         </div>
       )}

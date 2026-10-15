@@ -2,12 +2,14 @@
 export const EDGE = { max: 6, inset: 20, mergePx: 40, heightPx: 34, smoothMs: 120, fadeMs: 200 };
 const R_KM = 6371;
 
-/** Great-circle km between two unit vectors ({x,y,z}), rounded to the nearest 100. */
+const KM_PER_MI = 1.609344;
+/** Great-circle distance between two unit vectors ({x,y,z}) in miles, rounded to the nearest 100. */
 export function roundedKm(a, b) {
   const d = Math.max(-1, Math.min(1, a.x * b.x + a.y * b.y + a.z * b.z));
-  return Math.round((Math.acos(d) * R_KM) / 100) * 100;
+  return Math.round((Math.acos(d) * R_KM) / KM_PER_MI / 100) * 100;
 }
-export const kmText = (km) => `${km.toLocaleString("en-US")} km`;
+/** Label for a roundedKm value (already miles). */
+export const kmText = (mi) => `${mi.toLocaleString("en-US")} mi`;
 
 /** Where a ray from c in direction d leaves rect r ({x0,y0,x1,y1}). */
 export function edgePoint(c, d, r) {

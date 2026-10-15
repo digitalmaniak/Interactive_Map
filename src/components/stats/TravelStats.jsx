@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { kmToMi } from "../../lib/units/distance";
 import { fetchProfileStats } from "../../lib/stats/profileStats";
 
 const fmt = (n) => n.toLocaleString("en-US");
@@ -21,7 +22,7 @@ export default function TravelStats({ onClose }) {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
   const s = state.data;
-  const items = s ? [["Countries", fmt(s.countries)], ["Trips", fmt(s.trips)], ["Km", fmt(s.km)], ["Flights", fmt(s.flights), s.flownKm ? `${fmt(s.flownKm)} km flown` : null]] : [];
+  const items = s ? [["Countries", fmt(s.countries)], ["Trips", fmt(s.trips)], ["Miles", fmt(Math.round(kmToMi(s.km)))], ["Flights", fmt(s.flights), s.flownKm ? `${fmt(Math.round(kmToMi(s.flownKm)))} mi flown` : null]] : [];
   if (typeof document === "undefined") return null;
   return createPortal(
     <div className="v2-stats-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>

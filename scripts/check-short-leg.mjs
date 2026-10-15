@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { isShortLeg, legKm, shortLegLabel, haversineKm, snapShortLegs } from "../src/lib/legs/shortLeg.js";
 import { projectRoute } from "../src/lib/journeys/shareItinerary.js";
-assert.equal(shortLegLabel("walk", 0.800487), "Walk · 0.8 km");
-assert.equal(shortLegLabel("rocket", 1.2), "Other · 1.2 km");
+assert.equal(shortLegLabel("walk", 0.800487), "Walk · 0.5 mi");
+assert.equal(shortLegLabel("rocket", 1.2), "Other · 0.7 mi");
 assert.ok(isShortLeg(0.8) && !isShortLeg(2) && !isShortLeg(null));
 assert.equal(legKm(0.8, null, null), 0.8);
 assert.ok(Math.abs(legKm(null, { lat: 9.5, lon: -82.62 }, { lat: 9.5, lon: -82.6127 }) - 0.8) < 0.05);
