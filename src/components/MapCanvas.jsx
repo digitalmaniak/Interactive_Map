@@ -404,19 +404,8 @@ export default function MapCanvas() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  // Quick add confirm step: a picked place becomes a browser-only ghost pin; nothing is
-  // written until Save. A place with no country code is refused here, before the ghost.
-  const [pendingStop, setPendingStop] = useState(null);
-  const handleQuickPick = (r) => {
-    const { error } = quickPinFields(r, { userId: session?.user?.id || "pending", journeyId: "pending" });
-    if (error) return error;
-    setPendingStop(r);
-    setFlyTo((f) => ({ lat: Number(r.lat), lon: Number(r.lng), at: (f?.at || 0) + 1 }));
-    return null; // the dialog stays open with Save
-  };
-  // Every dismissal (Cancel, Esc, backdrop) drops the ghost and runs the empty-globe reset.
+  // Every quick add dismissal (Cancel, Esc, backdrop) runs the empty-globe reset.
   const cancelQuickAdd = () => {
-    setPendingStop(null);
     setAddSearchOpen(false);
     resetToEmptyGlobe();
   };
@@ -910,7 +899,6 @@ export default function MapCanvas() {
             panelWidth={viewport.mobile ? 0 : draftGlobe ? 452 : 350}
             sheetInset={draftGlobe && viewport.mobile ? Math.round(viewport.h * 0.5) : sheetInset}
             timeline={session ? timelineProps : null}
-            ghost={addSearchOpen && pendingStop ? { lat: Number(pendingStop.lat), lng: Number(pendingStop.lng) } : null}
             resetKey={globeResetKey}
           />
         )}
@@ -963,9 +951,7 @@ export default function MapCanvas() {
         <QuickAdd
           dialog
           inTrip={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection}
-          pending={pendingStop}
-          onPick={(r) => handleQuickPick(r)}
-          onSave={async () => { const err = await handleQuickDrop(pendingStop); if (!err) { setPendingStop(null); setAddSearchOpen(false); } return err; }}
+          onPick={async (r) => { const err = await handleQuickDrop(r); if (!err) setAddSearchOpen(false); return err; }}
           onCancel={cancelQuickAdd}
           onTypeTrip={() => { setAddSearchOpen(false); openDraft("start"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}
           onBuildTrip={() => { setAddSearchOpen(false); openDraft("edit"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}
