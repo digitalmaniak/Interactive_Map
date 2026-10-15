@@ -95,6 +95,7 @@ const TRIP_POLAR_MAX = THREE.MathUtils.degToRad(70);
 const TRIP_AZ_RANGE = THREE.MathUtils.degToRad(60);
 const TRIP_FLY_MS = 2400;
 const AUTO_ROTATE_EASE_S = 1.5;
+const HOME_FREE_PX = 6; // pointer travel that ends the post-dismiss free spin
 // Zoom-to-cursor incidence fade (cosine between the view ray and the surface normal).
 const ZOOM_GRAZE_MIN = 0.3, ZOOM_GRAZE_FULL = 0.6;
 const ZOOM_GESTURE_MS = 800;
@@ -518,6 +519,14 @@ function CameraController({ homeResumeRef, pinHoverRef, pointerRef, itemsRef, dr
     applyState({ ...live, heading: base + rel, tilt, offset: s.offset }, controls);
   };
 
+  // Last cursor position anywhere on the page (the dismiss happens over the dialog).
+  useEffect(() => {
+    const onMove = (e) => { st.current.lastPtr = { x: e.clientX, y: e.clientY }; };
+    window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("pointerdown", onMove, true);
+    return () => { window.removeEventListener("pointermove", onMove, true); window.removeEventListener("pointerdown", onMove, true); };
+  }, []);
+
   const orbitRef = useRef(orbitBy);
   useEffect(() => { orbitRef.current = orbitBy; });
 
@@ -690,11 +699,16 @@ function CameraController({ homeResumeRef, pinHoverRef, pointerRef, itemsRef, dr
       // Quick add dismiss: hold auto-rotate until the ease out home lands, then ramp it in.
       // homeHold counts down a few idle frames (the move may start next frame) and restarts
       // while the move is running, so rotation waits for the landing.
-      // After landing, only a real drag or zoom stops it: the hover pause is ignored, because
-      // the trip exit centres the trip's pins right under a cursor resting where Cancel was.
-      // Every drag and zoom sets idleUntil away from 0, which ends that free run.
-      if (homeResumeRef?.current) { homeResumeRef.current = 0; idleUntil.current = 0; s.homeHold = 3; s.homeFree = true; }
+      // After landing it ignores the hover pause (the trip exit centres the trip's pins right
+      // under a cursor resting where Cancel was) until the next real pointer move, more than
+      // HOME_FREE_PX from where the cursor was at the dismiss (trackpad jitter does not
+      // count), or a drag or zoom (each sets idleUntil away from 0). Then hover pauses again.
+      if (homeResumeRef?.current) { homeResumeRef.current = 0; idleUntil.current = 0; s.homeHold = 3; s.homeFree = true; s.homeAnchor = s.lastPtr ? { ...s.lastPtr } : null; }
       if (s.homeHold) s.homeHold = s.tw || s.fade ? 3 : s.homeHold - 1;
+      if (s.homeFree && s.lastPtr) {
+        if (!s.homeAnchor) s.homeAnchor = { ...s.lastPtr };
+        else if (Math.hypot(s.lastPtr.x - s.homeAnchor.x, s.lastPtr.y - s.homeAnchor.y) > HOME_FREE_PX) s.homeFree = false;
+      }
       if (s.homeFree && (idleUntil.current !== 0 || draggingRef.current)) s.homeFree = false;
       const hoverPause = (pinHoverRef.current || underCursor) && !s.homeFree;
       const autoOn = controls && !tripView.current && !reducedMotion && !draggingRef.current && alt > AUTO_ROTATE_MIN_ALT && now > idleUntil.current && !hoverPause && !s.homeHold;
