@@ -1,5 +1,6 @@
 // Mock A finishing touches: trip title, corner crosshairs, home rings.
 // Values follow DESIGN.md v2 tokens (title.hero, Corner crosshair, Home ring, ring colour).
+import { tokens } from "./tokens.js";
 export const TRIP_TITLE = {
   maxPx: 112, // title.hero desktop
   minPx: 40,
@@ -28,7 +29,7 @@ export const titleReservePx = (H, chipPx = 0) => titleBottomPx(chipPx) + titleBl
 export const CROSSHAIR = { armPx: 16, strokePx: 1, inset: 20, opacity: 0.8, color: "#FFFFFF" };
 
 export const HOME_RINGS = {
-  color: "#5CC8E4", // --v2-route, the app's cyan token
+  color: tokens.color.homeAccent, // home accent #FFA620 (--v2-home-accent)
   scale: [1, 1.8, 2.6], // ring radius in pin sizes (pin scale, not km)
   opacity: [0.6, 0.35, 0.15], // inner to outer
   segments: 96,

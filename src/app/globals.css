@@ -14,6 +14,7 @@
   --v2-route-tint: rgba(92, 200, 228, 0.10);
   --v2-route-border: rgba(92, 200, 228, 0.40);
   --v2-accent: #FF3311;
+  --v2-home-accent: #FFA620; /* home base rings and future highlight accents; never stops */
   --v2-danger: #F2555A;
   --v2-text: #FFFFFF;
   --v2-text-dim: #9AA3A8;

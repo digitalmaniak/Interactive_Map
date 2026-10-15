@@ -8,6 +8,7 @@ export const tokens = {
     coast: "#8A9399", coastOpacity: 0.7,
     route: "#5CC8E4", routeCore: "#CFF4FF",
     accent: "#FF3311",
+    homeAccent: "#FFA620", // home base rings and future highlight accents; never stops
     atmo: "#5CC8E4", atmoOpacity: 0.18,
   },
   hatch: { angleDeg: 35, spacingPx: { globe: 6, trip: 9 }, thicknessPx: 1, aaPx: 0.75, limbFade: 0.15 },

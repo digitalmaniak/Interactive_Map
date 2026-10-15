@@ -9,7 +9,7 @@ ok(near(ringPhase(0, 1), 2 / 3), "ring 2 mid-cycle at t=0 (no gap at start)");
 ok(near(ringOpacity(0), 0) && near(ringOpacity(0.05), 0.3) && near(ringOpacity(0.1), 0.6), "opacity 0 to 60% over first 10%");
 ok(near(ringOpacity(0.55), 0.3) && near(ringOpacity(1), 0), "linear fade to 0");
 ok(near(easeOut(0), 0) && near(easeOut(1), 1) && easeOut(0.5) > 0.5, "size eases out");
-ok(HOME_RINGS.color.toUpperCase() === "#5CC8E4", "rings are cyan #5CC8E4");
+ok(HOME_RINGS.color.toUpperCase() === "#FFA620", "rings use the home accent #FFA620");
 ok(HOME_RINGS.scale.join() === "1,1.8,2.6", "screen sizing: 1x, 1.8x, 2.6x the pin; the pulse grows each ring to 2.6x");
 ok(HOME_RINGS.opacity.join() === "0.6,0.35,0.15", "reduced motion: static at 0.60, 0.35, 0.15");
 ok(near(ringOpacity(1 - 1e-12), 0) && ringOpacity(0.999) < 0.001, "fades fully out before restarting");
