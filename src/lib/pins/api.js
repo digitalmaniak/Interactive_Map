@@ -52,6 +52,14 @@ export async function removePin(id, signal) {
   return { error, deleted: ok ? 1 : 0 };
 }
 
+/** Hard delete one pin by its exact id (owner delete policy; pin_logs cascade). Only for
+ * undoing a quick add pick that was dismissed while it saved. */
+export async function hardDeletePin(id) {
+  if (!id) return { error: null, deleted: 0 };
+  const { error, count } = await supabase.from("pins").delete({ count: "exact" }).eq("id", id);
+  return { error, deleted: count ?? 0 };
+}
+
 /** Insert a single pin_logs row; returns the inserted row via .select().single(). */
 export async function addLog(fields) {
   const { data, error } = await supabase

@@ -7,6 +7,7 @@ import {
   updatePin as updatePinRow,
   removePin as deletePinRow,
   addLog as insertPinLog,
+  hardDeletePin,
   updateLog as updatePinLogRow,
   removeLog as deletePinLogRow,
 } from "../lib/pins/api";
@@ -391,6 +392,7 @@ export default function MapCanvas() {
   // '/' opens the Add entry search (same flow as the button), except while typing in a
   // field or when a dialog is already open.
   const signedInRef = useRef(false);
+  const openQuickAddRef = useRef(null);
   useEffect(() => { signedInRef.current = Boolean(session); }, [session]);
   useEffect(() => {
     const onKey = (e) => {
@@ -399,14 +401,45 @@ export default function MapCanvas() {
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
       if (!signedInRef.current || document.querySelector("[role=dialog][aria-modal=true]")) return;
       e.preventDefault();
-      setAddSearchOpen(true);
+      openQuickAddRef.current?.();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   // Every quick add dismissal (Cancel, Esc, backdrop) goes straight home.
   const [globeHomeKey, setGlobeHomeKey] = useState(0);
+  // Quick add dialog session: the pin its pick inserted, and whether it was dismissed.
+  const quickTokenRef = useRef(0);
+  const quickPinIdRef = useRef(null);
+  const quickDismissedRef = useRef(false);
+  const quickKeptRef = useRef(false);
+  // Hard delete of the one pin a dismissed pick created, by its exact id (owner delete
+  // policy; pin_logs cascade). Nothing else is ever deleted here.
+  const undoQuickPin = async (id) => {
+    if (!id) return;
+    const { error } = await hardDeletePin(id);
+    if (error) console.warn("[quick add] undo failed", error.message || error);
+    setPins((prev) => prev.filter((p) => p.id !== id));
+    setActivePin((a) => (a?.id === id ? null : a));
+  };
+  // Opening starts a fresh session and remembers what had focus (Add entry, usually).
+  const openerRef = useRef(null);
+  const openQuickAdd = () => {
+    quickTokenRef.current += 1;
+    quickPinIdRef.current = null; quickDismissedRef.current = false; quickKeptRef.current = false;
+    openerRef.current = typeof document !== "undefined" ? document.activeElement : null;
+    setAddSearchOpen(true);
+  };
+  useEffect(() => { openQuickAddRef.current = openQuickAdd; });
   const cancelQuickAdd = () => {
+    if (!quickKeptRef.current) {
+      quickDismissedRef.current = true; // a pick still saving undoes itself once its id is known
+      if (quickPinIdRef.current) undoQuickPin(quickPinIdRef.current);
+    }
+    // Focus goes back to whatever opened the dialog; :focus-visible only rings it after a
+    // keyboard dismiss (Esc), so a mouse dismiss leaves Add entry unlit.
+    const opener = openerRef.current;
+    if (opener && opener !== document.body && document.contains(opener)) setTimeout(() => opener.focus(), 0);
     setAddSearchOpen(false);
     resetToEmptyGlobe(); // no panel, Map tab, nothing selected, hover and region cleared
     setGlobeHomeKey((k) => k + 1); // camera eases out to the default globe, auto-rotate resumes
@@ -415,7 +448,11 @@ export default function MapCanvas() {
   // One-step quick add: the picked place is saved as a stop straight away (no form), in
   // the open trip, else the owner's Imported trip, sent explicitly. Returns an error string
   // to keep the search open (no country code, no trip), or null once saved.
+  // A quick add dialog session: the pin id its pick inserted, and whether it was dismissed.
+  // Dismissing while that pick is saving hard-deletes exactly that pin (logs cascade).
   const handleQuickDrop = async (r) => {
+    const token = quickTokenRef.current;
+    const dismissed = () => quickTokenRef.current !== token || quickDismissedRef.current;
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
     const journeyId = openTripId || journeys.find((j) => j.title === "Imported")?.id || null;
@@ -424,8 +461,12 @@ export default function MapCanvas() {
     fields.sort_order = nextPinSort(pins, journeyId);
     const { data: insertedPin, error: pinError } = await insertPin(fields);
     if (pinError || !insertedPin) { console.error(pinError); return "Couldn't save that stop. Try again."; }
+    if (quickTokenRef.current === token) quickPinIdRef.current = insertedPin.id;
+    if (dismissed()) { await undoQuickPin(insertedPin.id); return "dismissed"; }
     const { data: insertedLog } = await insertPinLog({ pin_id: insertedPin.id, log_date: null, title: "Initial Entry", content: "", category: "Experience", media_urls: [], created_at: new Date().toISOString() });
+    if (dismissed()) { await undoQuickPin(insertedPin.id); return "dismissed"; }
     const addedPin = { ...insertedPin, logs: insertedLog ? [insertedLog] : [] };
+    quickKeptRef.current = true;
     setPins((prev) => [...prev, addedPin]);
     setActivePin(addedPin);
     setFlyTo((f) => ({ lat: fields.latitude, lon: fields.longitude, at: (f?.at || 0) + 1 }));
@@ -929,7 +970,7 @@ export default function MapCanvas() {
           stubReason={tripDraft.stubReason || null}
           source={tripDraft.source || null}
           onStartGuided={() => { openDraft("edit"); setActiveTab("Map"); }}
-          onAddSingle={() => { if (tripDraft.face) closeDraft(); setAddSearchOpen(true); }}
+          onAddSingle={() => { if (tripDraft.face) closeDraft(); openQuickAdd(); }}
           draft={tripDraft.draft}
           setDraft={(fn) => setTripDraft((cur) => ({ ...cur, draft: typeof fn === "function" ? fn(cur.draft) : fn }))}
           onSave={saveTripDraft}
@@ -954,7 +995,7 @@ export default function MapCanvas() {
         <QuickAdd
           dialog
           inTrip={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection}
-          onPick={async (r) => { const err = await handleQuickDrop(r); if (!err) setAddSearchOpen(false); return err; }}
+          onPick={async (r) => { const err = await handleQuickDrop(r); if (err === "dismissed") return null; if (!err) setAddSearchOpen(false); return err; }}
           onCancel={cancelQuickAdd}
           onTypeTrip={() => { setAddSearchOpen(false); openDraft("start"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}
           onBuildTrip={() => { setAddSearchOpen(false); openDraft("edit"); setActiveTab("Map"); setActiveJourneyId(null); setActivePin(null); }}
@@ -969,7 +1010,7 @@ export default function MapCanvas() {
         setShowProfileMenu={setShowProfileMenu}
         sessionEmail={session?.user?.email}
         onSignOut={() => supabase.auth.signOut()}
-        onAddEntry={() => setAddSearchOpen(true)}
+        onAddEntry={openQuickAdd}
         addTripName={activeJourneyId != null && !String(activeJourneyId).startsWith("__") && !activeJourneyIsCollection ? activeJourney?.title || null : null}
         onOpenJournalsTab={() => { setReviewOpen(false); setClusterPins(null); setActivePin(null); setActiveJourneyId(null); setActiveTab("Journals"); }}
       >
