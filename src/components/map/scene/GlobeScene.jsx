@@ -477,7 +477,7 @@ function blendStates(a, b, w) {
   };
 }
 
-function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDragStart, onDragEndAt, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef, sheetInset = 0, tripMaxD = TRIP_MAX_D }) {
+function CameraController({ homeResumeRef, pinHoverRef, pointerRef, itemsRef, draggingRef, onDragStart, onDragEndAt, controlsRef, moveRef, reducedMotion, tripView, tripBlend, labelMix, panelOpen, panelWidth, viewRef, sheetInset = 0, tripMaxD = TRIP_MAX_D }) {
   const { camera, size, gl } = useThree();
   const st = useRef({ tw: null, prev: null, seen: null, offset: 0, offsetKey: null, heading: 0, panelTarget: null, applied: null, fade: null, voff: 0, vFrom: 0, vTo: null, vT0: 0 });
   const idleUntil = useRef(0);
@@ -687,6 +687,7 @@ function CameraController({ pinHoverRef, pointerRef, itemsRef, draggingRef, onDr
       }
       // Auto-rotate: only at globe zoom (height over 1.5 R), 4 s after the last drag ended,
       // never while dragging or zoomed in.
+      if (homeResumeRef?.current) { homeResumeRef.current = 0; idleUntil.current = 0; }
       const autoOn = controls && !tripView.current && !reducedMotion && !draggingRef.current && alt > AUTO_ROTATE_MIN_ALT && now > idleUntil.current && !pinHoverRef.current && !underCursor;
       if (!autoOn) s.autoK = 0;
       if (autoOn) {
@@ -1137,6 +1138,7 @@ export default function GlobeScene({
   onFallback,
   timeline = null,
   resetKey = 0,
+  homeKey = 0,
   sheetInset = 0,
 }) {
   // Mobile bottom sheet height in px (0 on desktop or when closed): the camera centres
@@ -1313,6 +1315,21 @@ export default function GlobeScene({
     }
     moveRef.current = { n, D: HOME_DIST, tilt: 0, fov: CAM.keyframes[0].fov, trip: false };
   }, [items]);
+
+  // Go home (quick add dismissal): the shared exit if a trip or point is engaged, else the
+  // same pull back to the zoomed-out globe over the current spot; auto-rotate resumes now.
+  const homeResumeRef = useRef(0);
+  useEffect(() => {
+    if (!homeKey) return;
+    const had = engagedRef.current;
+    exitTripView();
+    if (!had) {
+      const c = controlsRef.current;
+      const n = c ? c.object.position.clone().normalize() : new THREE.Vector3(0, 0, 1);
+      moveRef.current = { n, D: HOME_DIST, tilt: 0, fov: CAM.keyframes[0].fov, trip: false };
+    }
+    homeResumeRef.current = 1;
+  }, [homeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Normal trip fit goal (used when a trip opens and when a flyover ends).
   const tripFitGoal = useCallback((stops) => {
@@ -1755,7 +1772,7 @@ export default function GlobeScene({
         {onFirstFrame && <FirstFrame onFirstFrame={onFirstFrame} />}
         <EdgeTagsDriver store={edgeStore} itemsRef={itemsRef} safe={edgeSafe} reducedMotion={reducedMotion} enabled={edgeOn} />
         <RegionProbe pointerRef={pointerRef} draggingRef={draggingRef} pinHoverRef={pinHoverRef} dotHoverRef={dotHoverRef} onPoint={handleRegionPoint} />
-        <CameraController sheetInset={sheetInset} pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} tripMaxD={cinematic ? MAX_DIST : TRIP_MAX_D} />
+        <CameraController homeResumeRef={homeResumeRef} sheetInset={sheetInset} pinHoverRef={pinHoverRef} pointerRef={pointerRef} itemsRef={itemsRef} draggingRef={draggingRef} onDragStart={clearRegionReadout} onDragEndAt={handleGlobeHover} controlsRef={controlsRef} moveRef={moveRef} reducedMotion={reducedMotion} tripView={tripView} tripBlend={tripBlend} labelMix={labelMix} panelOpen={panelOpen} panelWidth={panelWidth} viewRef={viewRef} tripMaxD={cinematic ? MAX_DIST : TRIP_MAX_D} />
         <LabelProjector items={items} labelEls={labelEls} focusing={focusing} maxLabels={t.labels} activePinId={shownActivePinId} meta={labelMeta} clusterRef={clusterRef} labelMix={labelMix} beamHeightRef={beamHeightRef} />
         {t.bloom && (
           <EffectComposer multisampling={0} resolutionScale={tier === "phoneHigh" ? 0.5 : 1}>

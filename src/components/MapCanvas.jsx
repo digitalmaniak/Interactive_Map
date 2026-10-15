@@ -404,10 +404,12 @@ export default function MapCanvas() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  // Every quick add dismissal (Cancel, Esc, backdrop) runs the empty-globe reset.
+  // Every quick add dismissal (Cancel, Esc, backdrop) goes straight home.
+  const [globeHomeKey, setGlobeHomeKey] = useState(0);
   const cancelQuickAdd = () => {
     setAddSearchOpen(false);
-    resetToEmptyGlobe();
+    resetToEmptyGlobe(); // no panel, Map tab, nothing selected, hover and region cleared
+    setGlobeHomeKey((k) => k + 1); // camera eases out to the default globe, auto-rotate resumes
   };
 
   // One-step quick add: the picked place is saved as a stop straight away (no form), in
@@ -900,6 +902,7 @@ export default function MapCanvas() {
             sheetInset={draftGlobe && viewport.mobile ? Math.round(viewport.h * 0.5) : sheetInset}
             timeline={session ? timelineProps : null}
             resetKey={globeResetKey}
+            homeKey={globeHomeKey}
           />
         )}
       </div>
