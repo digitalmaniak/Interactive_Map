@@ -1,4 +1,4 @@
-// Small + crosshairs in the four corners (DESIGN.md v2 chrome).
+// Corner L marks in the four corners (Prism: 16px arms, 16px inset, 1px, white 0.3).
 export default function Crosshairs() {
   return (
     <div className="v2-crosshairs" aria-hidden="true">

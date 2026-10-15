@@ -64,14 +64,12 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
 
 /* Corner crosshairs */
 .v2-crosshairs { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
-.v2-crosshairs span { position: absolute; width: 16px; height: 16px; opacity: 0.8; }
-.v2-crosshairs span::before, .v2-crosshairs span::after { content: ""; position: absolute; background: var(--v2-text); }
-.v2-crosshairs span::before { left: 7.5px; top: 0; width: 1px; height: 16px; }
-.v2-crosshairs span::after { top: 7.5px; left: 0; height: 1px; width: 16px; }
-.v2-crosshairs .tl { top: 10px; left: 10px; }
-.v2-crosshairs .tr { top: 10px; right: 10px; }
-.v2-crosshairs .bl { bottom: 10px; left: 10px; }
-.v2-crosshairs .br { bottom: 10px; right: 10px; }
+/* Prism: L marks, 16px arms, 16px from each corner, 1px, white at 0.3, static */
+.v2-crosshairs span { position: absolute; width: 16px; height: 16px; border: 0 solid rgba(255, 255, 255, 0.3); box-sizing: border-box; }
+.v2-crosshairs .tl { top: 16px; left: 16px; border-top-width: 1px; border-left-width: 1px; }
+.v2-crosshairs .tr { top: 16px; right: 16px; border-top-width: 1px; border-right-width: 1px; }
+.v2-crosshairs .bl { bottom: 16px; left: 16px; border-bottom-width: 1px; border-left-width: 1px; }
+.v2-crosshairs .br { bottom: 16px; right: 16px; border-bottom-width: 1px; border-right-width: 1px; }
 
 /* Type */
 .v2-wordmark { font: 500 13px/1 var(--v2-sans); letter-spacing: 0.32em; text-transform: uppercase; color: var(--v2-text); }
