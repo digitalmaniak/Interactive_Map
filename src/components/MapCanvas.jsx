@@ -19,6 +19,8 @@ import {
   movePinToJourney,
 } from "../lib/journeys/api";
 import QuickAdd from "./quickadd/QuickAdd";
+import GlobeStats from "./stats/GlobeStats";
+import { fetchProfileStats } from "../lib/stats/profileStats";
 import { dateOrNull, defaultChoice, joinLegRow, lastStop, localDate, nextPinSort, previewLegRow, tripOptions } from "../lib/addentry/partOfTrip";
 import { fetchJourneyLegs, insertJourneyLeg } from "../lib/journeys/legs";
 import { placeLine } from "../lib/geocode/quickAdd";
@@ -238,6 +240,14 @@ export default function MapCanvas() {
   // Mobile bottom sheet (under 768 px): open whenever the journals panel is; swiping the
   // handle collapses it to its header. Reopening the panel always starts at 50%.
   const viewport = useMobileViewport();
+  // Profile stats (profile_stats_v2), read once per sign-in and after trip data reloads.
+  const [profileStats, setProfileStats] = useState(null);
+  useEffect(() => {
+    if (!session) return undefined;
+    let live = true;
+    fetchProfileStats().then((r) => { if (live && r.data) setProfileStats(r.data); });
+    return () => { live = false; };
+  }, [session, journeys]);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
   const [sheetHeaderPx, setSheetHeaderPx] = useState(SHEET_HEADER_PX); // measured by the panel
   const panelIsOpen = Boolean(session) && activeTab === "Journals";
@@ -874,6 +884,10 @@ export default function MapCanvas() {
           />
         )}
       </div>
+
+      {session && profileStats && !draftGlobe && activeJourneyId == null && !viewport.mobile && (
+        <GlobeStats stats={profileStats} journeys={journeys} right={activeTab === "Journals" ? 350 + 24 : 48} />
+      )}
 
       {session && draftFace && !addSearchOpen && (
         <TripDraft
